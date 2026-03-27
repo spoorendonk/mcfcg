@@ -5,7 +5,6 @@
 #include "mcfcg/util/timer.h"
 
 #include <limits>
-#include <unordered_set>
 
 namespace mcfcg {
 
@@ -43,17 +42,21 @@ CGResult solve_tree_cg(const Instance& inst, const CGParams& params) {
                              result.time_separation, result.time_total);
     };
 
+    timer.start(TimerCat::Total);
+
     if (params.warm_start) {
-        std::vector<double> zero_pi_s(inst.sources.size(), 0.0);
+        // Price with large source duals so all shortest-path columns pass the
+        // negative reduced cost filter (true_rc = -pi_s[s] + cost < 0 for large pi_s).
+        timer.start(TimerCat::Pricing);
+        std::vector<double> big_pi_s(inst.sources.size(), TreeMaster::BIG_M);
         std::unordered_map<uint32_t, double> empty_mu;
-        auto init_cols = pricer.price(zero_pi_s, empty_mu, true);
+        auto init_cols = pricer.price(big_pi_s, empty_mu, true);
         if (!init_cols.empty()) {
             master.add_columns(std::move(init_cols));
         }
         pricer.reset_postponed();
+        timer.stop(TimerCat::Pricing);
     }
-
-    timer.start(TimerCat::Total);
 
     for (uint32_t iter = 0; iter < params.max_iterations; ++iter) {
         Timer iter_timer;
@@ -117,38 +120,14 @@ CGResult solve_tree_cg(const Instance& inst, const CGParams& params) {
             pricer.reset_postponed();
         }
 
+        if (new_cols.size() > params.max_cols_per_iter) {
+            new_cols.resize(params.max_cols_per_iter);
+        }
+
         iter_timer.stop(TimerCat::Pricing);
         timer.stop(TimerCat::Pricing);
 
         uint32_t added = master.add_columns(std::move(new_cols));
-        if (added == 0) {
-            timer.start(TimerCat::Pricing);
-            iter_timer.start(TimerCat::Pricing);
-
-            std::unordered_set<uint32_t> forbidden;
-            for (auto& [arc, dual] : mu) {
-                forbidden.insert(arc);
-            }
-            auto alt_cols = pricer.price(pi_s, mu, forbidden, true);
-
-            iter_timer.stop(TimerCat::Pricing);
-            timer.stop(TimerCat::Pricing);
-
-            added = master.add_columns(std::move(alt_cols));
-            if (added == 0) {
-                timer.stop(TimerCat::Total);
-
-                iter_timer.stop(TimerCat::Total);
-                logger.print_iteration(
-                    iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(), 0, 0, 0,
-                    0, iter_timer.elapsed(TimerCat::LP), iter_timer.elapsed(TimerCat::Pricing),
-                    iter_timer.elapsed(TimerCat::Separation), iter_timer.elapsed(TimerCat::Total));
-
-                set_optimal(obj, iter);
-                return result;
-            }
-            pricer.reset_postponed();
-        }
 
         result.iterations = iter + 1;
         result.total_columns = master.num_columns();
