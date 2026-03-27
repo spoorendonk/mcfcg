@@ -1,0 +1,11 @@
+Format of the "planar" networks:
+
+Number of nodes
+Number of arcs
+Number ofcommodities (OD-pairs)
+
+For each arc:
+ startnode endnode cost capacity
+
+For each OD-pair
+ origin destination demand

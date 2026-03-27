@@ -1,0 +1,4 @@
+build/
+.cache/
+data/intermodal-repo/
+data/intermodal/raw/
