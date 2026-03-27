@@ -1,24 +1,25 @@
 #pragma once
 
-#include <cmath>
-#include <cstdint>
-#include <limits>
-#include <unordered_map>
-#include <vector>
-
 #include "mcfcg/cg/tree_column.h"
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
 
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <limits>
+#include <unordered_map>
+#include <vector>
+
 namespace mcfcg {
 
 class TreeMaster {
-   public:
+public:
     static constexpr double BIG_M = 1e8;
     static constexpr double INF = std::numeric_limits<double>::infinity();
 
-   private:
-    const Instance * _inst = nullptr;
+private:
+    const Instance* _inst = nullptr;
     std::unique_ptr<LPSolver> _lp;
 
     uint32_t _num_source_rows = 0;
@@ -30,10 +31,10 @@ class TreeMaster {
     std::unordered_map<uint32_t, uint32_t> _arc_to_cap_row;
     std::vector<uint32_t> _cap_row_to_arc;
 
-   public:
+public:
     TreeMaster() = default;
 
-    void init(const Instance & inst) {
+    void init(const Instance& inst) {
         _inst = &inst;
         _num_source_rows = static_cast<uint32_t>(inst.sources.size());
         _columns.clear();
@@ -69,13 +70,18 @@ class TreeMaster {
     }
 
     uint32_t add_columns(std::vector<TreeColumn> cols) {
-        std::vector<TreeColumn> unique;
-        for (auto & c : cols) {
-            if (!is_duplicate(c))
-                unique.push_back(std::move(c));
-        }
-        if (unique.empty())
+        if (cols.empty())
             return 0;
+
+#ifndef NDEBUG
+        // Debug-only: warn if pricer produced duplicates (indicates a bug)
+        for (auto& c : cols) {
+            if (is_duplicate(c)) {
+                std::fprintf(stderr, "WARNING: duplicate tree column for source %u\n",
+                             c.source_idx);
+            }
+        }
+#endif
 
         // Build CSC matrix
         std::vector<double> obj;
@@ -85,7 +91,7 @@ class TreeMaster {
         std::vector<uint32_t> row_indices;
         std::vector<double> values;
 
-        for (auto & col : unique) {
+        for (auto& col : cols) {
             obj.push_back(col.cost);
             lb.push_back(0.0);
             ub.push_back(INF);
@@ -96,7 +102,7 @@ class TreeMaster {
             values.push_back(1.0);
 
             // Capacity row coefficients
-            for (auto & af : col.arc_flows) {
+            for (auto& af : col.arc_flows) {
                 auto it = _arc_to_cap_row.find(af.arc);
                 if (it != _arc_to_cap_row.end()) {
                     row_indices.push_back(it->second);
@@ -106,13 +112,12 @@ class TreeMaster {
         }
         starts.push_back(static_cast<uint32_t>(row_indices.size()));
 
-        uint32_t first_lp =
-            _lp->add_cols(obj, lb, ub, starts, row_indices, values);
+        uint32_t first_lp = _lp->add_cols(obj, lb, ub, starts, row_indices, values);
 
-        uint32_t n = static_cast<uint32_t>(unique.size());
+        uint32_t n = static_cast<uint32_t>(cols.size());
         for (uint32_t i = 0; i < n; ++i) {
             _col_to_lp.push_back(first_lp + i);
-            _columns.push_back(std::move(unique[i]));
+            _columns.push_back(std::move(cols[i]));
         }
 
         return n;
@@ -139,14 +144,13 @@ class TreeMaster {
         return result;
     }
 
-    uint32_t add_violated_capacity_constraints(
-        const std::vector<double> & primals) {
+    uint32_t add_violated_capacity_constraints(const std::vector<double>& primals) {
         auto flow = _inst->graph.create_arc_map<double>(0.0);
         for (uint32_t c = 0; c < _columns.size(); ++c) {
             double lambda = primals[_col_to_lp[c]];
             if (lambda < 1e-10)
                 continue;
-            for (auto & af : _columns[c].arc_flows) {
+            for (auto& af : _columns[c].arc_flows) {
                 flow[af.arc] += lambda * af.flow;
             }
         }
@@ -174,7 +178,7 @@ class TreeMaster {
             row_ub.push_back(_inst->capacity[a]);
             starts.push_back(static_cast<uint32_t>(indices.size()));
             for (uint32_t c = 0; c < _columns.size(); ++c) {
-                for (auto & af : _columns[c].arc_flows) {
+                for (auto& af : _columns[c].arc_flows) {
                     if (af.arc == a) {
                         indices.push_back(_col_to_lp[c]);
                         values.push_back(af.flow);
@@ -184,8 +188,7 @@ class TreeMaster {
             }
         }
 
-        uint32_t first_row =
-            _lp->add_rows(row_lb, row_ub, starts, indices, values);
+        uint32_t first_row = _lp->add_rows(row_lb, row_ub, starts, indices, values);
 
         for (uint32_t i = 0; i < new_arcs.size(); ++i) {
             _arc_to_cap_row[new_arcs[i]] = first_row + i;
@@ -195,23 +198,23 @@ class TreeMaster {
         return static_cast<uint32_t>(new_arcs.size());
     }
 
-    uint32_t num_columns() const {
-        return static_cast<uint32_t>(_columns.size());
-    }
+    uint32_t num_columns() const { return static_cast<uint32_t>(_columns.size()); }
 
-   private:
-    bool is_duplicate(const TreeColumn & col) const {
-        for (auto & existing : _columns) {
+    uint32_t num_lp_cols() const { return _lp->num_cols(); }
+    uint32_t num_lp_rows() const { return _lp->num_rows(); }
+
+private:
+    bool is_duplicate(const TreeColumn& col) const {
+        for (auto& existing : _columns) {
             if (existing.source_idx != col.source_idx)
                 continue;
             if (existing.arc_flows.size() != col.arc_flows.size())
                 continue;
             bool match = true;
-            for (auto & af : col.arc_flows) {
+            for (auto& af : col.arc_flows) {
                 bool found = false;
-                for (auto & eaf : existing.arc_flows) {
-                    if (eaf.arc == af.arc &&
-                        std::abs(eaf.flow - af.flow) < 1e-10) {
+                for (auto& eaf : existing.arc_flows) {
+                    if (eaf.arc == af.arc && std::abs(eaf.flow - af.flow) < 1e-10) {
                         found = true;
                         break;
                     }

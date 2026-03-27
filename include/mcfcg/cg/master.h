@@ -1,23 +1,24 @@
 #pragma once
 
-#include <cstdint>
-#include <limits>
-#include <unordered_map>
-#include <vector>
-
 #include "mcfcg/cg/column.h"
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
 
+#include <cstdint>
+#include <cstdio>
+#include <limits>
+#include <unordered_map>
+#include <vector>
+
 namespace mcfcg {
 
 class PathMaster {
-   public:
+public:
     static constexpr double BIG_M = 1e8;
     static constexpr double INF = std::numeric_limits<double>::infinity();
 
-   private:
-    const Instance * _inst = nullptr;
+private:
+    const Instance* _inst = nullptr;
     std::unique_ptr<LPSolver> _lp;
 
     uint32_t _num_demand_rows = 0;
@@ -30,10 +31,10 @@ class PathMaster {
     std::unordered_map<uint32_t, uint32_t> _arc_to_cap_row;
     std::vector<uint32_t> _cap_row_to_arc;
 
-   public:
+public:
     PathMaster() = default;
 
-    void init(const Instance & inst) {
+    void init(const Instance& inst) {
         _inst = &inst;
         _num_demand_rows = static_cast<uint32_t>(inst.commodities.size());
         _columns.clear();
@@ -70,14 +71,17 @@ class PathMaster {
     }
 
     uint32_t add_columns(std::vector<Column> cols) {
-        // Deduplicate
-        std::vector<Column> unique;
-        for (auto & c : cols) {
-            if (!is_duplicate(c))
-                unique.push_back(std::move(c));
-        }
-        if (unique.empty())
+        if (cols.empty())
             return 0;
+
+#ifndef NDEBUG
+        // Debug-only: warn if pricer produced duplicates (indicates a bug)
+        for (auto& c : cols) {
+            if (is_duplicate(c)) {
+                std::fprintf(stderr, "WARNING: duplicate column for commodity %u\n", c.commodity);
+            }
+        }
+#endif
 
         // Build CSC matrix for new columns
         std::vector<double> obj;
@@ -87,7 +91,7 @@ class PathMaster {
         std::vector<uint32_t> row_indices;
         std::vector<double> values;
 
-        for (auto & col : unique) {
+        for (auto& col : cols) {
             obj.push_back(col.cost);
             lb.push_back(0.0);
             ub.push_back(INF);
@@ -109,14 +113,13 @@ class PathMaster {
         // Sentinel
         starts.push_back(static_cast<uint32_t>(row_indices.size()));
 
-        uint32_t first_lp =
-            _lp->add_cols(obj, lb, ub, starts, row_indices, values);
+        uint32_t first_lp = _lp->add_cols(obj, lb, ub, starts, row_indices, values);
 
         // Update mapping
-        uint32_t n = static_cast<uint32_t>(unique.size());
+        uint32_t n = static_cast<uint32_t>(cols.size());
         for (uint32_t i = 0; i < n; ++i) {
             _col_to_lp.push_back(first_lp + i);
-            _columns.push_back(std::move(unique[i]));
+            _columns.push_back(std::move(cols[i]));
         }
 
         return n;
@@ -143,8 +146,7 @@ class PathMaster {
         return result;
     }
 
-    uint32_t add_violated_capacity_constraints(
-        const std::vector<double> & primals) {
+    uint32_t add_violated_capacity_constraints(const std::vector<double>& primals) {
         // Compute flow on each arc
         auto flow = _inst->graph.create_arc_map<double>(0.0);
         for (uint32_t c = 0; c < _columns.size(); ++c) {
@@ -190,8 +192,7 @@ class PathMaster {
             }
         }
 
-        uint32_t first_row =
-            _lp->add_rows(row_lb, row_ub, starts, indices, values);
+        uint32_t first_row = _lp->add_rows(row_lb, row_ub, starts, indices, values);
 
         // Update mappings
         for (uint32_t i = 0; i < new_arcs.size(); ++i) {
@@ -202,15 +203,15 @@ class PathMaster {
         return static_cast<uint32_t>(new_arcs.size());
     }
 
-    uint32_t num_columns() const {
-        return static_cast<uint32_t>(_columns.size());
-    }
+    uint32_t num_columns() const { return static_cast<uint32_t>(_columns.size()); }
 
-   private:
-    bool is_duplicate(const Column & col) const {
-        for (auto & existing : _columns) {
-            if (existing.commodity == col.commodity &&
-                existing.arcs == col.arcs) {
+    uint32_t num_lp_cols() const { return _lp->num_cols(); }
+    uint32_t num_lp_rows() const { return _lp->num_rows(); }
+
+private:
+    bool is_duplicate(const Column& col) const {
+        for (auto& existing : _columns) {
+            if (existing.commodity == col.commodity && existing.arcs == col.arcs) {
                 return true;
             }
         }
