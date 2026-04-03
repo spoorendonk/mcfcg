@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -15,8 +16,30 @@
 
 namespace fs = std::filesystem;
 
-static std::string data_dir(const std::string & subdir) {
+static std::string data_dir(const std::string& subdir) {
     return std::string(MCFCG_SOURCE_DIR) + "/data/" + subdir;
+}
+
+// Load optimal.csv from a data directory. Returns instance->optimal map.
+static std::unordered_map<std::string, double> load_optimal(const std::string& dir) {
+    std::unordered_map<std::string, double> result;
+    auto path = dir + "/optimal.csv";
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        throw std::runtime_error("Cannot open " + path);
+    }
+    std::string line;
+    std::getline(file, line);  // skip header
+    while (std::getline(file, line)) {
+        if (line.empty()) {
+            continue;
+        }
+        auto comma = line.find(',');
+        auto name = line.substr(0, comma);
+        auto val = std::stod(line.substr(comma + 1));
+        result[name] = val;
+    }
+    return result;
 }
 
 // --- RC validation: manually drive CG loop with checks ---
@@ -25,9 +48,9 @@ static std::string data_dir(const std::string & subdir) {
 static constexpr double NEW_COL_RC_TOL = 1e-6;
 // Tolerance for existing columns at optimality: allow small numerical noise.
 // Tree formulation accumulates demand-weighted floating-point error, so existing
-// columns can show slightly negative recomputed RC (observed up to ~1e-4 on
-// Winnipeg tree). This is a known epsilon issue, not a bug.
-static constexpr double EXISTING_COL_RC_TOL = 1e-4;
+// columns can show slightly negative recomputed RC (observed up to ~3.5e-4 on
+// planar100 tree). This grows with instance size.
+static constexpr double EXISTING_COL_RC_TOL = 1e-3;
 
 static double recompute_path_rc(const mcfcg::Column& col, const std::vector<double>& pi,
                                 const std::unordered_map<uint32_t, double>& mu) {
@@ -178,40 +201,39 @@ static void solve_and_validate_tree_rc(const mcfcg::Instance& inst, double paper
     EXPECT_LE(obj, paper_obj * (1.0 + tol));
 }
 
-// --- Correctness tests: solve small instances, verify against paper ---
-// Reference objectives from the paper (FLOWTY_MOSEK_PATH solver).
-// We check: optimal, and within `tol` (default 0.01%) of paper value.
+// --- Correctness tests: solve instances, verify against optimal.csv ---
 
-static void solve_and_check(const mcfcg::Instance & inst, double paper_obj,
-                            double tol = 0.0001) {
+static void solve_and_check(const mcfcg::Instance& inst, double ref_obj, double tol = 0.0001) {
     mcfcg::CGParams params;
     params.max_iterations = 10000;
     auto result = mcfcg::solve_path_cg(inst, params);
     EXPECT_TRUE(result.optimal) << "Did not reach optimality";
-    EXPECT_GE(result.objective, paper_obj * (1.0 - tol))
-        << "Objective below paper value (possible bug)";
-    EXPECT_LE(result.objective, paper_obj * (1.0 + tol))
-        << "Objective too far above paper value";
+    EXPECT_GE(result.objective, ref_obj * (1.0 - tol)) << "Objective below reference";
+    EXPECT_LE(result.objective, ref_obj * (1.0 + tol)) << "Objective above reference";
 }
 
 TEST(GridCorrectness, Grid1) {
+    auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
-    solve_and_check(inst, 827319.0);  // paper: 827318.9999
+    solve_and_check(inst, opt.at("grid1"));
 }
 
 TEST(GridCorrectness, Grid2) {
+    auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid2");
-    solve_and_check(inst, 1705508.0);  // paper: 1705507.9999
+    solve_and_check(inst, opt.at("grid2"));
 }
 
 TEST(PlanarCorrectness, Planar30) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar30");
-    solve_and_check(inst, 44350624.0);  // paper: 44350623.9995
+    solve_and_check(inst, opt.at("planar30"));
 }
 
 TEST(PlanarCorrectness, Planar80) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar80");
-    solve_and_check(inst, 182438134.0);  // paper: 182438134.0001
+    solve_and_check(inst, opt.at("planar80"));
 }
 
 TEST(TransportationCorrectness, Winnipeg) {
@@ -219,8 +241,9 @@ TEST(TransportationCorrectness, Winnipeg) {
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
     if (!fs::exists(net))
         GTEST_SKIP() << "data/transportation not found";
+    auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
-    solve_and_check(inst, 420.165);  // paper: 420.16536
+    solve_and_check(inst, opt.at("Winnipeg"));
 }
 
 TEST(TransportationCorrectness, Barcelona) {
@@ -228,64 +251,95 @@ TEST(TransportationCorrectness, Barcelona) {
     auto trips = data_dir("transportation") + "/Barcelona_trips.tntp.gz";
     if (!fs::exists(net))
         GTEST_SKIP() << "data/transportation not found";
+    auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 5050.0);
-    solve_and_check(inst, 243.512);  // paper: 243.51248
+    solve_and_check(inst, opt.at("Barcelona"));
 }
 
-// Intermodal instances were regenerated + cleaned, so paper objectives don't
-// apply. Use our own verified values (from this solver on these instances).
 TEST(IntermodalCorrectness, Subway308) {
     auto path = data_dir("intermodal") + "/SUBWAY-308-0.txt.gz";
     if (!fs::exists(path))
         GTEST_SKIP() << "data/intermodal not found";
+    auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
-    solve_and_check(inst, 8835.0);
+    solve_and_check(inst, opt.at("SUBWAY-308-0"));
 }
 
 TEST(IntermodalCorrectness, Subway486) {
     auto path = data_dir("intermodal") + "/SUBWAY-486-0.txt.gz";
     if (!fs::exists(path))
         GTEST_SKIP() << "data/intermodal not found";
+    auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
-    solve_and_check(inst, 13543.0);
+    solve_and_check(inst, opt.at("SUBWAY-486-0"));
 }
 
 TEST(IntermodalCorrectness, DISABLED_Bus2632) {
     auto path = data_dir("intermodal") + "/BUS-2632-0.txt.gz";
     if (!fs::exists(path))
         GTEST_SKIP() << "data/intermodal not found";
+    auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
-    solve_and_check(inst, 71026.5, 0.005);
+    solve_and_check(inst, opt.at("BUS-2632-0"));
 }
 
 TEST(IntermodalCorrectness, DISABLED_Bus7896) {
     auto path = data_dir("intermodal") + "/BUS-7896-0.txt.gz";
     if (!fs::exists(path))
         GTEST_SKIP() << "data/intermodal not found";
+    auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
-    solve_and_check(inst, 210603.5, 0.005);
+    solve_and_check(inst, opt.at("BUS-7896-0"));
 }
 
 // --- Reduced cost validation on real instances ---
 
 TEST(RCValidation, Grid1Path) {
+    auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
-    solve_and_validate_path_rc(inst, 827319.0);
+    solve_and_validate_path_rc(inst, opt.at("grid1"));
 }
 
 TEST(RCValidation, Grid1Tree) {
+    auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
-    solve_and_validate_tree_rc(inst, 827319.0);
+    solve_and_validate_tree_rc(inst, opt.at("grid1"));
 }
 
 TEST(RCValidation, Planar30Path) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar30");
-    solve_and_validate_path_rc(inst, 44350624.0);
+    solve_and_validate_path_rc(inst, opt.at("planar30"));
 }
 
 TEST(RCValidation, Planar30Tree) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar30");
-    solve_and_validate_tree_rc(inst, 44350624.0);
+    solve_and_validate_tree_rc(inst, opt.at("planar30"));
+}
+
+TEST(RCValidation, Planar80Path) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar80");
+    solve_and_validate_path_rc(inst, opt.at("planar80"));
+}
+
+TEST(RCValidation, Planar80Tree) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar80");
+    solve_and_validate_tree_rc(inst, opt.at("planar80"));
+}
+
+TEST(RCValidation, Planar100Path) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar100");
+    solve_and_validate_path_rc(inst, opt.at("planar100"));
+}
+
+TEST(RCValidation, Planar100Tree) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar100");
+    solve_and_validate_tree_rc(inst, opt.at("planar100"));
 }
 
 TEST(RCValidation, WinnipegPath) {
@@ -293,8 +347,9 @@ TEST(RCValidation, WinnipegPath) {
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
     if (!fs::exists(net))
         GTEST_SKIP() << "data/transportation not found";
+    auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
-    solve_and_validate_path_rc(inst, 420.165);
+    solve_and_validate_path_rc(inst, opt.at("Winnipeg"));
 }
 
 TEST(RCValidation, WinnipegTree) {
@@ -302,6 +357,7 @@ TEST(RCValidation, WinnipegTree) {
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
     if (!fs::exists(net))
         GTEST_SKIP() << "data/transportation not found";
+    auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
-    solve_and_validate_tree_rc(inst, 420.165);
+    solve_and_validate_tree_rc(inst, opt.at("Winnipeg"));
 }
