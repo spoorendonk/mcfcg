@@ -2,6 +2,8 @@
 
 Column generation solver for minimum-cost multicommodity flow (MCF). Supports path-based and tree-based Dantzig-Wolfe decompositions.
 
+Based on: S. Spoorendonk and B. Petersen, [Tree-based formulation for the multi-commodity flow problem](https://arxiv.org/abs/2509.24656), 2025.
+
 ## Build
 
 Requires C++23, CMake 3.20+, and zlib.
