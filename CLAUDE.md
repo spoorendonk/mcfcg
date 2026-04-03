@@ -54,4 +54,4 @@ Four families in `data/`: grid, planar (CommaLab format), transportation (TNTP f
 
 - **Integer-scaled Dijkstra costs**: Reduced costs are scaled by 1e9 and clamped to non-negative int64_t. Negative reduced costs (attractive arcs) become 0-length. True reduced cost is recomputed in floating point after path extraction.
 - **Lazy capacity constraints**: The master starts with demand/convexity rows only. Capacity rows are added when flow exceeds capacity by >1e-6, avoiding a huge initial LP.
-- **Forbidden-arc fallback**: When all new columns are duplicates, the CG loop re-prices with binding-capacity arcs forbidden, forcing alternative paths.
+- **No duplicate columns**: The pricer must never generate duplicate columns. If duplicates appear, it indicates a bug in pricing or reduced-cost computation.
