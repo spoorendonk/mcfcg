@@ -28,7 +28,7 @@ Run a single test by name:
 
 ## What This Is
 
-Column generation solver for minimum-cost multicommodity flow (MCF). Supports path-based and tree-based Dantzig-Wolfe decompositions. Accompanies a paper targeting Mathematical Programming Computation (MPC) that reverses the 30-year finding of Jones et al. (1993) that path decomposition beats tree decomposition — at modern scale with |K| >> |S|, the tree formulation wins.
+Column generation solver for minimum-cost multicommodity flow (MCF). Supports path-based and tree-based Dantzig-Wolfe decompositions.
 
 ## Architecture
 
