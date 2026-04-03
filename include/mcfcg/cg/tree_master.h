@@ -4,9 +4,7 @@
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
 
-#include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <limits>
 #include <unordered_map>
 #include <vector>
@@ -72,16 +70,6 @@ public:
     uint32_t add_columns(std::vector<TreeColumn> cols) {
         if (cols.empty())
             return 0;
-
-#ifndef NDEBUG
-        // Debug-only: warn if pricer produced duplicates (indicates a bug)
-        for (auto& c : cols) {
-            if (is_duplicate(c)) {
-                std::fprintf(stderr, "WARNING: duplicate tree column for source %u\n",
-                             c.source_idx);
-            }
-        }
-#endif
 
         // Build CSC matrix
         std::vector<double> obj;
@@ -199,36 +187,11 @@ public:
     }
 
     uint32_t num_columns() const { return static_cast<uint32_t>(_columns.size()); }
+    const std::vector<TreeColumn>& columns() const { return _columns; }
 
     uint32_t num_lp_cols() const { return _lp->num_cols(); }
     uint32_t num_lp_rows() const { return _lp->num_rows(); }
 
-private:
-    bool is_duplicate(const TreeColumn& col) const {
-        for (auto& existing : _columns) {
-            if (existing.source_idx != col.source_idx)
-                continue;
-            if (existing.arc_flows.size() != col.arc_flows.size())
-                continue;
-            bool match = true;
-            for (auto& af : col.arc_flows) {
-                bool found = false;
-                for (auto& eaf : existing.arc_flows) {
-                    if (eaf.arc == af.arc && std::abs(eaf.flow - af.flow) < 1e-10) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    match = false;
-                    break;
-                }
-            }
-            if (match)
-                return true;
-        }
-        return false;
-    }
 };
 
 }  // namespace mcfcg

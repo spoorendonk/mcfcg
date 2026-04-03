@@ -5,7 +5,6 @@
 #include "mcfcg/lp/lp_solver.h"
 
 #include <cstdint>
-#include <cstdio>
 #include <limits>
 #include <unordered_map>
 #include <vector>
@@ -73,15 +72,6 @@ public:
     uint32_t add_columns(std::vector<Column> cols) {
         if (cols.empty())
             return 0;
-
-#ifndef NDEBUG
-        // Debug-only: warn if pricer produced duplicates (indicates a bug)
-        for (auto& c : cols) {
-            if (is_duplicate(c)) {
-                std::fprintf(stderr, "WARNING: duplicate column for commodity %u\n", c.commodity);
-            }
-        }
-#endif
 
         // Build CSC matrix for new columns
         std::vector<double> obj;
@@ -204,19 +194,11 @@ public:
     }
 
     uint32_t num_columns() const { return static_cast<uint32_t>(_columns.size()); }
+    const std::vector<Column>& columns() const { return _columns; }
 
     uint32_t num_lp_cols() const { return _lp->num_cols(); }
     uint32_t num_lp_rows() const { return _lp->num_rows(); }
 
-private:
-    bool is_duplicate(const Column& col) const {
-        for (auto& existing : _columns) {
-            if (existing.commodity == col.commodity && existing.arcs == col.arcs) {
-                return true;
-            }
-        }
-        return false;
-    }
 };
 
 }  // namespace mcfcg

@@ -74,6 +74,7 @@ add_executable(mcfcg_tests
     test/lp_solver_test.cpp
     test/path_cg_test.cpp
     test/tree_cg_test.cpp
+    test/reduced_cost_test.cpp
 )
 target_link_libraries(mcfcg_tests PRIVATE mcfcg GTest::gtest_main)
 target_include_directories(mcfcg_tests PRIVATE include)
