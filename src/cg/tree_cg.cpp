@@ -10,7 +10,7 @@ namespace mcfcg {
 
 CGResult solve_tree_cg(const Instance& inst, const CGParams& params) {
     TreeMaster master;
-    master.init(inst);
+    master.init(inst, params.solver_factory ? params.solver_factory() : nullptr);
 
     TreePricer pricer;
     pricer.init(inst);

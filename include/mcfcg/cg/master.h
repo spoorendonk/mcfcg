@@ -33,7 +33,7 @@ private:
 public:
     PathMaster() = default;
 
-    void init(const Instance& inst) {
+    void init(const Instance& inst, std::unique_ptr<LPSolver> lp = nullptr) {
         _inst = &inst;
         _num_demand_rows = static_cast<uint32_t>(inst.commodities.size());
         _columns.clear();
@@ -42,7 +42,7 @@ public:
         _cap_row_to_arc.clear();
 
         // Create LP once
-        _lp = create_lp_solver();
+        _lp = lp ? std::move(lp) : create_lp_solver();
 
         // Add slack columns (one per commodity, no row coefficients yet)
         std::vector<double> slack_obj(_num_demand_rows, BIG_M);
