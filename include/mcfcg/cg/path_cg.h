@@ -23,6 +23,9 @@ struct CGParams {
     uint32_t max_cols_per_iter = 1000;
     bool warm_start = true;
     Verbosity verbosity = Verbosity::Silent;
+    // When true, cap columns per iteration at the number of sources (one per
+    // source) so the master LP is re-solved more frequently with fresh duals.
+    bool prefer_master = false;
 };
 
 CGResult solve_path_cg(const Instance& inst, const CGParams& params = {});
