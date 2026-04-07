@@ -276,9 +276,13 @@ class CuOptSolver : public LPSolver {
             return LPStatus::Error;
         }
 
-        // Use GPU barrier solver
+        // Use GPU barrier solver with tight tolerances (1e-4 relative
+        // optimality as in the paper, tightened to 1e-6 for numerical safety)
         cuOptSetParameter(settings, CUOPT_METHOD,
                           std::to_string(CUOPT_METHOD_BARRIER).c_str());
+        cuOptSetParameter(settings, CUOPT_RELATIVE_GAP_TOLERANCE, "1e-8");
+        cuOptSetParameter(settings, CUOPT_RELATIVE_PRIMAL_TOLERANCE, "1e-8");
+        cuOptSetParameter(settings, CUOPT_RELATIVE_DUAL_TOLERANCE, "1e-8");
 
         if (_verbose) {
             cuOptSetParameter(settings, CUOPT_LOG_TO_CONSOLE, "1");
