@@ -5,6 +5,7 @@
 #include "mcfcg/instance.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
@@ -171,6 +172,7 @@ public:
     // arc.  Affected sources are un-postponed (their reduced costs changed);
     // unaffected sources are postponed (their reduced costs are unchanged).
     void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
+        assert(_track_arcs && "filter_for_new_caps requires set_track_arcs(true)");
         std::unordered_set<uint32_t> cap_set(new_cap_arcs.begin(), new_cap_arcs.end());
         for (uint32_t s = 0; s < _source_postponed.size(); ++s) {
             bool affected = std::any_of(_source_arcs[s].begin(), _source_arcs[s].end(),

@@ -289,8 +289,8 @@ public:
     }
 
     // Run until num_targets target vertices have been settled.
-    // targets_remaining is decremented each time a target is settled.
-    // Caller initializes it to the number of targets to find.
+    // Mutates is_target (sets settled targets to false) and decrements
+    // targets_remaining.  Caller initializes both before calling.
     void run_until_targets(static_map<vertex, bool>& is_target,
                            uint32_t& targets_remaining) noexcept {
         while (!finished() && targets_remaining > 0) {

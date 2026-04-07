@@ -2,11 +2,10 @@
 
 #include "mcfcg/lp/lp_solver.h"
 
-#include <cuopt/linear_programming/constants.h>
-#include <cuopt/linear_programming/cuopt_c.h>
-
 #include <algorithm>
 #include <cstdint>
+#include <cuopt/linear_programming/constants.h>
+#include <cuopt/linear_programming/cuopt_c.h>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -27,7 +26,7 @@ void check_cuopt(cuopt_int_t status, const char* msg) {
 // This solver maintains the full problem state internally and rebuilds the
 // cuOpt problem from scratch on each solve() call.
 class CuOptSolver : public LPSolver {
-   private:
+private:
     // Column data
     std::vector<double> _obj;
     std::vector<double> _col_lb;
@@ -53,12 +52,11 @@ class CuOptSolver : public LPSolver {
 
     bool _verbose = false;
 
-   public:
+public:
     CuOptSolver() = default;
     explicit CuOptSolver(bool verbose) : _verbose(verbose) {}
 
-    uint32_t add_cols(const std::vector<double>& obj,
-                      const std::vector<double>& lb,
+    uint32_t add_cols(const std::vector<double>& obj, const std::vector<double>& lb,
                       const std::vector<double>& ub) override {
         uint32_t first = num_cols();
         for (size_t i = 0; i < obj.size(); ++i) {
@@ -70,10 +68,8 @@ class CuOptSolver : public LPSolver {
         return first;
     }
 
-    uint32_t add_cols(const std::vector<double>& obj,
-                      const std::vector<double>& lb,
-                      const std::vector<double>& ub,
-                      const std::vector<uint32_t>& starts,
+    uint32_t add_cols(const std::vector<double>& obj, const std::vector<double>& lb,
+                      const std::vector<double>& ub, const std::vector<uint32_t>& starts,
                       const std::vector<uint32_t>& row_indices,
                       const std::vector<double>& values) override {
         uint32_t first = num_cols();
@@ -94,10 +90,8 @@ class CuOptSolver : public LPSolver {
         return first;
     }
 
-    uint32_t add_rows(const std::vector<double>& lb,
-                      const std::vector<double>& ub,
-                      const std::vector<uint32_t>& starts,
-                      const std::vector<uint32_t>& indices,
+    uint32_t add_rows(const std::vector<double>& lb, const std::vector<double>& ub,
+                      const std::vector<uint32_t>& starts, const std::vector<uint32_t>& indices,
                       const std::vector<double>& values) override {
         uint32_t first = num_rows();
         auto m = static_cast<uint32_t>(lb.size());
@@ -108,8 +102,7 @@ class CuOptSolver : public LPSolver {
 
             uint32_t begin = starts[i];
             // Callers don't include sentinel; derive end from next start or nnz
-            uint32_t end = (i + 1 < m) ? starts[i + 1]
-                                       : static_cast<uint32_t>(values.size());
+            uint32_t end = (i + 1 < m) ? starts[i + 1] : static_cast<uint32_t>(values.size());
 
             uint32_t row = first + i;
             for (uint32_t j = begin; j < end; ++j) {
@@ -155,9 +148,7 @@ class CuOptSolver : public LPSolver {
 
         // Write new indices back into mask (-1 for deleted)
         for (uint32_t i = 0; i < n; ++i) {
-            mask[i] = (old_to_new[i] == UINT32_MAX)
-                          ? -1
-                          : static_cast<int32_t>(old_to_new[i]);
+            mask[i] = (old_to_new[i] == UINT32_MAX) ? -1 : static_cast<int32_t>(old_to_new[i]);
         }
     }
 
@@ -188,9 +179,8 @@ class CuOptSolver : public LPSolver {
 
         // Update row indices in column entries and remove deleted entries
         for (auto& entries : _col_entries) {
-            std::erase_if(entries, [&](const CSCEntry& e) {
-                return old_to_new[e.row] == UINT32_MAX;
-            });
+            std::erase_if(entries,
+                          [&](const CSCEntry& e) { return old_to_new[e.row] == UINT32_MAX; });
             for (auto& e : entries) {
                 e.row = old_to_new[e.row];
             }
@@ -198,9 +188,7 @@ class CuOptSolver : public LPSolver {
 
         // Write new indices back into mask
         for (uint32_t i = 0; i < m; ++i) {
-            mask[i] = (old_to_new[i] == UINT32_MAX)
-                          ? -1
-                          : static_cast<int32_t>(old_to_new[i]);
+            mask[i] = (old_to_new[i] == UINT32_MAX) ? -1 : static_cast<int32_t>(old_to_new[i]);
         }
     }
 
@@ -208,7 +196,8 @@ class CuOptSolver : public LPSolver {
         uint32_t n = num_cols();
         uint32_t m = num_rows();
 
-        if (n == 0) return LPStatus::Error;
+        if (n == 0)
+            return LPStatus::Error;
 
         // Convert internal CSC storage to CSR for cuOpt.
         // Build CSR row_offsets, col_indices, coeff_values.
@@ -261,12 +250,12 @@ class CuOptSolver : public LPSolver {
         // Create problem
         cuOptOptimizationProblem problem = nullptr;
         auto status = cuOptCreateRangedProblem(
-            static_cast<cuopt_int_t>(m), static_cast<cuopt_int_t>(n),
-            CUOPT_MINIMIZE, static_cast<cuopt_float_t>(0.0), f_obj.data(),
-            row_offsets.data(), col_indices.data(), coeff_values.data(),
-            f_row_lb.data(), f_row_ub.data(), f_col_lb.data(), f_col_ub.data(),
+            static_cast<cuopt_int_t>(m), static_cast<cuopt_int_t>(n), CUOPT_MINIMIZE,
+            static_cast<cuopt_float_t>(0.0), f_obj.data(), row_offsets.data(), col_indices.data(),
+            coeff_values.data(), f_row_lb.data(), f_row_ub.data(), f_col_lb.data(), f_col_ub.data(),
             var_types.data(), &problem);
-        if (status != CUOPT_SUCCESS) return LPStatus::Error;
+        if (status != CUOPT_SUCCESS)
+            return LPStatus::Error;
 
         // Create solver settings
         cuOptSolverSettings settings = nullptr;
@@ -276,10 +265,8 @@ class CuOptSolver : public LPSolver {
             return LPStatus::Error;
         }
 
-        // Use GPU barrier solver with tight tolerances (1e-4 relative
-        // optimality as in the paper, tightened to 1e-6 for numerical safety)
-        cuOptSetParameter(settings, CUOPT_METHOD,
-                          std::to_string(CUOPT_METHOD_BARRIER).c_str());
+        // Use GPU barrier solver with tight tolerances (1e-8 relative)
+        cuOptSetParameter(settings, CUOPT_METHOD, std::to_string(CUOPT_METHOD_BARRIER).c_str());
         cuOptSetParameter(settings, CUOPT_RELATIVE_GAP_TOLERANCE, "1e-8");
         cuOptSetParameter(settings, CUOPT_RELATIVE_PRIMAL_TOLERANCE, "1e-8");
         cuOptSetParameter(settings, CUOPT_RELATIVE_DUAL_TOLERANCE, "1e-8");
@@ -299,23 +286,21 @@ class CuOptSolver : public LPSolver {
 
         // Check termination status
         cuopt_int_t term_status = 0;
-        check_cuopt(cuOptGetTerminationStatus(solution, &term_status),
-                    "GetTerminationStatus");
+        check_cuopt(cuOptGetTerminationStatus(solution, &term_status), "GetTerminationStatus");
 
         LPStatus result = LPStatus::Error;
+        // Note: cuOpt API has "TERIMINATION" typo in constant names
         if (term_status == CUOPT_TERIMINATION_STATUS_OPTIMAL) {
             result = LPStatus::Optimal;
 
             // Extract objective
             cuopt_float_t obj_val = 0;
-            check_cuopt(cuOptGetObjectiveValue(solution, &obj_val),
-                        "GetObjectiveValue");
+            check_cuopt(cuOptGetObjectiveValue(solution, &obj_val), "GetObjectiveValue");
             _cached_obj = static_cast<double>(obj_val);
 
             // Extract primals
             std::vector<cuopt_float_t> f_primals(n);
-            check_cuopt(cuOptGetPrimalSolution(solution, f_primals.data()),
-                        "GetPrimalSolution");
+            check_cuopt(cuOptGetPrimalSolution(solution, f_primals.data()), "GetPrimalSolution");
             _cached_primals.resize(n);
             for (uint32_t i = 0; i < n; ++i) {
                 _cached_primals[i] = static_cast<double>(f_primals[i]);
@@ -323,8 +308,7 @@ class CuOptSolver : public LPSolver {
 
             // Extract duals
             std::vector<cuopt_float_t> f_duals(m);
-            check_cuopt(cuOptGetDualSolution(solution, f_duals.data()),
-                        "GetDualSolution");
+            check_cuopt(cuOptGetDualSolution(solution, f_duals.data()), "GetDualSolution");
             _cached_duals.resize(m);
             for (uint32_t i = 0; i < m; ++i) {
                 _cached_duals[i] = static_cast<double>(f_duals[i]);
@@ -347,12 +331,8 @@ class CuOptSolver : public LPSolver {
     std::vector<double> get_primals() const override { return _cached_primals; }
     std::vector<double> get_duals() const override { return _cached_duals; }
 
-    uint32_t num_cols() const override {
-        return static_cast<uint32_t>(_obj.size());
-    }
-    uint32_t num_rows() const override {
-        return static_cast<uint32_t>(_row_lb.size());
-    }
+    uint32_t num_cols() const override { return static_cast<uint32_t>(_obj.size()); }
+    uint32_t num_rows() const override { return static_cast<uint32_t>(_row_lb.size()); }
 };
 
 std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose) {
