@@ -1,13 +1,13 @@
 #pragma once
 
-#include <cassert>
-#include <cstdint>
-#include <optional>
-
 #include "mcfcg/graph/d_ary_heap.h"
 #include "mcfcg/graph/semiring.h"
 #include "mcfcg/graph/static_digraph.h"
 #include "mcfcg/graph/static_map.h"
+
+#include <cassert>
+#include <cstdint>
+#include <optional>
 
 namespace mcfcg {
 
@@ -30,7 +30,7 @@ struct dijkstra_store_paths {
 // Traits control whether distances and predecessor arcs are stored.
 template <typename Traits = dijkstra_default_traits>
 class dijkstra {
-   public:
+public:
     using vertex = uint32_t;
     using arc = uint32_t;
     using length_type = int64_t;
@@ -38,9 +38,9 @@ class dijkstra {
 
     enum vertex_status : char { PRE_HEAP = 0, IN_HEAP = 1, POST_HEAP = 2 };
 
-   private:
-    const static_digraph * _graph = nullptr;
-    const static_map<arc, length_type> * _length_map = nullptr;
+private:
+    const static_digraph* _graph = nullptr;
+    const static_map<arc, length_type>* _length_map = nullptr;
 
     d_ary_heap<4, length_type> _heap;
     static_map<vertex, vertex_status> _status;
@@ -59,30 +59,27 @@ class dijkstra {
         // nothing
     };
 
-    using dist_storage = std::conditional_t<Traits::store_distances,
-                                            dist_map_holder, empty_dist_holder>;
-    using pred_storage = std::conditional_t<Traits::store_paths,
-                                            pred_map_holder, empty_pred_holder>;
+    using dist_storage =
+        std::conditional_t<Traits::store_distances, dist_map_holder, empty_dist_holder>;
+    using pred_storage =
+        std::conditional_t<Traits::store_paths, pred_map_holder, empty_pred_holder>;
 
     [[no_unique_address]] dist_storage _dist_s;
     [[no_unique_address]] pred_storage _pred_s;
 
-   public:
+public:
     dijkstra() = default;
 
-    dijkstra(const static_digraph & g,
-             const static_map<arc, length_type> & lengths)
+    dijkstra(const static_digraph& g, const static_map<arc, length_type>& lengths)
         : _graph(&g),
           _length_map(&lengths),
           _heap(g.num_vertices()),
           _status(g.num_vertices(), PRE_HEAP) {
         if constexpr (Traits::store_distances) {
-            _dist_s._distances =
-                static_map<vertex, length_type>(g.num_vertices());
+            _dist_s._distances = static_map<vertex, length_type>(g.num_vertices());
         }
         if constexpr (Traits::store_paths) {
-            _pred_s._pred_arcs =
-                static_map<vertex, std::optional<arc>>(g.num_vertices());
+            _pred_s._pred_arcs = static_map<vertex, std::optional<arc>>(g.num_vertices());
         }
     }
 
@@ -149,6 +146,12 @@ class dijkstra {
             advance();
     }
 
+    // Run until the heap is empty or the minimum key exceeds bound.
+    void run_until(length_type bound) noexcept {
+        while (!finished() && current().second <= bound)
+            advance();
+    }
+
     bool reached(vertex u) const noexcept { return _status[u] != PRE_HEAP; }
     bool visited(vertex u) const noexcept { return _status[u] == POST_HEAP; }
 
@@ -180,7 +183,7 @@ class dijkstra {
 // number of target vertices.
 template <typename Traits = dijkstra_store_paths>
 class astar_dijkstra {
-   public:
+public:
     using vertex = uint32_t;
     using arc = uint32_t;
     using length_type = int64_t;
@@ -188,10 +191,10 @@ class astar_dijkstra {
 
     enum vertex_status : char { PRE_HEAP = 0, IN_HEAP = 1, POST_HEAP = 2 };
 
-   private:
-    const static_digraph * _graph = nullptr;
-    const static_map<arc, length_type> * _length_map = nullptr;
-    const static_map<vertex, length_type> * _heuristic = nullptr;
+private:
+    const static_digraph* _graph = nullptr;
+    const static_map<arc, length_type>* _length_map = nullptr;
+    const static_map<vertex, length_type>* _heuristic = nullptr;
 
     d_ary_heap<4, length_type> _heap;
     static_map<vertex, vertex_status> _status;
@@ -204,16 +207,15 @@ class astar_dijkstra {
         // nothing
     };
 
-    using pred_storage = std::conditional_t<Traits::store_paths,
-                                            pred_map_holder, empty_pred_holder>;
+    using pred_storage =
+        std::conditional_t<Traits::store_paths, pred_map_holder, empty_pred_holder>;
     [[no_unique_address]] pred_storage _pred_s;
 
-   public:
+public:
     astar_dijkstra() = default;
 
-    astar_dijkstra(const static_digraph & g,
-                   const static_map<arc, length_type> & lengths,
-                   const static_map<vertex, length_type> & heuristic)
+    astar_dijkstra(const static_digraph& g, const static_map<arc, length_type>& lengths,
+                   const static_map<vertex, length_type>& heuristic)
         : _graph(&g),
           _length_map(&lengths),
           _heuristic(&heuristic),
@@ -221,8 +223,7 @@ class astar_dijkstra {
           _status(g.num_vertices(), PRE_HEAP),
           _g(g.num_vertices()) {
         if constexpr (Traits::store_paths) {
-            _pred_s._pred_arcs =
-                static_map<vertex, std::optional<arc>>(g.num_vertices());
+            _pred_s._pred_arcs = static_map<vertex, std::optional<arc>>(g.num_vertices());
         }
     }
 
@@ -290,8 +291,8 @@ class astar_dijkstra {
     // Run until num_targets target vertices have been settled.
     // targets_remaining is decremented each time a target is settled.
     // Caller initializes it to the number of targets to find.
-    void run_until_targets(static_map<vertex, bool> & is_target,
-                           uint32_t & targets_remaining) noexcept {
+    void run_until_targets(static_map<vertex, bool>& is_target,
+                           uint32_t& targets_remaining) noexcept {
         while (!finished() && targets_remaining > 0) {
             auto [v, _] = settle_next();
             if (is_target[v]) {

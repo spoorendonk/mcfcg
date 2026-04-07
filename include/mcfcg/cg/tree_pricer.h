@@ -1,34 +1,35 @@
 #pragma once
 
-#include <cmath>
-#include <cstdint>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
 #include "mcfcg/cg/pricer.h"
 #include "mcfcg/cg/tree_column.h"
 #include "mcfcg/graph/dijkstra.h"
 #include "mcfcg/graph/semiring.h"
 #include "mcfcg/instance.h"
 
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
 namespace mcfcg {
 
 class TreePricer {
-   public:
+public:
     static constexpr double SCALE = 1e9;
     static constexpr double NEG_RC_TOL = -1e-6;
 
-   private:
-    const Instance * _inst = nullptr;
+private:
+    const Instance* _inst = nullptr;
     std::vector<bool> _source_postponed;
     PricingMode _mode = PricingMode::AStar;
     static_map<uint32_t, int64_t> _lower_bounds;
 
-   public:
+public:
     TreePricer() = default;
 
-    void init(const Instance & inst, PricingMode mode = PricingMode::AStar) {
+    void init(const Instance& inst, PricingMode mode = PricingMode::AStar) {
         _inst = &inst;
         _source_postponed.assign(inst.sources.size(), false);
         _mode = mode;
@@ -40,18 +41,17 @@ class TreePricer {
     // Price all sources. Returns tree columns with negative reduced cost.
     // pi_s: source convexity duals
     // mu: capacity duals (per arc)
-    std::vector<TreeColumn> price(
-        const std::vector<double> & pi_s,
-        const std::unordered_map<uint32_t, double> & mu,
-        bool final_round = false) {
+    std::vector<TreeColumn> price(const std::vector<double>& pi_s,
+                                  const std::unordered_map<uint32_t, double>& mu,
+                                  bool final_round = false) {
         std::unordered_set<uint32_t> no_forbidden;
         return price(pi_s, mu, no_forbidden, final_round);
     }
 
-    std::vector<TreeColumn> price(
-        const std::vector<double> & pi_s,
-        const std::unordered_map<uint32_t, double> & mu,
-        const std::unordered_set<uint32_t> & forbidden_arcs, bool final_round) {
+    std::vector<TreeColumn> price(const std::vector<double>& pi_s,
+                                  const std::unordered_map<uint32_t, double>& mu,
+                                  const std::unordered_set<uint32_t>& forbidden_arcs,
+                                  bool final_round) {
         auto rc = _inst->graph.create_arc_map<int64_t>();
         constexpr int64_t BIG = shortest_path_semiring<int64_t>::infty / 2;
         for (auto a : _inst->graph.arcs()) {
@@ -65,9 +65,7 @@ class TreePricer {
             if (it != mu.end())
                 mu_a = it->second;
             double val = cost_a - mu_a;
-            rc[a] = (val <= 0.0)
-                        ? int64_t{0}
-                        : static_cast<int64_t>(std::round(val * SCALE));
+            rc[a] = (val <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(val * SCALE));
         }
 
         std::vector<TreeColumn> new_columns;
@@ -76,31 +74,25 @@ class TreePricer {
             if (!final_round && _source_postponed[s_idx])
                 continue;
 
-            const auto & src = _inst->sources[s_idx];
+            const auto& src = _inst->sources[s_idx];
             uint32_t source_v = src.vertex;
 
             if (_mode == PricingMode::AStar) {
-                price_source_astar(s_idx, src, source_v, rc, pi_s, mu,
-                                   new_columns);
+                price_source_astar(s_idx, src, source_v, rc, pi_s, mu, new_columns);
             } else {
-                price_source_dijkstra(s_idx, src, source_v, rc, pi_s, mu,
-                                      new_columns);
+                price_source_dijkstra(s_idx, src, source_v, rc, pi_s, mu, new_columns);
             }
         }
 
         return new_columns;
     }
 
-    void reset_postponed() {
-        std::fill(_source_postponed.begin(), _source_postponed.end(), false);
-    }
+    void reset_postponed() { std::fill(_source_postponed.begin(), _source_postponed.end(), false); }
 
-   private:
-    void build_tree_column(
-        uint32_t s_idx, const Source & src,
-        const std::vector<double> & pi_s,
-        const std::unordered_map<uint32_t, double> & mu,
-        auto & dijk, std::vector<TreeColumn> & new_columns) {
+private:
+    void build_tree_column(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
+                           const std::unordered_map<uint32_t, double>& mu, auto& dijk,
+                           std::vector<TreeColumn>& new_columns) {
         bool all_reachable = true;
         TreeColumn col;
         col.source_idx = s_idx;
@@ -142,31 +134,85 @@ class TreePricer {
 
         _source_postponed[s_idx] = false;
 
-        for (auto & [arc, flow] : arc_flow_map) {
+        for (auto& [arc, flow] : arc_flow_map) {
             col.arc_flows.push_back({arc, flow});
         }
 
         new_columns.push_back(std::move(col));
     }
 
-    void price_source_dijkstra(
-        uint32_t s_idx, const Source & src, uint32_t source_v,
-        const static_map<uint32_t, int64_t> & rc,
-        const std::vector<double> & pi_s,
-        const std::unordered_map<uint32_t, double> & mu,
-        std::vector<TreeColumn> & new_columns) {
+    void price_source_dijkstra(uint32_t s_idx, const Source& src, uint32_t source_v,
+                               const static_map<uint32_t, int64_t>& rc,
+                               const std::vector<double>& pi_s,
+                               const std::unordered_map<uint32_t, double>& mu,
+                               std::vector<TreeColumn>& new_columns) {
+        constexpr auto MAX_BOUND = shortest_path_semiring<int64_t>::infty / 2;
+
+        // Shrinking-budget bound: budget starts at pi_s * SCALE.
+        // As targets are settled, subtract d_k * dist_k from budget.
+        // Bound = budget / min_remaining_demand.
+        struct target_info {
+            uint32_t commodity;
+            double demand;
+        };
+        std::unordered_map<uint32_t, std::vector<target_info>> remaining;
+        double min_demand = std::numeric_limits<double>::max();
+        for (uint32_t k : src.commodity_indices) {
+            uint32_t sink = _inst->commodities[k].sink;
+            double d = _inst->commodities[k].demand;
+            remaining[sink].push_back({k, d});
+            min_demand = std::min(min_demand, d);
+        }
+
+        double budget = pi_s[s_idx] * SCALE;
+        uint32_t num_remaining = static_cast<uint32_t>(src.commodity_indices.size());
+
+        auto compute_bound = [&]() -> int64_t {
+            if (num_remaining == 0 || budget <= 0.0)
+                return int64_t{0};
+            double raw = budget / min_demand;
+            return raw >= static_cast<double>(MAX_BOUND) ? MAX_BOUND
+                                                         : static_cast<int64_t>(std::ceil(raw));
+        };
+
+        int64_t dual_bound = compute_bound();
+
         dijkstra<dijkstra_store_paths> dijk(_inst->graph, rc);
         dijk.add_source(source_v);
-        dijk.run();
+
+        while (!dijk.finished() && num_remaining > 0) {
+            auto [u, u_dist] = dijk.current();
+            if (u_dist > dual_bound)
+                break;
+            dijk.advance();
+
+            auto rit = remaining.find(u);
+            if (rit != remaining.end()) {
+                for (auto& ti : rit->second) {
+                    budget -= ti.demand * static_cast<double>(u_dist);
+                    --num_remaining;
+                }
+                remaining.erase(rit);
+                if (num_remaining > 0) {
+                    min_demand = std::numeric_limits<double>::max();
+                    for (auto& [_, infos] : remaining) {
+                        for (auto& ti : infos) {
+                            min_demand = std::min(min_demand, ti.demand);
+                        }
+                    }
+                }
+                dual_bound = compute_bound();
+            }
+        }
+
         build_tree_column(s_idx, src, pi_s, mu, dijk, new_columns);
     }
 
-    void price_source_astar(
-        uint32_t s_idx, const Source & src, uint32_t source_v,
-        const static_map<uint32_t, int64_t> & rc,
-        const std::vector<double> & pi_s,
-        const std::unordered_map<uint32_t, double> & mu,
-        std::vector<TreeColumn> & new_columns) {
+    void price_source_astar(uint32_t s_idx, const Source& src, uint32_t source_v,
+                            const static_map<uint32_t, int64_t>& rc,
+                            const std::vector<double>& pi_s,
+                            const std::unordered_map<uint32_t, double>& mu,
+                            std::vector<TreeColumn>& new_columns) {
         // Build target set: all unique sinks.
         auto is_target = _inst->graph.create_vertex_map<bool>(false);
         uint32_t num_targets = 0;
@@ -179,8 +225,7 @@ class TreePricer {
         }
 
         // Use precomputed lower bounds (original costs, computed once at init).
-        astar_dijkstra<dijkstra_store_paths> dijk(_inst->graph, rc,
-                                                  _lower_bounds);
+        astar_dijkstra<dijkstra_store_paths> dijk(_inst->graph, rc, _lower_bounds);
         dijk.add_source(source_v);
         dijk.run_until_targets(is_target, num_targets);
 
