@@ -25,6 +25,7 @@ private:
     const Instance* _inst = nullptr;
     std::vector<bool> _source_postponed;
     std::vector<std::vector<uint32_t>> _source_arcs;  // arcs used per source in last pricing
+    bool _track_arcs = false;
     PricingMode _mode = PricingMode::AStar;
     static_map<uint32_t, int64_t> _lower_bounds;
 
@@ -34,10 +35,16 @@ public:
     void init(const Instance& inst, PricingMode mode = PricingMode::AStar) {
         _inst = &inst;
         _source_postponed.assign(inst.sources.size(), false);
-        _source_arcs.resize(inst.sources.size());
         _mode = mode;
         if (_mode == PricingMode::AStar) {
             _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
+        }
+    }
+
+    void set_track_arcs(bool enabled) {
+        _track_arcs = enabled;
+        if (enabled) {
+            _source_arcs.resize(_inst->sources.size());
         }
     }
 
@@ -144,10 +151,12 @@ private:
         }
 
         // Record arcs used by this source for capacity filtering
-        _source_arcs[s_idx].clear();
-        _source_arcs[s_idx].reserve(arc_flow_map.size());
-        for (auto& [arc, flow] : arc_flow_map) {
-            _source_arcs[s_idx].push_back(arc);
+        if (_track_arcs) {
+            _source_arcs[s_idx].clear();
+            _source_arcs[s_idx].reserve(arc_flow_map.size());
+            for (auto& [arc, flow] : arc_flow_map) {
+                _source_arcs[s_idx].push_back(arc);
+            }
         }
 
         if (!all_reachable || tree_rc >= NEG_RC_TOL) {

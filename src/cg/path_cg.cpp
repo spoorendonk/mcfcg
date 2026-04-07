@@ -14,6 +14,7 @@ CGResult solve_path_cg(const Instance& inst, const CGParams& params) {
 
     PathPricer pricer;
     pricer.init(inst);
+    pricer.set_track_arcs(params.pricing_filter);
 
     Timer timer;
     CGLogger logger(params.verbosity);
@@ -84,7 +85,9 @@ CGResult solve_path_cg(const Instance& inst, const CGParams& params) {
         timer.stop(TimerCat::Separation);
 
         if (!new_cap_arcs.empty()) {
-            pricer.filter_for_new_caps(new_cap_arcs);
+            if (params.pricing_filter) {
+                pricer.filter_for_new_caps(new_cap_arcs);
+            }
 
             iter_timer.stop(TimerCat::Total);
             logger.print_iteration(

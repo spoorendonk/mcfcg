@@ -96,6 +96,7 @@ private:
     const Instance* _inst = nullptr;
     std::vector<bool> _source_postponed;
     std::vector<std::vector<uint32_t>> _source_arcs;  // arcs used per source in last pricing
+    bool _track_arcs = false;
     PricingMode _mode = PricingMode::AStar;
     static_map<vertex_t, int64_t> _lower_bounds;
 
@@ -105,10 +106,16 @@ public:
     void init(const Instance& inst, PricingMode mode = PricingMode::AStar) {
         _inst = &inst;
         _source_postponed.assign(inst.sources.size(), false);
-        _source_arcs.resize(inst.sources.size());
         _mode = mode;
         if (_mode == PricingMode::AStar) {
             _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
+        }
+    }
+
+    void set_track_arcs(bool enabled) {
+        _track_arcs = enabled;
+        if (enabled) {
+            _source_arcs.resize(_inst->sources.size());
         }
     }
 
@@ -179,7 +186,8 @@ private:
                          const std::unordered_map<uint32_t, double>& mu, auto& dijk,
                          std::vector<Column>& new_columns) {
         bool found_any = false;
-        _source_arcs[s_idx].clear();
+        if (_track_arcs)
+            _source_arcs[s_idx].clear();
 
         for (uint32_t k : src.commodity_indices) {
             vertex_t sink = _inst->commodities[k].sink;
@@ -195,7 +203,8 @@ private:
             while (dijk.has_pred(v)) {
                 uint32_t a = dijk.pred_arc(v);
                 col.arcs.push_back(a);
-                _source_arcs[s_idx].push_back(a);
+                if (_track_arcs)
+                    _source_arcs[s_idx].push_back(a);
                 col.cost += _inst->cost[a];
                 double mu_a = 0.0;
                 auto mit = mu.find(a);

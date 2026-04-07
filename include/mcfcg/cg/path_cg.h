@@ -30,6 +30,7 @@ struct CGParams {
     // When true, cap columns per iteration at the number of sources (one per
     // source) so the master LP is re-solved more frequently with fresh duals.
     bool prefer_master = false;
+    bool pricing_filter = false;
     SolverFactory solver_factory;  // Custom LP solver; uses HiGHS if null
 };
 
