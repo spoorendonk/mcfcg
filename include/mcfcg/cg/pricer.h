@@ -95,6 +95,7 @@ public:
 private:
     const Instance* _inst = nullptr;
     std::vector<bool> _source_postponed;
+    std::vector<std::vector<uint32_t>> _source_arcs;  // arcs used per source in last pricing
     PricingMode _mode = PricingMode::AStar;
     static_map<vertex_t, int64_t> _lower_bounds;
 
@@ -104,6 +105,7 @@ public:
     void init(const Instance& inst, PricingMode mode = PricingMode::AStar) {
         _inst = &inst;
         _source_postponed.assign(inst.sources.size(), false);
+        _source_arcs.resize(inst.sources.size());
         _mode = mode;
         if (_mode == PricingMode::AStar) {
             _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
@@ -157,6 +159,19 @@ public:
         return new_columns;
     }
 
+    // After new capacity constraints are added, mark sources for re-pricing
+    // based on whether their last shortest-path tree used any newly constrained
+    // arc.  Affected sources are un-postponed (their reduced costs changed);
+    // unaffected sources are postponed (their reduced costs are unchanged).
+    void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
+        std::unordered_set<uint32_t> cap_set(new_cap_arcs.begin(), new_cap_arcs.end());
+        for (uint32_t s = 0; s < _source_postponed.size(); ++s) {
+            bool affected = std::any_of(_source_arcs[s].begin(), _source_arcs[s].end(),
+                                        [&](uint32_t a) { return cap_set.contains(a); });
+            _source_postponed[s] = !affected;
+        }
+    }
+
     void reset_postponed() { std::fill(_source_postponed.begin(), _source_postponed.end(), false); }
 
 private:
@@ -164,6 +179,7 @@ private:
                          const std::unordered_map<uint32_t, double>& mu, auto& dijk,
                          std::vector<Column>& new_columns) {
         bool found_any = false;
+        _source_arcs[s_idx].clear();
 
         for (uint32_t k : src.commodity_indices) {
             vertex_t sink = _inst->commodities[k].sink;
@@ -179,6 +195,7 @@ private:
             while (dijk.has_pred(v)) {
                 uint32_t a = dijk.pred_arc(v);
                 col.arcs.push_back(a);
+                _source_arcs[s_idx].push_back(a);
                 col.cost += _inst->cost[a];
                 double mu_a = 0.0;
                 auto mit = mu.find(a);

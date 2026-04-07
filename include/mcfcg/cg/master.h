@@ -136,7 +136,7 @@ public:
         return result;
     }
 
-    uint32_t add_violated_capacity_constraints(const std::vector<double>& primals) {
+    std::vector<uint32_t> add_violated_capacity_constraints(const std::vector<double>& primals) {
         // Compute flow on each arc
         auto flow = _inst->graph.create_arc_map<double>(0.0);
         for (uint32_t c = 0; c < _columns.size(); ++c) {
@@ -158,7 +158,7 @@ public:
         }
 
         if (new_arcs.empty())
-            return 0;
+            return {};
 
         // Build CSR for new capacity rows
         std::vector<double> row_lb;
@@ -190,7 +190,7 @@ public:
             _cap_row_to_arc.push_back(new_arcs[i]);
         }
 
-        return static_cast<uint32_t>(new_arcs.size());
+        return new_arcs;
     }
 
     uint32_t num_columns() const { return static_cast<uint32_t>(_columns.size()); }
@@ -198,7 +198,6 @@ public:
 
     uint32_t num_lp_cols() const { return _lp->num_cols(); }
     uint32_t num_lp_rows() const { return _lp->num_rows(); }
-
 };
 
 }  // namespace mcfcg

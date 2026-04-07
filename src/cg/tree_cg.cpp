@@ -79,15 +79,17 @@ CGResult solve_tree_cg(const Instance& inst, const CGParams& params) {
         // --- Separation ---
         timer.start(TimerCat::Separation);
         iter_timer.start(TimerCat::Separation);
-        uint32_t new_caps = master.add_violated_capacity_constraints(primals);
+        auto new_cap_arcs = master.add_violated_capacity_constraints(primals);
         iter_timer.stop(TimerCat::Separation);
         timer.stop(TimerCat::Separation);
 
-        if (new_caps > 0) {
+        if (!new_cap_arcs.empty()) {
+            pricer.filter_for_new_caps(new_cap_arcs);
+
             iter_timer.stop(TimerCat::Total);
             logger.print_iteration(
                 iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(), 0, 0,
-                new_caps, 0, iter_timer.elapsed(TimerCat::LP),
+                static_cast<uint32_t>(new_cap_arcs.size()), 0, iter_timer.elapsed(TimerCat::LP),
                 iter_timer.elapsed(TimerCat::Pricing), iter_timer.elapsed(TimerCat::Separation),
                 iter_timer.elapsed(TimerCat::Total));
             continue;
@@ -120,9 +122,8 @@ CGResult solve_tree_cg(const Instance& inst, const CGParams& params) {
             pricer.reset_postponed();
         }
 
-        uint32_t col_limit = params.prefer_master
-                                 ? static_cast<uint32_t>(inst.sources.size())
-                                 : params.max_cols_per_iter;
+        uint32_t col_limit = params.prefer_master ? static_cast<uint32_t>(inst.sources.size())
+                                                  : params.max_cols_per_iter;
         if (new_cols.size() > col_limit) {
             new_cols.resize(col_limit);
         }

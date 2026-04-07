@@ -1,12 +1,5 @@
 #pragma once
 
-#include <gtest/gtest.h>
-
-#include <cmath>
-#include <cstdint>
-#include <unordered_map>
-#include <vector>
-
 #include "mcfcg/cg/column.h"
 #include "mcfcg/cg/master.h"
 #include "mcfcg/cg/pricer.h"
@@ -14,6 +7,12 @@
 #include "mcfcg/cg/tree_master.h"
 #include "mcfcg/cg/tree_pricer.h"
 #include "mcfcg/instance.h"
+
+#include <cmath>
+#include <cstdint>
+#include <gtest/gtest.h>
+#include <unordered_map>
+#include <vector>
 
 namespace mcfcg::test {
 
@@ -76,7 +75,7 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, dou
 
         obj = master.get_obj();
         auto primals = master.get_primals();
-        if (master.add_violated_capacity_constraints(primals) > 0) {
+        if (!master.add_violated_capacity_constraints(primals).empty()) {
             continue;
         }
 
@@ -109,7 +108,7 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, dou
                 for (const auto& existing : master.columns()) {
                     if (existing.commodity == col.commodity && existing.arcs == col.arcs) {
                         ADD_FAILURE() << "Duplicate column for commodity " << col.commodity
-                                     << " at iteration " << iter;
+                                      << " at iteration " << iter;
                     }
                 }
             }
@@ -149,7 +148,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, dou
 
         obj = master.get_obj();
         auto primals = master.get_primals();
-        if (master.add_violated_capacity_constraints(primals) > 0) {
+        if (!master.add_violated_capacity_constraints(primals).empty()) {
             continue;
         }
 
@@ -174,8 +173,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, dou
 
         for (const auto& col : new_cols) {
             double rc = recompute_tree_rc(col, pi_s, mu);
-            EXPECT_LT(rc, NEW_COL_RC_TOL)
-                << "New tree col s=" << col.source_idx << " RC=" << rc;
+            EXPECT_LT(rc, NEW_COL_RC_TOL) << "New tree col s=" << col.source_idx << " RC=" << rc;
         }
 
         if (check_duplicates) {
@@ -203,7 +201,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, dou
                     }
                     if (match) {
                         ADD_FAILURE() << "Duplicate tree column for source " << col.source_idx
-                                     << " at iteration " << iter;
+                                      << " at iteration " << iter;
                     }
                 }
             }
