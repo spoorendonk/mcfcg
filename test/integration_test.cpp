@@ -1,13 +1,13 @@
-#include <gtest/gtest.h>
+#include "cg_test_util.h"
+#include "mcfcg/cg/path_cg.h"
+#include "mcfcg/cg/tree_cg.h"
+#include "mcfcg/instance.h"
 
 #include <filesystem>
 #include <fstream>
+#include <gtest/gtest.h>
 #include <string>
 #include <unordered_map>
-
-#include "cg_test_util.h"
-#include "mcfcg/cg/path_cg.h"
-#include "mcfcg/instance.h"
 
 namespace fs = std::filesystem;
 
@@ -201,13 +201,64 @@ TEST(RCValidation, WinnipegTree) {
     solve_and_validate_tree_rc(inst, opt.at("Winnipeg"));
 }
 
+// --- Feature tests: prefer_master, pricing_filter, A* admissibility ---
+
+// Verify prefer_master + pricing_filter produce same optimal objective.
+TEST(FeatureTests, PreferMasterPath) {
+    auto opt = load_optimal(data_dir("commalab/grid"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
+    mcfcg::CGParams params;
+    params.prefer_master = true;
+    params.pricing_filter = true;
+    auto result = mcfcg::solve_path_cg(inst, params);
+    EXPECT_TRUE(result.optimal);
+    solve_and_check(inst, opt.at("grid1"));
+}
+
+TEST(FeatureTests, PreferMasterTree) {
+    auto opt = load_optimal(data_dir("commalab/grid"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
+    mcfcg::CGParams params;
+    params.prefer_master = true;
+    params.pricing_filter = true;
+    auto result = mcfcg::solve_tree_cg(inst, params);
+    EXPECT_TRUE(result.optimal);
+    EXPECT_GE(result.objective, opt.at("grid1") * (1.0 - 0.0001));
+    EXPECT_LE(result.objective, opt.at("grid1") * (1.0 + 0.0001));
+}
+
+// Verify A* produces identical objective to plain Dijkstra (admissibility).
+TEST(FeatureTests, AStarMatchesDijkstra) {
+    auto opt = load_optimal(data_dir("commalab/grid"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid2");
+
+    mcfcg::CGParams params;
+    auto result_astar = mcfcg::solve_path_cg(inst, params);  // default is A*
+    ASSERT_TRUE(result_astar.optimal);
+
+    // Compare against reference -- A* must match within tolerance
+    EXPECT_GE(result_astar.objective, opt.at("grid2") * (1.0 - 0.0001));
+    EXPECT_LE(result_astar.objective, opt.at("grid2") * (1.0 + 0.0001));
+}
+
+TEST(FeatureTests, AStarMatchesDijkstraTree) {
+    auto opt = load_optimal(data_dir("commalab/grid"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid2");
+
+    auto result = mcfcg::solve_tree_cg(inst);
+    ASSERT_TRUE(result.optimal);
+    EXPECT_GE(result.objective, opt.at("grid2") * (1.0 - 0.0001));
+    EXPECT_LE(result.objective, opt.at("grid2") * (1.0 + 0.0001));
+}
+
 // --- cuOpt GPU solver tests ---
 
 #ifdef MCFCG_USE_CUOPT
 
 #include "mcfcg/lp/lp_solver.h"
 
-static void solve_and_check_cuopt(const mcfcg::Instance& inst, double ref_obj, double tol = 0.0001) {
+static void solve_and_check_cuopt(const mcfcg::Instance& inst, double ref_obj,
+                                  double tol = 0.0001) {
     mcfcg::CGParams params;
     params.max_iterations = 10000;
     params.solver_factory = []() { return mcfcg::create_cuopt_solver(); };

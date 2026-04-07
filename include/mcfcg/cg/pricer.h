@@ -21,6 +21,11 @@ enum class PricingMode { Dijkstra, AStar };
 // all commodities are seeded with distance 0 and a single multi-source reverse
 // Dijkstra is run.  The result is an admissible A* heuristic that is stable
 // across CG iterations (original costs never change).
+//
+// Admissibility: capacity duals mu_e <= 0 (non-positive for <= constraints in
+// minimization), so reduced costs c_e - mu_e >= c_e.  The heuristic using
+// original costs c_e underestimates the shortest path under reduced costs,
+// guaranteeing A* optimality.
 inline static_map<uint32_t, int64_t> compute_lower_bounds_to_targets(const Instance& inst,
                                                                      double scale) {
     const auto& g = inst.graph;

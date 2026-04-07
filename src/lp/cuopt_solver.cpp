@@ -284,23 +284,38 @@ public:
             return LPStatus::Error;
         }
 
+        // Cleanup helper — ensures cuOpt resources are freed on all paths.
+        auto cleanup = [&] {
+            if (solution)
+                cuOptDestroySolution(&solution);
+            cuOptDestroySolverSettings(&settings);
+            cuOptDestroyProblem(&problem);
+        };
+
         // Check termination status
         cuopt_int_t term_status = 0;
-        check_cuopt(cuOptGetTerminationStatus(solution, &term_status), "GetTerminationStatus");
+        if (cuOptGetTerminationStatus(solution, &term_status) != CUOPT_SUCCESS) {
+            cleanup();
+            return LPStatus::Error;
+        }
 
         LPStatus result = LPStatus::Error;
         // Note: cuOpt API has "TERIMINATION" typo in constant names
         if (term_status == CUOPT_TERIMINATION_STATUS_OPTIMAL) {
-            result = LPStatus::Optimal;
-
             // Extract objective
             cuopt_float_t obj_val = 0;
-            check_cuopt(cuOptGetObjectiveValue(solution, &obj_val), "GetObjectiveValue");
+            if (cuOptGetObjectiveValue(solution, &obj_val) != CUOPT_SUCCESS) {
+                cleanup();
+                return LPStatus::Error;
+            }
             _cached_obj = static_cast<double>(obj_val);
 
             // Extract primals
             std::vector<cuopt_float_t> f_primals(n);
-            check_cuopt(cuOptGetPrimalSolution(solution, f_primals.data()), "GetPrimalSolution");
+            if (cuOptGetPrimalSolution(solution, f_primals.data()) != CUOPT_SUCCESS) {
+                cleanup();
+                return LPStatus::Error;
+            }
             _cached_primals.resize(n);
             for (uint32_t i = 0; i < n; ++i) {
                 _cached_primals[i] = static_cast<double>(f_primals[i]);
@@ -308,22 +323,23 @@ public:
 
             // Extract duals
             std::vector<cuopt_float_t> f_duals(m);
-            check_cuopt(cuOptGetDualSolution(solution, f_duals.data()), "GetDualSolution");
+            if (cuOptGetDualSolution(solution, f_duals.data()) != CUOPT_SUCCESS) {
+                cleanup();
+                return LPStatus::Error;
+            }
             _cached_duals.resize(m);
             for (uint32_t i = 0; i < m; ++i) {
                 _cached_duals[i] = static_cast<double>(f_duals[i]);
             }
+
+            result = LPStatus::Optimal;
         } else if (term_status == CUOPT_TERIMINATION_STATUS_INFEASIBLE) {
             result = LPStatus::Infeasible;
         } else if (term_status == CUOPT_TERIMINATION_STATUS_UNBOUNDED) {
             result = LPStatus::Unbounded;
         }
 
-        // Cleanup cuOpt resources
-        cuOptDestroySolution(&solution);
-        cuOptDestroySolverSettings(&settings);
-        cuOptDestroyProblem(&problem);
-
+        cleanup();
         return result;
     }
 

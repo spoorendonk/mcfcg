@@ -125,7 +125,7 @@ CGResult solve_path_cg(const Instance& inst, const CGParams& params) {
             pricer.reset_postponed();
         }
 
-        uint32_t col_limit = params.prefer_master ? static_cast<uint32_t>(inst.sources.size())
+        uint32_t col_limit = params.prefer_master ? static_cast<uint32_t>(inst.commodities.size())
                                                   : params.max_cols_per_iter;
         if (new_cols.size() > col_limit) {
             new_cols.resize(col_limit);
