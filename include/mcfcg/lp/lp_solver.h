@@ -57,4 +57,8 @@ class LPSolver {
 
 std::unique_ptr<LPSolver> create_lp_solver();
 
+#ifdef MCFCG_USE_CUOPT
+std::unique_ptr<LPSolver> create_cuopt_solver();
+#endif
+
 }  // namespace mcfcg

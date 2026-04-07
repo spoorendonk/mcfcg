@@ -39,7 +39,18 @@ target_link_libraries(mcfcg PUBLIC highs ZLIB::ZLIB)
 
 if(MCFCG_USE_CUOPT)
     target_compile_definitions(mcfcg PUBLIC MCFCG_USE_CUOPT)
-    # TODO: find and link cuOpt
+    find_path(CUOPT_INCLUDE_DIR cuopt/linear_programming/cuopt_c.h
+              HINTS ENV CUOPT_ROOT ENV CONDA_PREFIX
+              PATH_SUFFIXES include)
+    find_library(CUOPT_LIBRARY cuopt
+                 HINTS ENV CUOPT_ROOT ENV CONDA_PREFIX
+                 PATH_SUFFIXES lib lib64)
+    if(NOT CUOPT_INCLUDE_DIR OR NOT CUOPT_LIBRARY)
+        message(FATAL_ERROR "cuOpt not found. Set CUOPT_ROOT or CMAKE_PREFIX_PATH.")
+    endif()
+    target_sources(mcfcg PRIVATE src/lp/cuopt_solver.cpp)
+    target_include_directories(mcfcg PRIVATE ${CUOPT_INCLUDE_DIR})
+    target_link_libraries(mcfcg PRIVATE ${CUOPT_LIBRARY})
 endif()
 
 if(MCFCG_USE_MOSEK)
