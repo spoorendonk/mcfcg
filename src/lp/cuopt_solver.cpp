@@ -2,6 +2,7 @@
 
 #include "mcfcg/lp/lp_solver.h"
 
+#include <cuopt/linear_programming/constants.h>
 #include <cuopt/linear_programming/cuopt_c.h>
 
 #include <algorithm>
@@ -50,8 +51,11 @@ class CuOptSolver : public LPSolver {
     std::vector<double> _cached_primals;
     std::vector<double> _cached_duals;
 
+    bool _verbose = false;
+
    public:
     CuOptSolver() = default;
+    explicit CuOptSolver(bool verbose) : _verbose(verbose) {}
 
     uint32_t add_cols(const std::vector<double>& obj,
                       const std::vector<double>& lb,
@@ -272,6 +276,14 @@ class CuOptSolver : public LPSolver {
             return LPStatus::Error;
         }
 
+        // Use GPU barrier solver
+        cuOptSetParameter(settings, CUOPT_METHOD,
+                          std::to_string(CUOPT_METHOD_BARRIER).c_str());
+
+        if (_verbose) {
+            cuOptSetParameter(settings, CUOPT_LOG_TO_CONSOLE, "1");
+        }
+
         // Solve
         cuOptSolution solution = nullptr;
         status = cuOptSolve(problem, settings, &solution);
@@ -339,8 +351,8 @@ class CuOptSolver : public LPSolver {
     }
 };
 
-std::unique_ptr<LPSolver> create_cuopt_solver() {
-    return std::make_unique<CuOptSolver>();
+std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose) {
+    return std::make_unique<CuOptSolver>(verbose);
 }
 
 }  // namespace mcfcg
