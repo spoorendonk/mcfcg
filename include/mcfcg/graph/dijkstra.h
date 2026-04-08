@@ -7,7 +7,6 @@
 
 #include <cassert>
 #include <cstdint>
-#include <optional>
 
 namespace mcfcg {
 
@@ -59,11 +58,12 @@ public:
         assert(_ws->status[s] != vertex_status::IN_HEAP);
         _ws->heap.push(s, dist);
         _ws->status[s] = vertex_status::IN_HEAP;
+        _ws->touch(s);
         if constexpr (Traits::store_distances) {
             _ws->dist[s] = dist;
         }
         if constexpr (Traits::store_paths) {
-            _ws->pred[s].reset();
+            _ws->pred[s] = dijkstra_workspace::NO_PRED;
         }
     }
 
@@ -95,14 +95,15 @@ public:
                 if (semiring::less(new_dist, _ws->heap.priority(w))) {
                     _ws->heap.promote(w, new_dist);
                     if constexpr (Traits::store_paths) {
-                        _ws->pred[w].emplace(a);
+                        _ws->pred[w] = a;
                     }
                 }
             } else {
                 _ws->heap.push(w, new_dist);
                 _ws->status[w] = vertex_status::IN_HEAP;
+                _ws->touch(w);
                 if constexpr (Traits::store_paths) {
-                    _ws->pred[w].emplace(a);
+                    _ws->pred[w] = a;
                 }
             }
         }
@@ -132,14 +133,14 @@ public:
     arc pred_arc(vertex u) const noexcept
         requires(Traits::store_paths)
     {
-        assert(reached(u) && _ws->pred[u].has_value());
-        return _ws->pred[u].value();
+        assert(reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED);
+        return _ws->pred[u];
     }
 
     bool has_pred(vertex u) const noexcept
         requires(Traits::store_paths)
     {
-        return reached(u) && _ws->pred[u].has_value();
+        return reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED;
     }
 };
 
@@ -179,8 +180,9 @@ public:
         length_type f = semiring::plus(dist, (*_heuristic)[s]);
         _ws->heap.push(s, f);
         _ws->status[s] = vertex_status::IN_HEAP;
+        _ws->touch(s);
         if constexpr (Traits::store_paths) {
-            _ws->pred[s].reset();
+            _ws->pred[s] = dijkstra_workspace::NO_PRED;
         }
     }
 
@@ -208,15 +210,16 @@ public:
                     _ws->dist[w] = new_g;
                     _ws->heap.promote(w, new_f);
                     if constexpr (Traits::store_paths) {
-                        _ws->pred[w].emplace(a);
+                        _ws->pred[w] = a;
                     }
                 }
             } else {
                 _ws->dist[w] = new_g;
                 _ws->heap.push(w, new_f);
                 _ws->status[w] = vertex_status::IN_HEAP;
+                _ws->touch(w);
                 if constexpr (Traits::store_paths) {
-                    _ws->pred[w].emplace(a);
+                    _ws->pred[w] = a;
                 }
             }
         }
@@ -256,14 +259,14 @@ public:
     arc pred_arc(vertex u) const noexcept
         requires(Traits::store_paths)
     {
-        assert(reached(u) && _ws->pred[u].has_value());
-        return _ws->pred[u].value();
+        assert(reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED);
+        return _ws->pred[u];
     }
 
     bool has_pred(vertex u) const noexcept
         requires(Traits::store_paths)
     {
-        return reached(u) && _ws->pred[u].has_value();
+        return reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED;
     }
 };
 

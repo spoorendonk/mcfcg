@@ -4,7 +4,7 @@
 #include "mcfcg/graph/static_map.h"
 
 #include <cstdint>
-#include <optional>
+#include <vector>
 
 namespace mcfcg {
 
@@ -19,10 +19,12 @@ struct dijkstra_workspace {
 
     enum vertex_status : char { PRE_HEAP = 0, IN_HEAP = 1, POST_HEAP = 2 };
 
+    static constexpr arc NO_PRED = ~arc{0};
+
     d_ary_heap<4, length_type> heap;
     static_map<vertex, vertex_status> status;
     static_map<vertex, length_type> dist;
-    static_map<vertex, std::optional<arc>> pred;
+    static_map<vertex, arc> pred;
 
     dijkstra_workspace() = default;
 
@@ -30,14 +32,24 @@ struct dijkstra_workspace {
         : heap(num_vertices),
           status(num_vertices, PRE_HEAP),
           dist(num_vertices),
-          pred(num_vertices, std::nullopt) {}
+          pred(num_vertices, NO_PRED) {}
 
-    // Only clears heap and status. dist/pred are not reset — they are
-    // always written before being read, gated by status (PRE_HEAP → never read).
+    // Track a vertex whose status changed from PRE_HEAP.
+    void touch(vertex v) noexcept { _touched.push_back(v); }
+
+    // Reset for the next shortest-path run. Only clears heap and touched
+    // vertices — O(touched) instead of O(V). dist/pred are not reset;
+    // they are always written before being read, gated by status.
     void reset() noexcept {
         heap.clear();
-        status.fill(PRE_HEAP);
+        for (vertex v : _touched) {
+            status[v] = PRE_HEAP;
+        }
+        _touched.clear();
     }
+
+private:
+    std::vector<vertex> _touched;
 };
 
 }  // namespace mcfcg

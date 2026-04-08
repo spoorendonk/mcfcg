@@ -1,128 +1,21 @@
 #pragma once
 
-#include "mcfcg/cg/pricer.h"
+#include "mcfcg/cg/pricer_base.h"
 #include "mcfcg/cg/tree_column.h"
-#include "mcfcg/graph/dijkstra.h"
-#include "mcfcg/graph/semiring.h"
-#include "mcfcg/instance.h"
 
-#include <algorithm>
-#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace mcfcg {
 
-class TreePricer {
-public:
-    static constexpr double SCALE = 1e9;
-    static constexpr double NEG_RC_TOL = -1e-6;
+class TreePricer : public PricerBase<TreePricer, TreeColumn> {
+    friend class PricerBase<TreePricer, TreeColumn>;
 
-private:
-    const Instance* _inst = nullptr;
-    std::vector<bool> _source_postponed;
-    std::vector<std::vector<uint32_t>> _source_arcs;  // arcs used per source in last pricing
-    bool _track_arcs = false;
-    PricingMode _mode = PricingMode::AStar;
-    static_map<uint32_t, int64_t> _lower_bounds;
-    dijkstra_workspace _workspace;
-    static_map<uint32_t, int64_t> _rc;
-    static_map<uint32_t, bool> _is_target;
-
-public:
-    TreePricer() = default;
-
-    void init(const Instance& inst, PricingMode mode = PricingMode::AStar) {
-        _inst = &inst;
-        _source_postponed.assign(inst.sources.size(), false);
-        _mode = mode;
-        _workspace = dijkstra_workspace(inst.graph.num_vertices());
-        _rc = inst.graph.create_arc_map<int64_t>();
-        if (_mode == PricingMode::AStar) {
-            _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
-            _is_target = inst.graph.create_vertex_map<bool>(false);
-        }
-    }
-
-    void set_track_arcs(bool enabled) {
-        _track_arcs = enabled;
-        if (enabled) {
-            _source_arcs.resize(_inst->sources.size());
-        }
-    }
-
-    // Price all sources. Returns tree columns with negative reduced cost.
-    // pi_s: source convexity duals
-    // mu: capacity duals (per arc)
-    std::vector<TreeColumn> price(const std::vector<double>& pi_s,
-                                  const std::unordered_map<uint32_t, double>& mu,
-                                  bool final_round = false) {
-        std::unordered_set<uint32_t> no_forbidden;
-        return price(pi_s, mu, no_forbidden, final_round);
-    }
-
-    std::vector<TreeColumn> price(const std::vector<double>& pi_s,
-                                  const std::unordered_map<uint32_t, double>& mu,
-                                  const std::unordered_set<uint32_t>& forbidden_arcs,
-                                  bool final_round) {
-        // Compute clamped reduced costs for Dijkstra (reuses _rc allocation).
-        constexpr int64_t BIG = shortest_path_semiring<int64_t>::infty / 2;
-        for (auto a : _inst->graph.arcs()) {
-            if (forbidden_arcs.count(a) > 0) {
-                _rc[a] = BIG;
-                continue;
-            }
-            double cost_a = _inst->cost[a];
-            double mu_a = 0.0;
-            auto it = mu.find(a);
-            if (it != mu.end())
-                mu_a = it->second;
-            double val = cost_a - mu_a;
-            _rc[a] = (val <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(val * SCALE));
-        }
-
-        std::vector<TreeColumn> new_columns;
-
-        for (uint32_t s_idx = 0; s_idx < _inst->sources.size(); ++s_idx) {
-            if (!final_round && _source_postponed[s_idx])
-                continue;
-
-            const auto& src = _inst->sources[s_idx];
-            uint32_t source_v = src.vertex;
-
-            if (_mode == PricingMode::AStar) {
-                price_source_astar(s_idx, src, source_v, pi_s, mu, new_columns);
-            } else {
-                price_source_dijkstra(s_idx, src, source_v, pi_s, mu, new_columns);
-            }
-        }
-
-        return new_columns;
-    }
-
-    // After new capacity constraints are added, mark sources for re-pricing
-    // based on whether their last shortest-path tree used any newly constrained
-    // arc.  Affected sources are un-postponed (their reduced costs changed);
-    // unaffected sources are postponed (their reduced costs are unchanged).
-    void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
-        assert(_track_arcs && "filter_for_new_caps requires set_track_arcs(true)");
-        std::unordered_set<uint32_t> cap_set(new_cap_arcs.begin(), new_cap_arcs.end());
-        for (uint32_t s = 0; s < _source_postponed.size(); ++s) {
-            bool affected = std::any_of(_source_arcs[s].begin(), _source_arcs[s].end(),
-                                        [&](uint32_t a) { return cap_set.contains(a); });
-            _source_postponed[s] = !affected;
-        }
-    }
-
-    void reset_postponed() { std::fill(_source_postponed.begin(), _source_postponed.end(), false); }
-
-private:
-    void build_tree_column(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
-                           const std::unordered_map<uint32_t, double>& mu, auto& dijk,
-                           std::vector<TreeColumn>& new_columns) {
+    void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
+                        const std::unordered_map<uint32_t, double>& mu, auto& dijk,
+                        std::vector<TreeColumn>& new_columns) {
         bool all_reachable = true;
         TreeColumn col;
         col.source_idx = s_idx;
@@ -244,31 +137,7 @@ private:
             }
         }
 
-        build_tree_column(s_idx, src, pi_s, mu, dijk, new_columns);
-    }
-
-    void price_source_astar(uint32_t s_idx, const Source& src, uint32_t source_v,
-                            const std::vector<double>& pi_s,
-                            const std::unordered_map<uint32_t, double>& mu,
-                            std::vector<TreeColumn>& new_columns) {
-        // Build target set: all unique sinks (reuses _is_target allocation).
-        _is_target.fill(false);
-        uint32_t num_targets = 0;
-        for (uint32_t k : src.commodity_indices) {
-            uint32_t sink = _inst->commodities[k].sink;
-            if (!_is_target[sink]) {
-                _is_target[sink] = true;
-                ++num_targets;
-            }
-        }
-
-        // Use precomputed lower bounds (original costs, computed once at init).
-        _workspace.reset();
-        astar_dijkstra<dijkstra_store_paths> dijk(_inst->graph, _rc, _lower_bounds, _workspace);
-        dijk.add_source(source_v);
-        dijk.run_until_targets(_is_target, num_targets);
-
-        build_tree_column(s_idx, src, pi_s, mu, dijk, new_columns);
+        process_source(s_idx, src, pi_s, mu, dijk, new_columns);
     }
 };
 
