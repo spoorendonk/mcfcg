@@ -1,16 +1,18 @@
-#include <gtest/gtest.h>
-
-#include <vector>
-
 #include "mcfcg/graph/dijkstra.h"
+
+#include "mcfcg/graph/dijkstra_workspace.h"
 #include "mcfcg/graph/static_digraph_builder.h"
+
+#include <gtest/gtest.h>
+#include <vector>
 
 // Diamond graph with costs: 0→1(1), 0→2(4), 1→3(6), 2→3(1)
 // Shortest path 0→3: 0→2→3 with cost 5
 class DijkstraTest : public ::testing::Test {
-   protected:
+protected:
     mcfcg::static_digraph graph;
     mcfcg::static_map<uint32_t, int64_t> lengths;
+    mcfcg::dijkstra_workspace ws;
 
     void SetUp() override {
         mcfcg::static_digraph_builder<int64_t> builder(4);
@@ -21,11 +23,12 @@ class DijkstraTest : public ::testing::Test {
         auto [g, len] = builder.build();
         graph = std::move(g);
         lengths = std::move(len);
+        ws = mcfcg::dijkstra_workspace(graph.num_vertices());
     }
 };
 
 TEST_F(DijkstraTest, ShortestDistances) {
-    mcfcg::dijkstra<mcfcg::dijkstra_store_distances> d(graph, lengths);
+    mcfcg::dijkstra<mcfcg::dijkstra_store_distances> d(graph, lengths, ws);
     d.add_source(0);
     d.run();
 
@@ -41,7 +44,7 @@ TEST_F(DijkstraTest, ShortestDistances) {
 }
 
 TEST_F(DijkstraTest, ShortestPaths) {
-    mcfcg::dijkstra<mcfcg::dijkstra_store_paths> d(graph, lengths);
+    mcfcg::dijkstra<mcfcg::dijkstra_store_paths> d(graph, lengths, ws);
     d.add_source(0);
     d.run();
 
@@ -62,7 +65,7 @@ TEST_F(DijkstraTest, ShortestPaths) {
 }
 
 TEST_F(DijkstraTest, StepByStep) {
-    mcfcg::dijkstra<mcfcg::dijkstra_store_distances> d(graph, lengths);
+    mcfcg::dijkstra<mcfcg::dijkstra_store_distances> d(graph, lengths, ws);
     d.add_source(0);
 
     EXPECT_FALSE(d.finished());
@@ -95,7 +98,7 @@ TEST_F(DijkstraTest, StepByStep) {
 }
 
 TEST_F(DijkstraTest, Reset) {
-    mcfcg::dijkstra<mcfcg::dijkstra_store_distances> d(graph, lengths);
+    mcfcg::dijkstra<mcfcg::dijkstra_store_distances> d(graph, lengths, ws);
     d.add_source(0);
     d.run();
     EXPECT_EQ(d.dist(3), 5);
@@ -107,12 +110,13 @@ TEST_F(DijkstraTest, Reset) {
     EXPECT_FALSE(d.reached(0));
 }
 
-TEST(DijkstraDefault, NoStorageOverhead) {
+TEST(DijkstraDefault, DefaultTraitsReachability) {
     mcfcg::static_digraph_builder<int64_t> builder(2);
     builder.add_arc(0, 1, 5);
     auto [g, len] = builder.build();
 
-    mcfcg::dijkstra<> d(g, len);
+    mcfcg::dijkstra_workspace ws(g.num_vertices());
+    mcfcg::dijkstra<> d(g, len, ws);
     d.add_source(0);
     d.run();
     EXPECT_TRUE(d.visited(1));

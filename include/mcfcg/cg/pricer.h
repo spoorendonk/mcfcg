@@ -105,6 +105,9 @@ private:
     bool _track_arcs = false;
     PricingMode _mode = PricingMode::AStar;
     static_map<vertex_t, int64_t> _lower_bounds;
+    dijkstra_workspace _workspace;
+    static_map<uint32_t, int64_t> _rc;
+    static_map<uint32_t, bool> _is_target;
 
 public:
     PathPricer() = default;
@@ -113,8 +116,11 @@ public:
         _inst = &inst;
         _source_postponed.assign(inst.sources.size(), false);
         _mode = mode;
+        _workspace = dijkstra_workspace(inst.graph.num_vertices());
+        _rc = inst.graph.create_arc_map<int64_t>();
         if (_mode == PricingMode::AStar) {
             _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
+            _is_target = inst.graph.create_vertex_map<bool>(false);
         }
     }
 
@@ -136,12 +142,11 @@ public:
                               const std::unordered_map<uint32_t, double>& mu,
                               const std::unordered_set<uint32_t>& forbidden_arcs,
                               bool final_round) {
-        // Compute clamped reduced costs for Dijkstra.
-        auto rc = _inst->graph.create_arc_map<int64_t>();
+        // Compute clamped reduced costs for Dijkstra (reuses _rc allocation).
         constexpr int64_t BIG = shortest_path_semiring<int64_t>::infty / 2;
         for (auto a : _inst->graph.arcs()) {
             if (forbidden_arcs.count(a) > 0) {
-                rc[a] = BIG;
+                _rc[a] = BIG;
                 continue;
             }
             double cost_a = _inst->cost[a];
@@ -150,7 +155,7 @@ public:
             if (it != mu.end())
                 mu_a = it->second;
             double val = cost_a - mu_a;
-            rc[a] = (val <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(val * SCALE));
+            _rc[a] = (val <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(val * SCALE));
         }
 
         std::vector<Column> new_columns;
@@ -163,9 +168,9 @@ public:
             vertex_t source_v = src.vertex;
 
             if (_mode == PricingMode::AStar) {
-                price_source_astar(s_idx, src, source_v, rc, pi, mu, new_columns);
+                price_source_astar(s_idx, src, source_v, pi, mu, new_columns);
             } else {
-                price_source_dijkstra(s_idx, src, source_v, rc, pi, mu, new_columns);
+                price_source_dijkstra(s_idx, src, source_v, pi, mu, new_columns);
             }
         }
 
@@ -233,7 +238,6 @@ private:
     }
 
     void price_source_dijkstra(uint32_t s_idx, const Source& src, vertex_t source_v,
-                               const static_map<uint32_t, int64_t>& rc,
                                const std::vector<double>& pi,
                                const std::unordered_map<uint32_t, double>& mu,
                                std::vector<Column>& new_columns) {
@@ -261,7 +265,8 @@ private:
 
         uint32_t remaining = static_cast<uint32_t>(cutoff.size());
 
-        dijkstra<dijkstra_store_paths> dijk(_inst->graph, rc);
+        _workspace.reset();
+        dijkstra<dijkstra_store_paths> dijk(_inst->graph, _rc, _workspace);
         dijk.add_source(source_v);
 
         while (!dijk.finished() && remaining > 0) {
@@ -287,24 +292,25 @@ private:
     }
 
     void price_source_astar(uint32_t s_idx, const Source& src, vertex_t source_v,
-                            const static_map<uint32_t, int64_t>& rc, const std::vector<double>& pi,
+                            const std::vector<double>& pi,
                             const std::unordered_map<uint32_t, double>& mu,
                             std::vector<Column>& new_columns) {
-        // Build target set for early termination.
-        auto is_target = _inst->graph.create_vertex_map<bool>(false);
+        // Build target set for early termination (reuses _is_target allocation).
+        _is_target.fill(false);
         uint32_t num_targets = 0;
         for (uint32_t k : src.commodity_indices) {
             vertex_t sink = _inst->commodities[k].sink;
-            if (!is_target[sink]) {
-                is_target[sink] = true;
+            if (!_is_target[sink]) {
+                _is_target[sink] = true;
                 ++num_targets;
             }
         }
 
         // Use precomputed lower bounds (original costs, computed once at init).
-        astar_dijkstra<dijkstra_store_paths> dijk(_inst->graph, rc, _lower_bounds);
+        _workspace.reset();
+        astar_dijkstra<dijkstra_store_paths> dijk(_inst->graph, _rc, _lower_bounds, _workspace);
         dijk.add_source(source_v);
-        dijk.run_until_targets(is_target, num_targets);
+        dijk.run_until_targets(_is_target, num_targets);
 
         extract_columns(s_idx, src, pi, mu, dijk, new_columns);
     }

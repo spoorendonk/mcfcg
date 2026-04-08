@@ -1,15 +1,15 @@
+#include "mcfcg/graph/dijkstra.h"
+#include "mcfcg/graph/dijkstra_workspace.h"
+#include "mcfcg/instance.h"
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 
-#include "mcfcg/graph/dijkstra.h"
-#include "mcfcg/instance.h"
-
-int main(int argc, char * argv[]) {
+int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::fprintf(stderr,
-                     "Usage: mcfcg_clean <input> [--output cleaned.txt]\n");
+        std::fprintf(stderr, "Usage: mcfcg_clean <input> [--output cleaned.txt]\n");
         return EXIT_FAILURE;
     }
 
@@ -35,8 +35,7 @@ int main(int argc, char * argv[]) {
     auto inst = mcfcg::read_commalab(input_path);
 
     std::fprintf(stderr, "Input: %u vertices, %u arcs, %zu commodities\n",
-                 inst.graph.num_vertices(), inst.graph.num_arcs(),
-                 inst.commodities.size());
+                 inst.graph.num_vertices(), inst.graph.num_arcs(), inst.commodities.size());
 
     // Build unit-weight arc map for reachability via Dijkstra
     auto lengths = inst.graph.create_arc_map<int64_t>();
@@ -47,15 +46,16 @@ int main(int argc, char * argv[]) {
     std::vector<mcfcg::Commodity> kept;
     uint32_t removed = 0;
 
-    mcfcg::dijkstra<mcfcg::dijkstra_store_distances> dijk(inst.graph, lengths);
+    mcfcg::dijkstra_workspace ws(inst.graph.num_vertices());
+    mcfcg::dijkstra<mcfcg::dijkstra_store_distances> dijk(inst.graph, lengths, ws);
 
-    for (auto & src_group : inst.sources) {
+    for (auto& src_group : inst.sources) {
         dijk.reset();
         dijk.add_source(src_group.vertex);
         dijk.run();
 
         for (uint32_t k_idx : src_group.commodity_indices) {
-            auto & k = inst.commodities[k_idx];
+            auto& k = inst.commodities[k_idx];
             if (dijk.visited(k.sink)) {
                 kept.push_back(k);
             } else {
@@ -64,8 +64,7 @@ int main(int argc, char * argv[]) {
         }
     }
 
-    std::fprintf(stderr, "Removed %u unreachable commodities, kept %zu\n",
-                 removed, kept.size());
+    std::fprintf(stderr, "Removed %u unreachable commodities, kept %zu\n", removed, kept.size());
 
     // Rebuild instance with kept commodities
     auto sources = mcfcg::group_by_source(kept);

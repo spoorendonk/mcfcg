@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mcfcg/graph/d_ary_heap.h"
+#include "mcfcg/graph/dijkstra_workspace.h"
 #include "mcfcg/graph/semiring.h"
 #include "mcfcg/graph/static_digraph.h"
 #include "mcfcg/graph/static_map.h"
@@ -28,6 +28,7 @@ struct dijkstra_store_paths {
 
 // Dijkstra's algorithm on static_digraph with int64_t arc lengths.
 // Traits control whether distances and predecessor arcs are stored.
+// Memory is borrowed from a dijkstra_workspace to avoid per-call allocation.
 template <typename Traits = dijkstra_default_traits>
 class dijkstra {
 public:
@@ -35,76 +36,39 @@ public:
     using arc = uint32_t;
     using length_type = int64_t;
     using semiring = shortest_path_semiring<length_type>;
-
-    enum vertex_status : char { PRE_HEAP = 0, IN_HEAP = 1, POST_HEAP = 2 };
+    using vertex_status = dijkstra_workspace::vertex_status;
 
 private:
     const static_digraph* _graph = nullptr;
     const static_map<arc, length_type>* _length_map = nullptr;
-
-    d_ary_heap<4, length_type> _heap;
-    static_map<vertex, vertex_status> _status;
-
-    struct dist_map_holder {
-        static_map<vertex, length_type> _distances;
-    };
-    struct empty_dist_holder {
-        // nothing
-    };
-
-    struct pred_map_holder {
-        static_map<vertex, std::optional<arc>> _pred_arcs;
-    };
-    struct empty_pred_holder {
-        // nothing
-    };
-
-    using dist_storage =
-        std::conditional_t<Traits::store_distances, dist_map_holder, empty_dist_holder>;
-    using pred_storage =
-        std::conditional_t<Traits::store_paths, pred_map_holder, empty_pred_holder>;
-
-    [[no_unique_address]] dist_storage _dist_s;
-    [[no_unique_address]] pred_storage _pred_s;
+    dijkstra_workspace* _ws = nullptr;
 
 public:
     dijkstra() = default;
 
-    dijkstra(const static_digraph& g, const static_map<arc, length_type>& lengths)
-        : _graph(&g),
-          _length_map(&lengths),
-          _heap(g.num_vertices()),
-          _status(g.num_vertices(), PRE_HEAP) {
-        if constexpr (Traits::store_distances) {
-            _dist_s._distances = static_map<vertex, length_type>(g.num_vertices());
-        }
-        if constexpr (Traits::store_paths) {
-            _pred_s._pred_arcs = static_map<vertex, std::optional<arc>>(g.num_vertices());
-        }
-    }
+    dijkstra(const static_digraph& g, const static_map<arc, length_type>& lengths,
+             dijkstra_workspace& ws)
+        : _graph(&g), _length_map(&lengths), _ws(&ws) {}
 
-    void reset() noexcept {
-        _heap.clear();
-        _status.fill(PRE_HEAP);
-    }
+    void reset() noexcept { _ws->reset(); }
 
     void add_source(vertex s, length_type dist = semiring::zero) noexcept {
-        assert(_status[s] != IN_HEAP);
-        _heap.push(s, dist);
-        _status[s] = IN_HEAP;
+        assert(_ws->status[s] != vertex_status::IN_HEAP);
+        _ws->heap.push(s, dist);
+        _ws->status[s] = vertex_status::IN_HEAP;
         if constexpr (Traits::store_distances) {
-            _dist_s._distances[s] = dist;
+            _ws->dist[s] = dist;
         }
         if constexpr (Traits::store_paths) {
-            _pred_s._pred_arcs[s].reset();
+            _ws->pred[s].reset();
         }
     }
 
-    bool finished() const noexcept { return _heap.empty(); }
+    bool finished() const noexcept { return _ws->heap.empty(); }
 
     std::pair<vertex, length_type> current() const noexcept {
         assert(!finished());
-        auto top = _heap.top();
+        auto top = _ws->heap.top();
         return {top.v, top.p};
     }
 
@@ -112,30 +76,30 @@ public:
         assert(!finished());
         auto [u, u_dist] = current();
         if constexpr (Traits::store_distances) {
-            _dist_s._distances[u] = u_dist;
+            _ws->dist[u] = u_dist;
         }
-        _status[u] = POST_HEAP;
-        _heap.pop();
+        _ws->status[u] = vertex_status::POST_HEAP;
+        _ws->heap.pop();
 
         for (arc a : _graph->out_arcs(u)) {
             vertex w = _graph->arc_target(a);
-            if (_status[w] == POST_HEAP)
+            if (_ws->status[w] == vertex_status::POST_HEAP)
                 continue;
 
             length_type new_dist = semiring::plus(u_dist, (*_length_map)[a]);
 
-            if (_status[w] == IN_HEAP) {
-                if (semiring::less(new_dist, _heap.priority(w))) {
-                    _heap.promote(w, new_dist);
+            if (_ws->status[w] == vertex_status::IN_HEAP) {
+                if (semiring::less(new_dist, _ws->heap.priority(w))) {
+                    _ws->heap.promote(w, new_dist);
                     if constexpr (Traits::store_paths) {
-                        _pred_s._pred_arcs[w].emplace(a);
+                        _ws->pred[w].emplace(a);
                     }
                 }
             } else {
-                _heap.push(w, new_dist);
-                _status[w] = IN_HEAP;
+                _ws->heap.push(w, new_dist);
+                _ws->status[w] = vertex_status::IN_HEAP;
                 if constexpr (Traits::store_paths) {
-                    _pred_s._pred_arcs[w].emplace(a);
+                    _ws->pred[w].emplace(a);
                 }
             }
         }
@@ -152,27 +116,27 @@ public:
             advance();
     }
 
-    bool reached(vertex u) const noexcept { return _status[u] != PRE_HEAP; }
-    bool visited(vertex u) const noexcept { return _status[u] == POST_HEAP; }
+    bool reached(vertex u) const noexcept { return _ws->status[u] != vertex_status::PRE_HEAP; }
+    bool visited(vertex u) const noexcept { return _ws->status[u] == vertex_status::POST_HEAP; }
 
     length_type dist(vertex u) const noexcept
         requires(Traits::store_distances)
     {
         assert(visited(u));
-        return _dist_s._distances[u];
+        return _ws->dist[u];
     }
 
     arc pred_arc(vertex u) const noexcept
         requires(Traits::store_paths)
     {
-        assert(reached(u) && _pred_s._pred_arcs[u].has_value());
-        return _pred_s._pred_arcs[u].value();
+        assert(reached(u) && _ws->pred[u].has_value());
+        return _ws->pred[u].value();
     }
 
     bool has_pred(vertex u) const noexcept
         requires(Traits::store_paths)
     {
-        return reached(u) && _pred_s._pred_arcs[u].has_value();
+        return reached(u) && _ws->pred[u].has_value();
     }
 };
 
@@ -181,6 +145,7 @@ public:
 // from v to the nearest target). Heap priority is f(v) = g(v) + h(v).
 // Supports early termination via a target count: stop after settling a given
 // number of target vertices.
+// Memory is borrowed from a dijkstra_workspace to avoid per-call allocation.
 template <typename Traits = dijkstra_store_paths>
 class astar_dijkstra {
 public:
@@ -188,94 +153,67 @@ public:
     using arc = uint32_t;
     using length_type = int64_t;
     using semiring = shortest_path_semiring<length_type>;
-
-    enum vertex_status : char { PRE_HEAP = 0, IN_HEAP = 1, POST_HEAP = 2 };
+    using vertex_status = dijkstra_workspace::vertex_status;
 
 private:
     const static_digraph* _graph = nullptr;
     const static_map<arc, length_type>* _length_map = nullptr;
     const static_map<vertex, length_type>* _heuristic = nullptr;
-
-    d_ary_heap<4, length_type> _heap;
-    static_map<vertex, vertex_status> _status;
-    static_map<vertex, length_type> _g;  // true distance g(v)
-
-    struct pred_map_holder {
-        static_map<vertex, std::optional<arc>> _pred_arcs;
-    };
-    struct empty_pred_holder {
-        // nothing
-    };
-
-    using pred_storage =
-        std::conditional_t<Traits::store_paths, pred_map_holder, empty_pred_holder>;
-    [[no_unique_address]] pred_storage _pred_s;
+    dijkstra_workspace* _ws = nullptr;
 
 public:
     astar_dijkstra() = default;
 
     astar_dijkstra(const static_digraph& g, const static_map<arc, length_type>& lengths,
-                   const static_map<vertex, length_type>& heuristic)
-        : _graph(&g),
-          _length_map(&lengths),
-          _heuristic(&heuristic),
-          _heap(g.num_vertices()),
-          _status(g.num_vertices(), PRE_HEAP),
-          _g(g.num_vertices()) {
-        if constexpr (Traits::store_paths) {
-            _pred_s._pred_arcs = static_map<vertex, std::optional<arc>>(g.num_vertices());
-        }
-    }
+                   const static_map<vertex, length_type>& heuristic, dijkstra_workspace& ws)
+        : _graph(&g), _length_map(&lengths), _heuristic(&heuristic), _ws(&ws) {}
 
-    void reset() noexcept {
-        _heap.clear();
-        _status.fill(PRE_HEAP);
-    }
+    void reset() noexcept { _ws->reset(); }
 
     void add_source(vertex s, length_type dist = semiring::zero) noexcept {
-        assert(_status[s] != IN_HEAP);
-        _g[s] = dist;
+        assert(_ws->status[s] != vertex_status::IN_HEAP);
+        _ws->dist[s] = dist;
         length_type f = semiring::plus(dist, (*_heuristic)[s]);
-        _heap.push(s, f);
-        _status[s] = IN_HEAP;
+        _ws->heap.push(s, f);
+        _ws->status[s] = vertex_status::IN_HEAP;
         if constexpr (Traits::store_paths) {
-            _pred_s._pred_arcs[s].reset();
+            _ws->pred[s].reset();
         }
     }
 
-    bool finished() const noexcept { return _heap.empty(); }
+    bool finished() const noexcept { return _ws->heap.empty(); }
 
     // Returns the vertex being settled and its true distance g(v).
     std::pair<vertex, length_type> settle_next() noexcept {
         assert(!finished());
-        auto top = _heap.top();
+        auto top = _ws->heap.top();
         vertex u = top.v;
-        length_type u_dist = _g[u];
-        _status[u] = POST_HEAP;
-        _heap.pop();
+        length_type u_dist = _ws->dist[u];
+        _ws->status[u] = vertex_status::POST_HEAP;
+        _ws->heap.pop();
 
         for (arc a : _graph->out_arcs(u)) {
             vertex w = _graph->arc_target(a);
-            if (_status[w] == POST_HEAP)
+            if (_ws->status[w] == vertex_status::POST_HEAP)
                 continue;
 
             length_type new_g = semiring::plus(u_dist, (*_length_map)[a]);
             length_type new_f = semiring::plus(new_g, (*_heuristic)[w]);
 
-            if (_status[w] == IN_HEAP) {
-                if (semiring::less(new_g, _g[w])) {
-                    _g[w] = new_g;
-                    _heap.promote(w, new_f);
+            if (_ws->status[w] == vertex_status::IN_HEAP) {
+                if (semiring::less(new_g, _ws->dist[w])) {
+                    _ws->dist[w] = new_g;
+                    _ws->heap.promote(w, new_f);
                     if constexpr (Traits::store_paths) {
-                        _pred_s._pred_arcs[w].emplace(a);
+                        _ws->pred[w].emplace(a);
                     }
                 }
             } else {
-                _g[w] = new_g;
-                _heap.push(w, new_f);
-                _status[w] = IN_HEAP;
+                _ws->dist[w] = new_g;
+                _ws->heap.push(w, new_f);
+                _ws->status[w] = vertex_status::IN_HEAP;
                 if constexpr (Traits::store_paths) {
-                    _pred_s._pred_arcs[w].emplace(a);
+                    _ws->pred[w].emplace(a);
                 }
             }
         }
@@ -302,27 +240,27 @@ public:
         }
     }
 
-    bool reached(vertex u) const noexcept { return _status[u] != PRE_HEAP; }
-    bool visited(vertex u) const noexcept { return _status[u] == POST_HEAP; }
+    bool reached(vertex u) const noexcept { return _ws->status[u] != vertex_status::PRE_HEAP; }
+    bool visited(vertex u) const noexcept { return _ws->status[u] == vertex_status::POST_HEAP; }
 
     length_type dist(vertex u) const noexcept
         requires(Traits::store_distances)
     {
         assert(visited(u));
-        return _g[u];
+        return _ws->dist[u];
     }
 
     arc pred_arc(vertex u) const noexcept
         requires(Traits::store_paths)
     {
-        assert(reached(u) && _pred_s._pred_arcs[u].has_value());
-        return _pred_s._pred_arcs[u].value();
+        assert(reached(u) && _ws->pred[u].has_value());
+        return _ws->pred[u].value();
     }
 
     bool has_pred(vertex u) const noexcept
         requires(Traits::store_paths)
     {
-        return reached(u) && _pred_s._pred_arcs[u].has_value();
+        return reached(u) && _ws->pred[u].has_value();
     }
 };
 
