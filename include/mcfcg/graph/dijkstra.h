@@ -31,6 +31,9 @@ struct dijkstra_store_paths {
 // Memory is borrowed from a dijkstra_workspace to avoid per-call allocation.
 template <typename Traits = dijkstra_default_traits>
 class dijkstra {
+    static_assert(!Traits::store_paths || Traits::store_distances,
+                  "store_paths requires store_distances");
+
 public:
     using vertex = uint32_t;
     using arc = uint32_t;

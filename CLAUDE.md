@@ -41,7 +41,7 @@ The CG loop (`src/cg/path_cg.cpp`, `src/cg/tree_cg.cpp`) drives the interaction 
 3. **LP backend** (`include/mcfcg/lp/lp_solver.h`, `src/lp/highs_solver.cpp`) — abstract interface, currently HiGHS. CSC format for columns, CSR for rows. The `starts` convention differs: `add_cols` callers include a sentinel, `add_rows` callers don't (the HiGHS adapter appends it).
 
 ### Graph layer
-`include/mcfcg/graph/` — CSR static digraph with typed arc/vertex maps (`static_map`), d-ary min-heap, Dijkstra with compile-time trait selection (store distances, paths, or neither via `[[no_unique_address]]`).
+`include/mcfcg/graph/` — CSR static digraph with typed arc/vertex maps (`static_map`), d-ary min-heap, Dijkstra/A* borrowing a `dijkstra_workspace` for reusable memory. Compile-time traits control which workspace fields are written (`if constexpr`).
 
 ### I/O
 Two instance formats: CommaLab/UniPi plain-numeric (1-indexed) and TNTP transportation networks. Both support `.gz` via zlib. TNTP uses `free_flow_time` as cost and divides demands by a city-specific coefficient.
