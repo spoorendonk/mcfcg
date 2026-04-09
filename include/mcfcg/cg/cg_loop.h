@@ -84,16 +84,12 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         double obj = master.get_obj();
         auto primals = master.get_primals();
 
-        // --- Separation (must happen before purge; primals are still valid) ---
+        // --- Separation ---
         timer.start(TimerCat::Separation);
         iter_timer.start(TimerCat::Separation);
         auto new_cap_arcs = master.add_violated_capacity_constraints(primals, iter);
         iter_timer.stop(TimerCat::Separation);
         timer.stop(TimerCat::Separation);
-
-        // --- Column aging and purge (after separation, before pricing) ---
-        master.update_column_ages(primals);
-        uint32_t purged = master.purge_aged_columns(params.col_age_limit);
 
         uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
 
@@ -114,12 +110,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             obj = master.get_obj();
         }
 
-        // Update capacity row activity tracking and purge non-binding rows
-        master.update_capacity_row_activity(iter);
-        uint32_t num_purged =
-            master.purge_nonbinding_capacity_rows(iter, params.row_inactivity_threshold);
-
-        // --- Pricing ---
+        // --- Pricing (duals are from the latest solve, not affected by purges) ---
         timer.start(TimerCat::Pricing);
         iter_timer.start(TimerCat::Pricing);
         auto pi = get_pricing_duals(master);
@@ -138,8 +129,8 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
                 iter_timer.stop(TimerCat::Total);
                 logger.print_iteration(
-                    iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(), 0, purged,
-                    num_new_caps, num_purged, iter_timer.elapsed(TimerCat::LP),
+                    iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(), 0, 0,
+                    num_new_caps, 0, iter_timer.elapsed(TimerCat::LP),
                     iter_timer.elapsed(TimerCat::Pricing), iter_timer.elapsed(TimerCat::Separation),
                     iter_timer.elapsed(TimerCat::Total));
 
@@ -157,6 +148,13 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         timer.stop(TimerCat::Pricing);
 
         uint32_t added = master.add_columns(std::move(new_cols));
+
+        // --- Purge (end of iteration, after pricing consumed duals) ---
+        master.update_column_ages(primals);
+        uint32_t purged = master.purge_aged_columns(params.col_age_limit);
+        master.update_capacity_row_activity(iter);
+        uint32_t num_purged =
+            master.purge_nonbinding_capacity_rows(iter, params.row_inactivity_threshold);
 
         result.iterations = iter + 1;
         result.total_columns = master.num_columns();

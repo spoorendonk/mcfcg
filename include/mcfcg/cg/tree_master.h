@@ -240,7 +240,8 @@ public:
 
         for (uint32_t i = 0; i < _cap_row_to_arc.size(); ++i) {
             uint32_t row = _num_source_rows + i;
-            if (current_iter - _cap_row_last_active[i] > inactivity_threshold) {
+            if (current_iter > _cap_row_last_active[i] &&
+                current_iter - _cap_row_last_active[i] > inactivity_threshold) {
                 mask[row] = 1;
                 ++purge_count;
             }
