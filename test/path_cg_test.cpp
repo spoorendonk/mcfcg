@@ -105,7 +105,7 @@ TEST_F(PathCGMultiSourceCap, OptimalWithCapacity) {
 
 // --- Row purging: verify aggressive purging does not change optimal objective ---
 
-TEST_F(PathCGCapacityBinding, PurgeDoesNotChangeObjective) {
+TEST_F(PathCGCapacityBinding, RowPurgeDoesNotChangeObjective) {
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
     params.row_inactivity_threshold = 1;  // aggressive: purge after 1 iteration inactive
@@ -115,7 +115,7 @@ TEST_F(PathCGCapacityBinding, PurgeDoesNotChangeObjective) {
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
 }
 
-TEST_F(PathCGMultiSourceCap, PurgeDoesNotChangeObjective) {
+TEST_F(PathCGMultiSourceCap, RowPurgeDoesNotChangeObjective) {
     auto inst = mcfcg::read_commalab(path);
     ASSERT_EQ(inst.sources.size(), 2u);
 
@@ -125,4 +125,46 @@ TEST_F(PathCGMultiSourceCap, PurgeDoesNotChangeObjective) {
 
     ASSERT_TRUE(result.optimal);
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
+}
+
+// --- Column purging tests: verify purging does not change the optimal objective ---
+
+TEST_F(PathCGSingleSource, ColPurgeDoesNotChangeObjective) {
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.col_age_limit = 3;  // aggressive purge
+    auto result = mcfcg::solve_path_cg(inst, params);
+
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 29.0, 1e-4);
+}
+
+TEST_F(PathCGCapacityBinding, ColPurgeWithCapacity) {
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.col_age_limit = 3;
+    auto result = mcfcg::solve_path_cg(inst, params);
+
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 21.0, 1e-4);
+}
+
+TEST_F(PathCGMultiSourceCap, ColPurgeWithMultiSourceCapacity) {
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.col_age_limit = 3;
+    auto result = mcfcg::solve_path_cg(inst, params);
+
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 21.0, 1e-4);
+}
+
+TEST_F(PathCGSingleSource, ColPurgeDisabledMatchesDefault) {
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.col_age_limit = 0;
+    auto result = mcfcg::solve_path_cg(inst, params);
+
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 29.0, 1e-4);
 }

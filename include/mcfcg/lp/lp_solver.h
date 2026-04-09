@@ -49,6 +49,13 @@ public:
 
     virtual uint32_t num_cols() const = 0;
     virtual uint32_t num_rows() const = 0;
+
+    // Returns true if a valid basis is available (simplex solvers).
+    virtual bool has_basis() const { return false; }
+
+    // Returns per-column basis status: true = basic, false = non-basic.
+    // Only valid when has_basis() returns true.
+    virtual std::vector<bool> get_basic_cols() const { return {}; }
 };
 
 std::unique_ptr<LPSolver> create_lp_solver();

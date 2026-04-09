@@ -36,6 +36,7 @@ struct CGParams {
     double neg_rc_tol = -1e-6;        // reduced cost tolerance for column acceptance
     uint32_t row_inactivity_threshold =
         5;                         // remove capacity rows inactive for this many iterations
+    uint32_t col_age_limit = 5;    // purge inactive columns after this many iters (0=off)
     SolverFactory solver_factory;  // Custom LP solver; uses HiGHS if null
 };
 

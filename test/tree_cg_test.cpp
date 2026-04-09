@@ -88,7 +88,7 @@ TEST(TreeCGCorrectness, ManyCommoditiesSameSource) {
 
 // --- Row purging: verify aggressive purging does not change optimal objective ---
 
-TEST(TreeCGPurge, CapacityBindingWithPurge) {
+TEST(TreeCGRowPurge, CapacityBindingWithPurge) {
     std::string path = "tree_cap_purge.txt";
     write_instance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
     auto inst = mcfcg::read_commalab(path);
@@ -100,7 +100,7 @@ TEST(TreeCGPurge, CapacityBindingWithPurge) {
     std::remove(path.c_str());
 }
 
-TEST(TreeCGPurge, MultiSourceCapWithPurge) {
+TEST(TreeCGRowPurge, MultiSourceCapWithPurge) {
     std::string path = "tree_ms_cap_purge.txt";
     write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
     auto inst = mcfcg::read_commalab(path);
@@ -109,5 +109,38 @@ TEST(TreeCGPurge, MultiSourceCapWithPurge) {
     auto result = mcfcg::solve_tree_cg(inst, params);
     ASSERT_TRUE(result.optimal);
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
+    std::remove(path.c_str());
+}
+
+// --- Column purging tests for tree formulation ---
+
+TEST(TreeCGColPurge, PurgeDoesNotChangeObjective) {
+    std::string path = "tree_purge_nocap.txt";
+    write_instance(path, 4, 5, 2, "1 2 1 10\n1 3 4 10\n2 3 2 10\n2 4 6 10\n3 4 1 10\n",
+                   "1 4 5\n1 3 3\n");
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.col_age_limit = 3;
+    auto path_result = mcfcg::solve_path_cg(inst, params);
+    auto tree_result = mcfcg::solve_tree_cg(inst, params);
+    ASSERT_TRUE(path_result.optimal);
+    ASSERT_TRUE(tree_result.optimal);
+    EXPECT_NEAR(path_result.objective, 29.0, 1e-4);
+    EXPECT_NEAR(tree_result.objective, 29.0, 1e-4);
+    std::remove(path.c_str());
+}
+
+TEST(TreeCGColPurge, PurgeWithCapacity) {
+    std::string path = "tree_purge_cap.txt";
+    write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.col_age_limit = 3;
+    auto path_result = mcfcg::solve_path_cg(inst, params);
+    auto tree_result = mcfcg::solve_tree_cg(inst, params);
+    ASSERT_TRUE(path_result.optimal);
+    ASSERT_TRUE(tree_result.optimal);
+    EXPECT_NEAR(path_result.objective, 21.0, 1e-4);
+    EXPECT_NEAR(tree_result.objective, 21.0, 1e-4);
     std::remove(path.c_str());
 }

@@ -84,12 +84,16 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         double obj = master.get_obj();
         auto primals = master.get_primals();
 
-        // --- Separation ---
+        // --- Separation (must happen before purge; primals are still valid) ---
         timer.start(TimerCat::Separation);
         iter_timer.start(TimerCat::Separation);
         auto new_cap_arcs = master.add_violated_capacity_constraints(primals, iter);
         iter_timer.stop(TimerCat::Separation);
         timer.stop(TimerCat::Separation);
+
+        // --- Column aging and purge (after separation, before pricing) ---
+        master.update_column_ages(primals);
+        uint32_t purged = master.purge_aged_columns(params.col_age_limit);
 
         uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
 
@@ -134,7 +138,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
                 iter_timer.stop(TimerCat::Total);
                 logger.print_iteration(
-                    iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(), 0, 0,
+                    iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(), 0, purged,
                     num_new_caps, num_purged, iter_timer.elapsed(TimerCat::LP),
                     iter_timer.elapsed(TimerCat::Pricing), iter_timer.elapsed(TimerCat::Separation),
                     iter_timer.elapsed(TimerCat::Total));
@@ -158,11 +162,11 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         result.total_columns = master.num_columns();
 
         iter_timer.stop(TimerCat::Total);
-        logger.print_iteration(iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(),
-                               added, 0, num_new_caps, num_purged, iter_timer.elapsed(TimerCat::LP),
-                               iter_timer.elapsed(TimerCat::Pricing),
-                               iter_timer.elapsed(TimerCat::Separation),
-                               iter_timer.elapsed(TimerCat::Total));
+        logger.print_iteration(
+            iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(), added, purged,
+            num_new_caps, num_purged, iter_timer.elapsed(TimerCat::LP),
+            iter_timer.elapsed(TimerCat::Pricing), iter_timer.elapsed(TimerCat::Separation),
+            iter_timer.elapsed(TimerCat::Total));
     }
 
     timer.stop(TimerCat::Total);

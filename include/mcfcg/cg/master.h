@@ -26,6 +26,7 @@ private:
     // Column store with bidirectional LP mapping
     std::vector<Column> _columns;
     std::vector<uint32_t> _col_to_lp;  // column index -> LP column index
+    std::vector<uint32_t> _col_age;    // consecutive iterations with zero primal
 
     // Capacity constraint tracking
     std::unordered_map<uint32_t, uint32_t> _arc_to_cap_row;
@@ -40,6 +41,7 @@ public:
         _num_demand_rows = static_cast<uint32_t>(inst.commodities.size());
         _columns.clear();
         _col_to_lp.clear();
+        _col_age.clear();
         _arc_to_cap_row.clear();
         _cap_row_to_arc.clear();
         _cap_row_last_active.clear();
@@ -113,6 +115,7 @@ public:
         for (uint32_t i = 0; i < n; ++i) {
             _col_to_lp.push_back(first_lp + i);
             _columns.push_back(std::move(cols[i]));
+            _col_age.push_back(0);
         }
 
         return n;
@@ -209,6 +212,28 @@ public:
         }
     }
 
+    void update_column_ages(const std::vector<double>& primals) {
+        if (_lp->has_basis()) {
+            auto basic = _lp->get_basic_cols();
+            for (uint32_t c = 0; c < _columns.size(); ++c) {
+                if (basic[_col_to_lp[c]]) {
+                    _col_age[c] = 0;  // basic columns are active
+                } else {
+                    ++_col_age[c];
+                }
+            }
+        } else {
+            // Barrier solver fallback: active if non-zero primal
+            for (uint32_t c = 0; c < _columns.size(); ++c) {
+                if (primals[_col_to_lp[c]] < 1e-10) {
+                    ++_col_age[c];
+                } else {
+                    _col_age[c] = 0;
+                }
+            }
+        }
+    }
+
     // Remove capacity rows that have been non-binding for more than
     // inactivity_threshold iterations. Returns the number of rows purged.
     uint32_t purge_nonbinding_capacity_rows(uint32_t current_iter, uint32_t inactivity_threshold) {
@@ -250,6 +275,45 @@ public:
 
         _cap_row_to_arc = std::move(new_cap_row_to_arc);
         _cap_row_last_active = std::move(new_cap_row_last_active);
+
+        return purge_count;
+    }
+
+    uint32_t purge_aged_columns(uint32_t age_limit) {
+        if (age_limit == 0)
+            return 0;
+
+        // Build LP-level deletion mask
+        uint32_t num_lp = _lp->num_cols();
+        std::vector<int32_t> mask(num_lp, 0);
+
+        uint32_t purge_count = 0;
+        for (uint32_t c = 0; c < _columns.size(); ++c) {
+            if (_col_age[c] > age_limit) {
+                mask[_col_to_lp[c]] = 1;
+                ++purge_count;
+            }
+        }
+
+        if (purge_count == 0)
+            return 0;
+
+        _lp->delete_cols(mask);
+
+        // Compact internal vectors, remapping surviving columns
+        uint32_t write = 0;
+        for (uint32_t c = 0; c < _columns.size(); ++c) {
+            int32_t new_lp = mask[_col_to_lp[c]];
+            if (new_lp >= 0) {
+                _columns[write] = std::move(_columns[c]);
+                _col_to_lp[write] = static_cast<uint32_t>(new_lp);
+                _col_age[write] = _col_age[c];
+                ++write;
+            }
+        }
+        _columns.resize(write);
+        _col_to_lp.resize(write);
+        _col_age.resize(write);
 
         return purge_count;
     }
