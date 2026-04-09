@@ -87,7 +87,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // --- Separation ---
         timer.start(TimerCat::Separation);
         iter_timer.start(TimerCat::Separation);
-        auto new_cap_arcs = master.add_violated_capacity_constraints(primals);
+        auto new_cap_arcs = master.add_violated_capacity_constraints(primals, iter);
         iter_timer.stop(TimerCat::Separation);
         timer.stop(TimerCat::Separation);
 
@@ -110,6 +110,11 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             obj = master.get_obj();
         }
 
+        // Update capacity row activity tracking and purge non-binding rows
+        master.update_capacity_row_activity(iter);
+        uint32_t num_purged =
+            master.purge_nonbinding_capacity_rows(iter, params.row_inactivity_threshold);
+
         // --- Pricing ---
         timer.start(TimerCat::Pricing);
         iter_timer.start(TimerCat::Pricing);
@@ -130,7 +135,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                 iter_timer.stop(TimerCat::Total);
                 logger.print_iteration(
                     iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(), 0, 0,
-                    num_new_caps, 0, iter_timer.elapsed(TimerCat::LP),
+                    num_new_caps, num_purged, iter_timer.elapsed(TimerCat::LP),
                     iter_timer.elapsed(TimerCat::Pricing), iter_timer.elapsed(TimerCat::Separation),
                     iter_timer.elapsed(TimerCat::Total));
 
@@ -154,7 +159,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
         iter_timer.stop(TimerCat::Total);
         logger.print_iteration(iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(),
-                               added, 0, num_new_caps, 0, iter_timer.elapsed(TimerCat::LP),
+                               added, 0, num_new_caps, num_purged, iter_timer.elapsed(TimerCat::LP),
                                iter_timer.elapsed(TimerCat::Pricing),
                                iter_timer.elapsed(TimerCat::Separation),
                                iter_timer.elapsed(TimerCat::Total));

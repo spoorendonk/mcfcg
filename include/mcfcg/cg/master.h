@@ -4,6 +4,7 @@
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <unordered_map>
@@ -29,6 +30,7 @@ private:
     // Capacity constraint tracking
     std::unordered_map<uint32_t, uint32_t> _arc_to_cap_row;
     std::vector<uint32_t> _cap_row_to_arc;
+    std::vector<uint32_t> _cap_row_last_active;  // last iteration each capacity row was active
 
 public:
     PathMaster() = default;
@@ -40,6 +42,7 @@ public:
         _col_to_lp.clear();
         _arc_to_cap_row.clear();
         _cap_row_to_arc.clear();
+        _cap_row_last_active.clear();
 
         // Create LP once
         _lp = lp ? std::move(lp) : create_lp_solver();
@@ -136,7 +139,8 @@ public:
         return result;
     }
 
-    std::vector<uint32_t> add_violated_capacity_constraints(const std::vector<double>& primals) {
+    std::vector<uint32_t> add_violated_capacity_constraints(const std::vector<double>& primals,
+                                                            uint32_t current_iter = 0) {
         // Compute flow on each arc
         auto flow = _inst->graph.create_arc_map<double>(0.0);
         for (uint32_t c = 0; c < _columns.size(); ++c) {
@@ -188,9 +192,66 @@ public:
         for (uint32_t i = 0; i < new_arcs.size(); ++i) {
             _arc_to_cap_row[new_arcs[i]] = first_row + i;
             _cap_row_to_arc.push_back(new_arcs[i]);
+            _cap_row_last_active.push_back(current_iter);
         }
 
         return new_arcs;
+    }
+
+    // Mark capacity rows as active when their dual is non-zero.
+    void update_capacity_row_activity(uint32_t current_iter) {
+        auto duals = _lp->get_duals();
+        for (uint32_t i = 0; i < _cap_row_to_arc.size(); ++i) {
+            uint32_t row = _num_demand_rows + i;
+            if (row < duals.size() && std::abs(duals[row]) > 1e-9) {
+                _cap_row_last_active[i] = current_iter;
+            }
+        }
+    }
+
+    // Remove capacity rows that have been non-binding for more than
+    // inactivity_threshold iterations. Returns the number of rows purged.
+    uint32_t purge_nonbinding_capacity_rows(uint32_t current_iter, uint32_t inactivity_threshold) {
+        if (_cap_row_to_arc.empty())
+            return 0;
+
+        // Build delete mask for LP (size = total LP rows)
+        uint32_t total_rows = _lp->num_rows();
+        std::vector<int32_t> mask(total_rows, 0);
+        uint32_t purge_count = 0;
+
+        for (uint32_t i = 0; i < _cap_row_to_arc.size(); ++i) {
+            uint32_t row = _num_demand_rows + i;
+            if (current_iter - _cap_row_last_active[i] > inactivity_threshold) {
+                mask[row] = 1;
+                ++purge_count;
+            }
+        }
+
+        if (purge_count == 0)
+            return 0;
+
+        _lp->delete_rows(mask);
+
+        // Rebuild internal data structures from surviving entries
+        std::vector<uint32_t> new_cap_row_to_arc;
+        std::vector<uint32_t> new_cap_row_last_active;
+        _arc_to_cap_row.clear();
+
+        for (uint32_t i = 0; i < _cap_row_to_arc.size(); ++i) {
+            uint32_t old_row = _num_demand_rows + i;
+            int32_t new_row = mask[old_row];
+            if (new_row >= 0) {
+                _arc_to_cap_row[_cap_row_to_arc[i]] = static_cast<uint32_t>(new_row);
+                new_cap_row_to_arc.push_back(_cap_row_to_arc[i]);
+                new_cap_row_last_active.push_back(_cap_row_last_active[i]);
+            }
+        }
+
+        _cap_row_to_arc = std::move(new_cap_row_to_arc);
+        _cap_row_last_active = std::move(new_cap_row_last_active);
+
+        return purge_count;
     }
 
     uint32_t num_columns() const { return static_cast<uint32_t>(_columns.size()); }

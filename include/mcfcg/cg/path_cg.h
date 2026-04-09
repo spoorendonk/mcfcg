@@ -34,7 +34,9 @@ struct CGParams {
     uint32_t num_threads = 1;         // 0 = auto-detect via hardware_concurrency
     uint32_t pricing_batch_size = 0;  // 0 = all sources in one batch
     double neg_rc_tol = -1e-6;        // reduced cost tolerance for column acceptance
-    SolverFactory solver_factory;     // Custom LP solver; uses HiGHS if null
+    uint32_t row_inactivity_threshold =
+        5;                         // remove capacity rows inactive for this many iterations
+    SolverFactory solver_factory;  // Custom LP solver; uses HiGHS if null
 };
 
 CGResult solve_path_cg(const Instance& inst, const CGParams& params = {});

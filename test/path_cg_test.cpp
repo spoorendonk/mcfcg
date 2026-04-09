@@ -1,16 +1,15 @@
-#include <gtest/gtest.h>
+#include "mcfcg/cg/path_cg.h"
+
+#include "mcfcg/instance.h"
 
 #include <cstdio>
 #include <fstream>
-
-#include "mcfcg/cg/path_cg.h"
-#include "mcfcg/instance.h"
+#include <gtest/gtest.h>
 
 // Helper to write plain-numeric instance file
-static void write_instance(const std::string & path, uint32_t vertices,
-                           uint32_t arcs, uint32_t commodities,
-                           const std::string & arc_lines,
-                           const std::string & commodity_lines) {
+static void write_instance(const std::string& path, uint32_t vertices, uint32_t arcs,
+                           uint32_t commodities, const std::string& arc_lines,
+                           const std::string& commodity_lines) {
     std::ofstream f(path);
     f << vertices << '\n' << arcs << '\n' << commodities << '\n';
     f << arc_lines << commodity_lines;
@@ -23,11 +22,10 @@ static void write_instance(const std::string & path, uint32_t vertices,
 // obj* = 29
 
 class PathCGSingleSource : public ::testing::Test {
-   protected:
+protected:
     std::string path = "path_cg_single.txt";
     void SetUp() override {
-        write_instance(path, 4, 5, 2,
-                       "1 2 1 10\n1 3 4 10\n2 3 2 10\n2 4 6 10\n3 4 1 10\n",
+        write_instance(path, 4, 5, 2, "1 2 1 10\n1 3 4 10\n2 3 2 10\n2 4 6 10\n3 4 1 10\n",
                        "1 4 5\n1 3 3\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
@@ -45,11 +43,10 @@ TEST_F(PathCGSingleSource, OptimalObjective) {
 // obj* = 21
 
 class PathCGCapacityBinding : public ::testing::Test {
-   protected:
+protected:
     std::string path = "path_cg_cap.txt";
     void SetUp() override {
-        write_instance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n",
-                       "1 4 5\n");
+        write_instance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
 };
@@ -66,11 +63,10 @@ TEST_F(PathCGCapacityBinding, OptimalWithSplitFlow) {
 // obj* = 17
 
 class PathCGMultiSource : public ::testing::Test {
-   protected:
+protected:
     std::string path = "path_cg_multi.txt";
     void SetUp() override {
-        write_instance(path, 4, 3, 2, "1 3 1 10\n2 3 2 10\n3 4 1 10\n",
-                       "1 4 4\n2 4 3\n");
+        write_instance(path, 4, 3, 2, "1 3 1 10\n2 3 2 10\n3 4 1 10\n", "1 4 4\n2 4 3\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
 };
@@ -89,11 +85,10 @@ TEST_F(PathCGMultiSource, OptimalObjective) {
 // obj* = 21
 
 class PathCGMultiSourceCap : public ::testing::Test {
-   protected:
+protected:
     std::string path = "path_cg_multi_cap.txt";
     void SetUp() override {
-        write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n",
-                       "1 4 4\n2 4 3\n");
+        write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
 };
@@ -103,6 +98,30 @@ TEST_F(PathCGMultiSourceCap, OptimalWithCapacity) {
     ASSERT_EQ(inst.sources.size(), 2u);
 
     auto result = mcfcg::solve_path_cg(inst);
+
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 21.0, 1e-4);
+}
+
+// --- Row purging: verify aggressive purging does not change optimal objective ---
+
+TEST_F(PathCGCapacityBinding, PurgeDoesNotChangeObjective) {
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.row_inactivity_threshold = 1;  // aggressive: purge after 1 iteration inactive
+    auto result = mcfcg::solve_path_cg(inst, params);
+
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 21.0, 1e-4);
+}
+
+TEST_F(PathCGMultiSourceCap, PurgeDoesNotChangeObjective) {
+    auto inst = mcfcg::read_commalab(path);
+    ASSERT_EQ(inst.sources.size(), 2u);
+
+    mcfcg::CGParams params;
+    params.row_inactivity_threshold = 1;
+    auto result = mcfcg::solve_path_cg(inst, params);
 
     ASSERT_TRUE(result.optimal);
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
