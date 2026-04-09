@@ -24,7 +24,7 @@ using SolverFactory = std::function<std::unique_ptr<LPSolver>()>;
 
 struct CGParams {
     uint32_t max_iterations = 10000;
-    uint32_t max_cols_per_iter = 1000;
+    uint32_t max_cols_per_iter = 50000;
     bool warm_start = true;
     Verbosity verbosity = Verbosity::Silent;
     // When true, cap columns per iteration at the number of sources (one per

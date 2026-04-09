@@ -32,13 +32,13 @@ Column generation solver for minimum-cost multicommodity flow (MCF). Supports pa
 
 ## Architecture
 
-The CG loop (`src/cg/path_cg.cpp`, `src/cg/tree_cg.cpp`) drives the interaction between three components:
+The CG loop (`include/mcfcg/cg/cg_loop.h`) is a single template function `solve_cg<Master, Pricer>` shared by both formulations. It drives the interaction between three components:
 
 1. **Master problem** (`include/mcfcg/cg/master.h`, `tree_master.h`) — restricted LP with incremental column/row addition. Path formulation has one demand row per commodity; tree formulation has one convexity row per source. Both use BIG_M slack variables and lazy capacity constraints (added on violation).
 
 2. **Pricer** (`include/mcfcg/cg/pricer.h`, `tree_pricer.h`) — computes reduced costs using dual values from the master. Runs Dijkstra from each source with clamped integer-scaled arc costs (SCALE=1e9). Source postponement skips sources that produced no negative-RC column last round. Path pricer extracts one column per commodity; tree pricer builds a single tree column per source aggregating demand-weighted arc flows.
 
-3. **LP backend** (`include/mcfcg/lp/lp_solver.h`, `src/lp/highs_solver.cpp`) — abstract interface, currently HiGHS. CSC format for columns, CSR for rows. The `starts` convention differs: `add_cols` callers include a sentinel, `add_rows` callers don't (the HiGHS adapter appends it).
+3. **LP backend** (`include/mcfcg/lp/lp_solver.h`) — abstract interface with three implementations: HiGHS (default, always available, incremental), cuOpt (optional, GPU barrier, rebuild-from-scratch), and COPT (optional, GPU barrier, incremental). Enable optional backends with `-DMCFCG_USE_CUOPT=ON` or `-DMCFCG_USE_COPT=ON`. CSC format for columns, CSR for rows. The `starts` convention differs: `add_cols` callers include a sentinel, `add_rows` callers don't (the HiGHS adapter appends it). Barrier backends use `neg_rc_tol = -1e-4` since barrier duals are less precise than simplex.
 
 ### Graph layer
 `include/mcfcg/graph/` — CSR static digraph with typed arc/vertex maps (`static_map`), d-ary min-heap, Dijkstra/A* borrowing a `dijkstra_workspace` for reusable memory. Compile-time traits control which workspace fields are written (`if constexpr`).

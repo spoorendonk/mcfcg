@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
                      "  --coef N                 TNTP demand coefficient\n"
                      "  --threads N              Number of pricing threads (0=auto)\n"
                      "  --batch-size N           Pricing batch size (0=all)\n"
-                     "  --solver highs|cuopt     LP solver backend (default: highs)\n");
+                     "  --solver highs|cuopt|copt LP solver backend (default: highs)\n");
         return EXIT_FAILURE;
     }
 
@@ -137,6 +137,14 @@ int main(int argc, char* argv[]) {
         params.neg_rc_tol = -1e-4;
 #else
         std::fprintf(stderr, "cuOpt not available. Rebuild with -DMCFCG_USE_CUOPT=ON.\n");
+        return EXIT_FAILURE;
+#endif
+    } else if (solver == "copt") {
+#ifdef MCFCG_USE_COPT
+        params.solver_factory = [] { return mcfcg::create_copt_solver(); };
+        params.neg_rc_tol = -1e-4;  // barrier duals less precise than simplex
+#else
+        std::fprintf(stderr, "COPT not available. Rebuild with -DMCFCG_USE_COPT=ON.\n");
         return EXIT_FAILURE;
 #endif
     }

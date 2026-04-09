@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(MCFCG_USE_CUOPT "Enable cuOpt LP solver backend" OFF)
+option(MCFCG_USE_COPT "Enable COPT LP solver backend" OFF)
 option(MCFCG_USE_MOSEK "Enable MOSEK LP solver backend" OFF)
 
 # HiGHS — always available as default fallback
@@ -52,6 +53,22 @@ if(MCFCG_USE_CUOPT)
     target_sources(mcfcg PRIVATE src/lp/cuopt_solver.cpp)
     target_include_directories(mcfcg PRIVATE ${CUOPT_INCLUDE_DIR})
     target_link_libraries(mcfcg PRIVATE ${CUOPT_LIBRARY})
+endif()
+
+if(MCFCG_USE_COPT)
+    target_compile_definitions(mcfcg PUBLIC MCFCG_USE_COPT)
+    find_path(COPT_INCLUDE_DIR copt.h
+              HINTS ENV COPT_HOME
+              PATH_SUFFIXES include)
+    find_library(COPT_LIBRARY copt
+                 HINTS ENV COPT_HOME
+                 PATH_SUFFIXES lib lib64)
+    if(NOT COPT_INCLUDE_DIR OR NOT COPT_LIBRARY)
+        message(FATAL_ERROR "COPT not found. Set COPT_HOME.")
+    endif()
+    target_sources(mcfcg PRIVATE src/lp/copt_solver.cpp)
+    target_include_directories(mcfcg PRIVATE ${COPT_INCLUDE_DIR})
+    target_link_libraries(mcfcg PRIVATE ${COPT_LIBRARY})
 endif()
 
 if(MCFCG_USE_MOSEK)
