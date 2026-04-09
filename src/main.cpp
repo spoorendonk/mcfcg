@@ -61,7 +61,8 @@ int main(int argc, char* argv[]) {
                      "  --trips PATH             TNTP trips file\n"
                      "  --coef N                 TNTP demand coefficient\n"
                      "  --threads N              Number of pricing threads (0=auto)\n"
-                     "  --batch-size N           Pricing batch size (0=all)\n");
+                     "  --batch-size N           Pricing batch size (0=all)\n"
+                     "  --solver highs|cuopt     LP solver backend (default: highs)\n");
         return EXIT_FAILURE;
     }
 
@@ -70,6 +71,7 @@ int main(int argc, char* argv[]) {
     uint32_t max_iters = 10000;
     uint32_t num_threads = 1;
     uint32_t batch_size = 0;
+    std::string solver = "highs";
     std::string trips_path;
     double coef = 0.0;
 
@@ -88,6 +90,8 @@ int main(int argc, char* argv[]) {
             num_threads = static_cast<uint32_t>(std::atoi(argv[i + 1]));
         else if (std::strcmp(argv[i], "--batch-size") == 0)
             batch_size = static_cast<uint32_t>(std::atoi(argv[i + 1]));
+        else if (std::strcmp(argv[i], "--solver") == 0)
+            solver = argv[i + 1];
     }
 
     mcfcg::Instance inst;
@@ -124,6 +128,18 @@ int main(int argc, char* argv[]) {
     params.num_threads = num_threads;
     params.pricing_batch_size = batch_size;
     params.verbosity = mcfcg::Verbosity::Iteration;
+
+    if (solver == "cuopt") {
+#ifdef MCFCG_USE_CUOPT
+        params.solver_factory = [] { return mcfcg::create_cuopt_solver(); };
+        // Barrier duals are less precise than simplex — loosen RC tolerance
+        // to avoid tailing off on spurious negative-RC columns.
+        params.neg_rc_tol = -1e-4;
+#else
+        std::fprintf(stderr, "cuOpt not available. Rebuild with -DMCFCG_USE_CUOPT=ON.\n");
+        return EXIT_FAILURE;
+#endif
+    }
 
     auto start = std::chrono::steady_clock::now();
     mcfcg::CGResult result;

@@ -107,7 +107,7 @@ public:
     using vertex_t = uint32_t;
 
     static constexpr double SCALE = 1e9;
-    static constexpr double NEG_RC_TOL = -1e-6;
+    static constexpr double DEFAULT_NEG_RC_TOL = -1e-6;
 
 protected:
     const Instance* _inst = nullptr;
@@ -115,6 +115,7 @@ protected:
     std::vector<std::vector<uint32_t>> _source_arcs;
     bool _track_arcs = false;
     PricingMode _mode = PricingMode::AStar;
+    double _neg_rc_tol = DEFAULT_NEG_RC_TOL;
     static_map<vertex_t, int64_t> _lower_bounds;
     static_map<uint32_t, int64_t> _rc;
 
@@ -134,10 +135,12 @@ public:
     PricerBase() = default;
 
     void init(const Instance& inst, PricingMode mode = PricingMode::AStar,
-              thread_pool* pool = nullptr, uint32_t batch_size = 0) {
+              thread_pool* pool = nullptr, uint32_t batch_size = 0,
+              double neg_rc_tol = DEFAULT_NEG_RC_TOL) {
         _inst = &inst;
         _source_postponed.assign(inst.sources.size(), 0);
         _mode = mode;
+        _neg_rc_tol = neg_rc_tol;
         _pool = pool;
         _batch_size = batch_size;
         _last_source_idx = 0;

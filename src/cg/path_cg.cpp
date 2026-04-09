@@ -16,7 +16,7 @@ CGResult solve_path_cg(const Instance& inst, const CGParams& params) {
     master.init(inst, params.solver_factory ? params.solver_factory() : nullptr);
 
     PathPricer pricer;
-    pricer.init(inst, PricingMode::AStar, pool.get(), params.pricing_batch_size);
+    pricer.init(inst, PricingMode::AStar, pool.get(), params.pricing_batch_size, params.neg_rc_tol);
     pricer.set_track_arcs(params.pricing_filter);
 
     Timer timer;

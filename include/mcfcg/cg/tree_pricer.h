@@ -59,7 +59,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             }
         }
 
-        if (!all_reachable || tree_rc >= NEG_RC_TOL) {
+        if (!all_reachable || tree_rc >= _neg_rc_tol) {
             _source_postponed[s_idx] = true;
             return;
         }

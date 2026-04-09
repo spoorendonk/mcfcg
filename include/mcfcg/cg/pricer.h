@@ -44,7 +44,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
                 v = _inst->graph.arc_source(a);
             }
 
-            if (true_rc >= NEG_RC_TOL)
+            if (true_rc >= _neg_rc_tol)
                 continue;
 
             found_any = true;

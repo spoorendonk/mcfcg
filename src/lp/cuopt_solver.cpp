@@ -196,8 +196,9 @@ public:
         uint32_t n = num_cols();
         uint32_t m = num_rows();
 
-        if (n == 0)
+        if (n == 0) {
             return LPStatus::Error;
+        }
 
         // Convert internal CSC storage to CSR for cuOpt.
         // Build CSR row_offsets, col_indices, coeff_values.
@@ -254,8 +255,9 @@ public:
             static_cast<cuopt_float_t>(0.0), f_obj.data(), row_offsets.data(), col_indices.data(),
             coeff_values.data(), f_row_lb.data(), f_row_ub.data(), f_col_lb.data(), f_col_ub.data(),
             var_types.data(), &problem);
-        if (status != CUOPT_SUCCESS)
+        if (status != CUOPT_SUCCESS) {
             return LPStatus::Error;
+        }
 
         // Create solver settings
         cuOptSolverSettings settings = nullptr;
@@ -271,9 +273,7 @@ public:
         cuOptSetParameter(settings, CUOPT_RELATIVE_PRIMAL_TOLERANCE, "1e-8");
         cuOptSetParameter(settings, CUOPT_RELATIVE_DUAL_TOLERANCE, "1e-8");
 
-        if (_verbose) {
-            cuOptSetParameter(settings, CUOPT_LOG_TO_CONSOLE, "1");
-        }
+        cuOptSetParameter(settings, CUOPT_LOG_TO_CONSOLE, _verbose ? "1" : "0");
 
         // Solve
         cuOptSolution solution = nullptr;
@@ -286,8 +286,9 @@ public:
 
         // Cleanup helper — ensures cuOpt resources are freed on all paths.
         auto cleanup = [&] {
-            if (solution)
+            if (solution) {
                 cuOptDestroySolution(&solution);
+            }
             cuOptDestroySolverSettings(&settings);
             cuOptDestroyProblem(&problem);
         };
