@@ -58,7 +58,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
     void price_source_dijkstra(uint32_t s_idx, const Source& src, vertex_t source_v,
                                const std::vector<double>& pi,
                                const std::unordered_map<uint32_t, double>& mu,
-                               std::vector<Column>& new_columns) {
+                               std::vector<Column>& new_columns, uint32_t thread_id) {
         constexpr auto MAX_BOUND = shortest_path_semiring<int64_t>::infty / 2;
 
         // Per-target cutoffs: cutoff[sink] = max pi[k]*SCALE over
@@ -83,8 +83,9 @@ class PathPricer : public PricerBase<PathPricer, Column> {
 
         uint32_t remaining = static_cast<uint32_t>(cutoff.size());
 
-        _workspace.reset();
-        dijkstra<dijkstra_store_paths> dijk(_inst->graph, _rc, _workspace);
+        auto& ws = _workspaces[thread_id];
+        ws.reset();
+        dijkstra<dijkstra_store_paths> dijk(_inst->graph, _rc, ws);
         dijk.add_source(source_v);
 
         while (!dijk.finished() && remaining > 0) {

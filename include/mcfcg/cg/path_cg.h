@@ -31,7 +31,9 @@ struct CGParams {
     // source) so the master LP is re-solved more frequently with fresh duals.
     bool prefer_master = false;
     bool pricing_filter = false;
-    SolverFactory solver_factory;  // Custom LP solver; uses HiGHS if null
+    uint32_t num_threads = 1;         // 0 = auto-detect via hardware_concurrency
+    uint32_t pricing_batch_size = 0;  // 0 = all sources in one batch
+    SolverFactory solver_factory;     // Custom LP solver; uses HiGHS if null
 };
 
 CGResult solve_path_cg(const Instance& inst, const CGParams& params = {});

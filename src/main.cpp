@@ -59,13 +59,17 @@ int main(int argc, char* argv[]) {
                      "  --formulation path|tree  (default: path)\n"
                      "  --max-iters N            (default: 10000)\n"
                      "  --trips PATH             TNTP trips file\n"
-                     "  --coef N                 TNTP demand coefficient\n");
+                     "  --coef N                 TNTP demand coefficient\n"
+                     "  --threads N              Number of pricing threads (0=auto)\n"
+                     "  --batch-size N           Pricing batch size (0=all)\n");
         return EXIT_FAILURE;
     }
 
     std::string instance_path = argv[1];
     std::string formulation = "path";
     uint32_t max_iters = 10000;
+    uint32_t num_threads = 1;
+    uint32_t batch_size = 0;
     std::string trips_path;
     double coef = 0.0;
 
@@ -80,6 +84,10 @@ int main(int argc, char* argv[]) {
             trips_path = argv[i + 1];
         else if (std::strcmp(argv[i], "--coef") == 0)
             coef = std::atof(argv[i + 1]);
+        else if (std::strcmp(argv[i], "--threads") == 0)
+            num_threads = static_cast<uint32_t>(std::atoi(argv[i + 1]));
+        else if (std::strcmp(argv[i], "--batch-size") == 0)
+            batch_size = static_cast<uint32_t>(std::atoi(argv[i + 1]));
     }
 
     mcfcg::Instance inst;
@@ -113,6 +121,8 @@ int main(int argc, char* argv[]) {
 
     mcfcg::CGParams params;
     params.max_iterations = max_iters;
+    params.num_threads = num_threads;
+    params.pricing_batch_size = batch_size;
     params.verbosity = mcfcg::Verbosity::Iteration;
 
     auto start = std::chrono::steady_clock::now();

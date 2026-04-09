@@ -76,7 +76,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
     void price_source_dijkstra(uint32_t s_idx, const Source& src, uint32_t source_v,
                                const std::vector<double>& pi_s,
                                const std::unordered_map<uint32_t, double>& mu,
-                               std::vector<TreeColumn>& new_columns) {
+                               std::vector<TreeColumn>& new_columns, uint32_t thread_id) {
         constexpr auto MAX_BOUND = shortest_path_semiring<int64_t>::infty / 2;
 
         // Shrinking-budget bound: budget starts at pi_s * SCALE.
@@ -108,8 +108,9 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
         int64_t dual_bound = compute_bound();
 
-        _workspace.reset();
-        dijkstra<dijkstra_store_paths> dijk(_inst->graph, _rc, _workspace);
+        auto& ws = _workspaces[thread_id];
+        ws.reset();
+        dijkstra<dijkstra_store_paths> dijk(_inst->graph, _rc, ws);
         dijk.add_source(source_v);
 
         while (!dijk.finished() && num_remaining > 0) {

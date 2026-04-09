@@ -3,11 +3,13 @@
 #include "mcfcg/cg/column.h"
 #include "mcfcg/graph/dijkstra.h"
 #include "mcfcg/instance.h"
+#include "mcfcg/util/thread_pool.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -92,11 +94,12 @@ inline static_map<uint32_t, int64_t> compute_lower_bounds_to_targets(const Insta
 }
 
 // CRTP base class for path and tree pricers.  Shared logic: member
-// variables, initialization, reduced-cost computation, source loop,
-// A* target setup/cleanup, and utility methods.
+// variables, initialization, reduced-cost computation, batched
+// round-robin source loop with parallel execution, A* target
+// setup/cleanup, and utility methods.
 //
 // Derived must implement:
-//   void price_source_dijkstra(s_idx, src, source_v, duals, mu, out)
+//   void price_source_dijkstra(s_idx, src, source_v, duals, mu, out, thread_id)
 //   void process_source(s_idx, src, duals, mu, dijk, out)  [auto& dijk]
 template <typename Derived, typename ColumnT>
 class PricerBase {
@@ -108,29 +111,51 @@ public:
 
 protected:
     const Instance* _inst = nullptr;
-    std::vector<bool> _source_postponed;
+    std::vector<uint8_t> _source_postponed;
     std::vector<std::vector<uint32_t>> _source_arcs;
     bool _track_arcs = false;
     PricingMode _mode = PricingMode::AStar;
     static_map<vertex_t, int64_t> _lower_bounds;
-    dijkstra_workspace _workspace;
     static_map<uint32_t, int64_t> _rc;
-    static_map<uint32_t, bool> _is_target;
+
+    // Per-thread state for parallel pricing
+    std::vector<dijkstra_workspace> _workspaces;
+    std::vector<static_map<uint32_t, bool>> _is_targets;  // A* mode only
+    std::vector<std::vector<ColumnT>> _thread_columns;    // reused across batches
+    thread_pool* _pool = nullptr;
+
+    // Round-robin cursor: where to start pricing next iteration
+    uint32_t _last_source_idx = 0;
+    uint32_t _batch_size = 0;  // 0 = all sources in one batch
 
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
 
 public:
     PricerBase() = default;
 
-    void init(const Instance& inst, PricingMode mode = PricingMode::AStar) {
+    void init(const Instance& inst, PricingMode mode = PricingMode::AStar,
+              thread_pool* pool = nullptr, uint32_t batch_size = 0) {
         _inst = &inst;
-        _source_postponed.assign(inst.sources.size(), false);
+        _source_postponed.assign(inst.sources.size(), 0);
         _mode = mode;
-        _workspace = dijkstra_workspace(inst.graph.num_vertices());
+        _pool = pool;
+        _batch_size = batch_size;
+        _last_source_idx = 0;
+
+        uint32_t num_ws = pool ? pool->num_threads() : 1;
+        _workspaces.clear();
+        _workspaces.reserve(num_ws);
+        for (uint32_t wi = 0; wi < num_ws; ++wi)
+            _workspaces.emplace_back(inst.graph.num_vertices());
+        _thread_columns.resize(num_ws);
+
         _rc = inst.graph.create_arc_map<int64_t>();
         if (_mode == PricingMode::AStar) {
             _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
-            _is_target = inst.graph.create_vertex_map<bool>(false);
+            _is_targets.clear();
+            _is_targets.reserve(num_ws);
+            for (uint32_t wi = 0; wi < num_ws; ++wi)
+                _is_targets.push_back(inst.graph.create_vertex_map<bool>(false));
         }
     }
 
@@ -143,34 +168,54 @@ public:
 
     std::vector<ColumnT> price(const std::vector<double>& duals,
                                const std::unordered_map<uint32_t, double>& mu,
-                               bool final_round = false) {
-        std::unordered_set<uint32_t> no_forbidden;
-        return price(duals, mu, no_forbidden, final_round);
+                               bool final_round = false, uint32_t max_cols = 0) {
+        static const std::unordered_set<uint32_t> no_forbidden;
+        return price(duals, mu, no_forbidden, final_round, max_cols);
     }
 
     std::vector<ColumnT> price(const std::vector<double>& duals,
                                const std::unordered_map<uint32_t, double>& mu,
-                               const std::unordered_set<uint32_t>& forbidden_arcs,
-                               bool final_round) {
+                               const std::unordered_set<uint32_t>& forbidden_arcs, bool final_round,
+                               uint32_t max_cols = 0) {
         compute_rc(mu, forbidden_arcs);
 
-        std::vector<ColumnT> new_columns;
+        uint32_t n_sources = static_cast<uint32_t>(_inst->sources.size());
+        if (n_sources == 0)
+            return {};
 
-        for (uint32_t s_idx = 0; s_idx < _inst->sources.size(); ++s_idx) {
-            if (!final_round && _source_postponed[s_idx])
+        uint32_t effective_batch = (_batch_size > 0) ? _batch_size : n_sources;
+        uint32_t start = final_round ? 0 : _last_source_idx;
+        uint32_t sources_scanned = 0;
+
+        std::vector<ColumnT> all_columns;
+        std::vector<uint32_t> batch;
+        batch.reserve(effective_batch);
+
+        while (sources_scanned < n_sources) {
+            // Collect next batch of active (non-postponed) sources
+            batch.clear();
+            while (batch.size() < effective_batch && sources_scanned < n_sources) {
+                uint32_t s_idx = (start + sources_scanned) % n_sources;
+                ++sources_scanned;
+                if (!final_round && _source_postponed[s_idx])
+                    continue;
+                batch.push_back(s_idx);
+            }
+
+            if (batch.empty())
                 continue;
 
-            const auto& src = _inst->sources[s_idx];
-            vertex_t source_v = src.vertex;
+            // Price batch (parallel if pool available)
+            auto batch_cols = price_batch(batch, duals, mu);
+            all_columns.insert(all_columns.end(), std::make_move_iterator(batch_cols.begin()),
+                               std::make_move_iterator(batch_cols.end()));
 
-            if (_mode == PricingMode::AStar) {
-                price_source_astar(s_idx, src, source_v, duals, mu, new_columns);
-            } else {
-                self().price_source_dijkstra(s_idx, src, source_v, duals, mu, new_columns);
-            }
+            if (max_cols > 0 && all_columns.size() >= max_cols)
+                break;
         }
 
-        return new_columns;
+        _last_source_idx = (start + sources_scanned) % n_sources;
+        return all_columns;
     }
 
     void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
@@ -179,11 +224,14 @@ public:
         for (uint32_t s = 0; s < _source_postponed.size(); ++s) {
             bool affected = std::any_of(_source_arcs[s].begin(), _source_arcs[s].end(),
                                         [&](uint32_t a) { return cap_set.contains(a); });
-            _source_postponed[s] = !affected;
+            _source_postponed[s] = affected ? 0 : 1;
         }
     }
 
-    void reset_postponed() { std::fill(_source_postponed.begin(), _source_postponed.end(), false); }
+    void reset_postponed() {
+        std::fill(_source_postponed.begin(), _source_postponed.end(), uint8_t{0});
+        _last_source_idx = 0;
+    }
 
 protected:
     void compute_rc(const std::unordered_map<uint32_t, double>& mu,
@@ -204,30 +252,79 @@ protected:
         }
     }
 
+    std::vector<ColumnT> price_batch(const std::vector<uint32_t>& batch,
+                                     const std::vector<double>& duals,
+                                     const std::unordered_map<uint32_t, double>& mu) {
+        uint32_t batch_n = static_cast<uint32_t>(batch.size());
+
+        if (!_pool || _pool->num_threads() <= 1 || batch_n <= 1) {
+            // Sequential
+            std::vector<ColumnT> cols;
+            for (uint32_t s_idx : batch)
+                price_one_source(s_idx, duals, mu, cols, 0);
+            return cols;
+        }
+
+        // Parallel: each thread accumulates into its own vector
+        for (auto& tc : _thread_columns)
+            tc.clear();
+
+        _pool->parallel_for(batch_n, [&](uint32_t task_i, uint32_t tid) {
+            price_one_source(batch[task_i], duals, mu, _thread_columns[tid], tid);
+        });
+
+        // Concatenate
+        size_t total = 0;
+        for (auto& tc : _thread_columns)
+            total += tc.size();
+        std::vector<ColumnT> result;
+        result.reserve(total);
+        for (auto& tc : _thread_columns)
+            result.insert(result.end(), std::make_move_iterator(tc.begin()),
+                          std::make_move_iterator(tc.end()));
+        return result;
+    }
+
+    void price_one_source(uint32_t s_idx, const std::vector<double>& duals,
+                          const std::unordered_map<uint32_t, double>& mu, std::vector<ColumnT>& out,
+                          uint32_t thread_id) {
+        const auto& src = _inst->sources[s_idx];
+        vertex_t source_v = src.vertex;
+
+        if (_mode == PricingMode::AStar) {
+            price_source_astar(s_idx, src, source_v, duals, mu, out, thread_id);
+        } else {
+            self().price_source_dijkstra(s_idx, src, source_v, duals, mu, out, thread_id);
+        }
+    }
+
     void price_source_astar(uint32_t s_idx, const Source& src, vertex_t source_v,
                             const std::vector<double>& duals,
                             const std::unordered_map<uint32_t, double>& mu,
-                            std::vector<ColumnT>& new_columns) {
+                            std::vector<ColumnT>& new_columns, uint32_t thread_id) {
+        auto& ws = _workspaces[thread_id];
+        auto& is_target = _is_targets[thread_id];
+
         // Set target sinks (O(commodities-per-source), not O(V)).
         uint32_t num_targets = 0;
         for (uint32_t k : src.commodity_indices) {
             vertex_t sink = _inst->commodities[k].sink;
-            if (!_is_target[sink]) {
-                _is_target[sink] = true;
+            if (!is_target[sink]) {
+                is_target[sink] = true;
                 ++num_targets;
             }
         }
 
-        _workspace.reset();
-        astar_dijkstra<dijkstra_store_paths> dijk(_inst->graph, _rc, _lower_bounds, _workspace);
+        ws.reset();
+        astar_dijkstra<dijkstra_store_paths> dijk(_inst->graph, _rc, _lower_bounds, ws);
         dijk.add_source(source_v);
-        dijk.run_until_targets(_is_target, num_targets);
+        dijk.run_until_targets(is_target, num_targets);
 
         self().process_source(s_idx, src, duals, mu, dijk, new_columns);
 
         // Clear only the sinks we set (O(commodities-per-source), not O(V)).
         for (uint32_t k : src.commodity_indices)
-            _is_target[_inst->commodities[k].sink] = false;
+            is_target[_inst->commodities[k].sink] = false;
     }
 };
 

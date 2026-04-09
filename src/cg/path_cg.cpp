@@ -2,6 +2,7 @@
 
 #include "mcfcg/cg/master.h"
 #include "mcfcg/cg/pricer.h"
+#include "mcfcg/util/thread_pool.h"
 #include "mcfcg/util/timer.h"
 
 #include <limits>
@@ -9,11 +10,13 @@
 namespace mcfcg {
 
 CGResult solve_path_cg(const Instance& inst, const CGParams& params) {
+    auto pool = make_thread_pool(params.num_threads);
+
     PathMaster master;
     master.init(inst, params.solver_factory ? params.solver_factory() : nullptr);
 
     PathPricer pricer;
-    pricer.init(inst);
+    pricer.init(inst, PricingMode::AStar, pool.get(), params.pricing_batch_size);
     pricer.set_track_arcs(params.pricing_filter);
 
     Timer timer;
@@ -104,10 +107,13 @@ CGResult solve_path_cg(const Instance& inst, const CGParams& params) {
         auto pi = master.get_demand_duals();
         auto mu = master.get_capacity_duals();
 
-        auto new_cols = pricer.price(pi, mu, false);
+        uint32_t col_limit = params.prefer_master ? static_cast<uint32_t>(inst.commodities.size())
+                                                  : params.max_cols_per_iter;
+
+        auto new_cols = pricer.price(pi, mu, false, col_limit);
 
         if (new_cols.empty()) {
-            new_cols = pricer.price(pi, mu, true);
+            new_cols = pricer.price(pi, mu, true, col_limit);
             if (new_cols.empty()) {
                 iter_timer.stop(TimerCat::Pricing);
                 timer.stop(TimerCat::Pricing);
@@ -125,8 +131,6 @@ CGResult solve_path_cg(const Instance& inst, const CGParams& params) {
             pricer.reset_postponed();
         }
 
-        uint32_t col_limit = params.prefer_master ? static_cast<uint32_t>(inst.commodities.size())
-                                                  : params.max_cols_per_iter;
         if (new_cols.size() > col_limit) {
             new_cols.resize(col_limit);
         }
