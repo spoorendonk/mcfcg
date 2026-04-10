@@ -8,8 +8,9 @@ namespace mcfcg {
 struct TreeColumn {
     uint32_t source_idx;  // index into Instance::sources
     double cost;          // total tree cost = sum_k d_k * dist[t_k]
-    // Reduced cost assigned by the pricer.  Only consulted when the
-    // per-iter column cap truncates the batch — see cg_loop::solve_cg.
+    // Reduced cost of this tree column. INVARIANT: set by
+    // TreePricer::process_source before push_back.  See the matching
+    // comment on Column::reduced_cost — same design rationale.
     double reduced_cost = 0.0;
 
     // Per-arc flow: f_bar_e = sum_{k: s_k=s, e on path s->t_k} d_k

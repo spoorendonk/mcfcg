@@ -63,6 +63,10 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     timer.start(TimerCat::Total);
 
     if (params.warm_start) {
+        // One-shot initialization: price every source against BIG_M duals to
+        // seed the master with at least one column per source.  This pass
+        // intentionally bypasses effective_col_limit (the per-iter cap only
+        // applies inside the main loop below).
         timer.start(TimerCat::Pricing);
         std::vector<double> big_duals(num_entities, Master::BIG_M);
         std::unordered_map<uint32_t, double> empty_mu;
@@ -118,10 +122,14 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             obj = master.get_obj();
             primals = master.get_primals();
 
-            // PricerLight: defer pricing until the master reaches a
-            // cut-stable state. Skip pricing and all post-pricing housekeeping
-            // for this iter — next iter will re-separate and eventually price
-            // with fresh duals once no more capacity rows are violated.
+            // PricerLight protocol — cuts before cols.  This is a mandatory
+            // part of the strategy bundle (see CGStrategy::PricerLight in
+            // path_cg.h): when new lazy capacity rows were just added, defer
+            // pricing entirely so the master reaches a cut-stable state.  The
+            // next iteration re-separates with fresh duals; once no more rows
+            // are violated, that iteration finally prices.  All post-pricing
+            // housekeeping (column aging, purge, add_columns) is also skipped
+            // for this deferred iteration since there is nothing to add.
             if (pricer_light) {
                 iter_timer.stop(TimerCat::Total);
                 logger.print_iteration(

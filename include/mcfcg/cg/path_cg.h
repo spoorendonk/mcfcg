@@ -11,6 +11,11 @@ namespace mcfcg {
 
 struct CGResult {
     double objective;
+    // CG-loop master iterations.  Counts every pass through the loop body,
+    // including iterations where pricing was deferred under
+    // CGStrategy::PricerLight (i.e. iterations that only added lazy capacity
+    // rows and re-solved the master).  Under CGStrategy::PricerHeavy every
+    // counted iteration also priced.
     uint32_t iterations;
     uint32_t total_columns;
     bool optimal;
@@ -49,6 +54,7 @@ struct CGParams {
     uint32_t max_cols_per_iter = 50000;
     bool warm_start = true;
     Verbosity verbosity = Verbosity::Silent;
+    // Strategy preset; see CGStrategy enum above for the bundled behaviors.
     CGStrategy strategy = CGStrategy::PricerHeavy;
     bool pricing_filter = false;
     uint32_t num_threads = 1;         // 0 = auto-detect via hardware_concurrency
