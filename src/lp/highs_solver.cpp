@@ -144,6 +144,11 @@ public:
         return sol.row_dual;
     }
 
+    std::vector<double> get_reduced_costs() const override {
+        auto& sol = _highs.getSolution();
+        return sol.col_dual;
+    }
+
     uint32_t num_cols() const override { return _num_cols; }
     uint32_t num_rows() const override { return _num_rows; }
 

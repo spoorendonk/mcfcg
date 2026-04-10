@@ -53,16 +53,20 @@ static bool is_tntp_net(const std::string& path) {
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::fprintf(stderr,
-                     "Usage: mcfcg_cli <instance_path> [options]\n"
-                     "Options:\n"
-                     "  --formulation path|tree  (default: path)\n"
-                     "  --max-iters N            (default: 10000)\n"
-                     "  --trips PATH             TNTP trips file\n"
-                     "  --coef N                 TNTP demand coefficient\n"
-                     "  --threads N              Number of pricing threads (0=auto)\n"
-                     "  --batch-size N           Pricing batch size (0=all)\n"
-                     "  --solver highs|cuopt|copt LP solver backend (default: highs)\n");
+        std::fprintf(
+            stderr,
+            "Usage: mcfcg_cli <instance_path> [options]\n"
+            "Options:\n"
+            "  --formulation path|tree  (default: path)\n"
+            "  --max-iters N            (default: 10000)\n"
+            "  --trips PATH             TNTP trips file\n"
+            "  --coef N                 TNTP demand coefficient\n"
+            "  --threads N              Number of pricing threads (0=auto)\n"
+            "  --batch-size N           Pricing batch size (0=all)\n"
+            "  --solver highs|cuopt|copt LP solver backend (default: highs)\n"
+            "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
+            "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
+            "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-6)\n");
         return EXIT_FAILURE;
     }
 
@@ -74,6 +78,8 @@ int main(int argc, char* argv[]) {
     std::string solver = "highs";
     std::string trips_path;
     double coef = 0.0;
+    mcfcg::CGParams params;
+    bool neg_rc_tol_overridden = false;
 
     for (int i = 2; i < argc; i += 2) {
         if (i + 1 >= argc)
@@ -92,6 +98,14 @@ int main(int argc, char* argv[]) {
             batch_size = static_cast<uint32_t>(std::atoi(argv[i + 1]));
         else if (std::strcmp(argv[i], "--solver") == 0)
             solver = argv[i + 1];
+        else if (std::strcmp(argv[i], "--col-age-limit") == 0)
+            params.col_age_limit = static_cast<uint32_t>(std::atoi(argv[i + 1]));
+        else if (std::strcmp(argv[i], "--row-inactivity") == 0)
+            params.row_inactivity_threshold = static_cast<uint32_t>(std::atoi(argv[i + 1]));
+        else if (std::strcmp(argv[i], "--neg-rc-tol") == 0) {
+            params.neg_rc_tol = std::atof(argv[i + 1]);
+            neg_rc_tol_overridden = true;
+        }
     }
 
     mcfcg::Instance inst;
@@ -123,7 +137,6 @@ int main(int argc, char* argv[]) {
                  inst.graph.num_vertices(), inst.graph.num_arcs(), inst.commodities.size(),
                  inst.sources.size());
 
-    mcfcg::CGParams params;
     params.max_iterations = max_iters;
     params.num_threads = num_threads;
     params.pricing_batch_size = batch_size;
@@ -134,7 +147,8 @@ int main(int argc, char* argv[]) {
         params.solver_factory = [] { return mcfcg::create_cuopt_solver(); };
         // Barrier duals are less precise than simplex — loosen RC tolerance
         // to avoid tailing off on spurious negative-RC columns.
-        params.neg_rc_tol = -1e-4;
+        if (!neg_rc_tol_overridden)
+            params.neg_rc_tol = -1e-4;
 #else
         std::fprintf(stderr, "cuOpt not available. Rebuild with -DMCFCG_USE_CUOPT=ON.\n");
         return EXIT_FAILURE;
@@ -142,7 +156,8 @@ int main(int argc, char* argv[]) {
     } else if (solver == "copt") {
 #ifdef MCFCG_USE_COPT
         params.solver_factory = [] { return mcfcg::create_copt_solver(); };
-        params.neg_rc_tol = -1e-4;  // barrier duals less precise than simplex
+        if (!neg_rc_tol_overridden)
+            params.neg_rc_tol = -1e-4;  // barrier duals less precise than simplex
 #else
         std::fprintf(stderr, "COPT not available. Rebuild with -DMCFCG_USE_COPT=ON.\n");
         return EXIT_FAILURE;

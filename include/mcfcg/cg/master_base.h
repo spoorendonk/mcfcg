@@ -240,12 +240,18 @@ public:
                 }
             }
         } else {
-            // Barrier solver fallback: active if non-zero primal
+            // Barrier solver fallback: a column is active if primal > eps
+            // or reduced cost < -eps (matches Flowty MCF model).
+            constexpr double EPS = 1e-6;
+            auto reduced_costs = _lp->get_reduced_costs();
+            bool have_rc = !reduced_costs.empty();
             for (uint32_t c = 0; c < _columns.size(); ++c) {
-                if (primals[_col_to_lp[c]] < 1e-10) {
-                    ++_col_age[c];
-                } else {
+                uint32_t lp_col = _col_to_lp[c];
+                bool active = primals[lp_col] > EPS || (have_rc && reduced_costs[lp_col] < -EPS);
+                if (active) {
                     _col_age[c] = 0;
+                } else {
+                    ++_col_age[c];
                 }
             }
         }

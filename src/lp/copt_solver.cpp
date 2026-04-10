@@ -210,6 +210,13 @@ public:
         return vals;
     }
 
+    std::vector<double> get_reduced_costs() const override {
+        std::vector<double> vals(num_cols());
+        check_copt(COPT_GetLpSolution(_prob, nullptr, nullptr, nullptr, vals.data()),
+                   "GetLpSolution(redCost)");
+        return vals;
+    }
+
     uint32_t num_cols() const override {
         int n = 0;
         check_copt(COPT_GetIntAttr(_prob, COPT_INTATTR_COLS, &n), "GetIntAttr(Cols)");

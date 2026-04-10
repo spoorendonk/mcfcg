@@ -150,9 +150,12 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
         // --- Purge (after pricing consumed duals, before add_columns so
         // primals and LP column indices stay consistent) ---
+        // Activity updates must happen BEFORE any delete_*, because some
+        // backends (COPT) invalidate the solution on delete and subsequent
+        // get_duals / get_reduced_costs calls fail.
+        master.update_capacity_row_activity(iter);
         master.update_column_ages(primals);
         uint32_t purged = master.purge_aged_columns(params.col_age_limit);
-        master.update_capacity_row_activity(iter);
         uint32_t num_purged =
             master.purge_nonbinding_capacity_rows(iter, params.row_inactivity_threshold);
 

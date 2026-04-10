@@ -49,6 +49,7 @@ private:
     double _cached_obj = 0.0;
     std::vector<double> _cached_primals;
     std::vector<double> _cached_duals;
+    std::vector<double> _cached_reduced_costs;
 
     bool _verbose = false;
 
@@ -333,6 +334,17 @@ public:
                 _cached_duals[i] = static_cast<double>(f_duals[i]);
             }
 
+            // Extract reduced costs
+            std::vector<cuopt_float_t> f_rc(n);
+            if (cuOptGetReducedCosts(solution, f_rc.data()) != CUOPT_SUCCESS) {
+                cleanup();
+                return LPStatus::Error;
+            }
+            _cached_reduced_costs.resize(n);
+            for (uint32_t i = 0; i < n; ++i) {
+                _cached_reduced_costs[i] = static_cast<double>(f_rc[i]);
+            }
+
             result = LPStatus::Optimal;
         } else if (term_status == CUOPT_TERIMINATION_STATUS_INFEASIBLE) {
             result = LPStatus::Infeasible;
@@ -347,6 +359,7 @@ public:
     double get_obj() const override { return _cached_obj; }
     std::vector<double> get_primals() const override { return _cached_primals; }
     std::vector<double> get_duals() const override { return _cached_duals; }
+    std::vector<double> get_reduced_costs() const override { return _cached_reduced_costs; }
 
     uint32_t num_cols() const override { return static_cast<uint32_t>(_obj.size()); }
     uint32_t num_rows() const override { return static_cast<uint32_t>(_row_lb.size()); }

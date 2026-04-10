@@ -47,6 +47,10 @@ public:
     virtual std::vector<double> get_primals() const = 0;
     virtual std::vector<double> get_duals() const = 0;
 
+    // Returns per-column reduced costs from the last solve. Default
+    // returns an empty vector for backends that do not expose them.
+    virtual std::vector<double> get_reduced_costs() const { return {}; }
+
     virtual uint32_t num_cols() const = 0;
     virtual uint32_t num_rows() const = 0;
 
