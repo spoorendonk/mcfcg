@@ -6,7 +6,9 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace mcfcg {
@@ -15,13 +17,17 @@ namespace mcfcg {
 // LP init, column management, solve/duals, lazy capacity constraints,
 // column aging, and row/column purging.
 //
-// Derived must implement (private, with friend access):
+// Derived must implement the following hooks (private + friend, or public):
 //   uint32_t num_structural_entities() const;
 //   std::pair<double, double> structural_row_bounds(uint32_t k) const;
 //   uint32_t structural_row_index(const ColumnT& col) const;
 //   void for_each_arc_coeff(const ColumnT& col, auto&& callback) const;
 //   void accumulate_flow(const ColumnT& col, double x,
 //                        static_map<uint32_t, double>& flow) const;
+//
+// Invariant: for_each_arc_coeff must not yield the same arc twice for a
+// given column.  Path columns are simple paths; tree columns aggregate
+// per-arc flow into a unique-arc map in the pricer.
 template <typename Derived, typename ColumnT>
 class MasterBase {
 public:

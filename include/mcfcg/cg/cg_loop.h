@@ -108,6 +108,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             if (status != LPStatus::Optimal)
                 break;
             obj = master.get_obj();
+            primals = master.get_primals();
         }
 
         // --- Pricing (duals are from the latest solve, not affected by purges) ---
@@ -147,14 +148,15 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         iter_timer.stop(TimerCat::Pricing);
         timer.stop(TimerCat::Pricing);
 
-        uint32_t added = master.add_columns(std::move(new_cols));
-
-        // --- Purge (end of iteration, after pricing consumed duals) ---
+        // --- Purge (after pricing consumed duals, before add_columns so
+        // primals and LP column indices stay consistent) ---
         master.update_column_ages(primals);
         uint32_t purged = master.purge_aged_columns(params.col_age_limit);
         master.update_capacity_row_activity(iter);
         uint32_t num_purged =
             master.purge_nonbinding_capacity_rows(iter, params.row_inactivity_threshold);
+
+        uint32_t added = master.add_columns(std::move(new_cols));
 
         result.iterations = iter + 1;
         result.total_columns = master.num_columns();
