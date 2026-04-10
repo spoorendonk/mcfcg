@@ -156,8 +156,8 @@ int main(int argc, char* argv[]) {
     } else if (solver == "copt") {
 #ifdef MCFCG_USE_COPT
         params.solver_factory = [] { return mcfcg::create_copt_solver(); };
-        if (!neg_rc_tol_overridden)
-            params.neg_rc_tol = -1e-4;  // barrier duals less precise than simplex
+        // COPT's barrier is precise enough to use the default simplex
+        // tolerance; only cuOpt needs the loosened -1e-4.
 #else
         std::fprintf(stderr, "COPT not available. Rebuild with -DMCFCG_USE_COPT=ON.\n");
         return EXIT_FAILURE;
