@@ -1,9 +1,10 @@
 #pragma once
 
+#include "mcfcg/util/limits.h"
+
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
-#include <limits>
 
 namespace mcfcg {
 
@@ -33,8 +34,6 @@ public:
         if (_verbosity < Verbosity::Iteration) {
             return;
         }
-
-        constexpr double INF = std::numeric_limits<double>::infinity();
 
         char ub_buf[16];
         if (std::isinf(upper_bound)) {

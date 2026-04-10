@@ -47,6 +47,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
             if (true_rc >= _neg_rc_tol)
                 continue;
 
+            col.reduced_cost = true_rc;
             found_any = true;
             std::reverse(col.arcs.begin(), col.arcs.end());
             new_columns.push_back(std::move(col));

@@ -201,26 +201,24 @@ TEST(RCValidation, WinnipegTree) {
     solve_and_validate_tree_rc(inst, opt.at("Winnipeg"));
 }
 
-// --- Feature tests: prefer_master, pricing_filter, A* admissibility ---
+// --- Feature tests: strategy bundle, pricing_filter, A* admissibility ---
 
-// Verify prefer_master + pricing_filter produce same optimal objective.
-TEST(FeatureTests, PreferMasterPath) {
+// Verify PricerLight strategy produces same optimal objective.
+TEST(FeatureTests, PricerLightPath) {
     auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
     mcfcg::CGParams params;
-    params.prefer_master = true;
-    params.pricing_filter = true;
+    params.strategy = mcfcg::CGStrategy::PricerLight;
     auto result = mcfcg::solve_path_cg(inst, params);
     EXPECT_TRUE(result.optimal);
     solve_and_check(inst, opt.at("grid1"));
 }
 
-TEST(FeatureTests, PreferMasterTree) {
+TEST(FeatureTests, PricerLightTree) {
     auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
     mcfcg::CGParams params;
-    params.prefer_master = true;
-    params.pricing_filter = true;
+    params.strategy = mcfcg::CGStrategy::PricerLight;
     auto result = mcfcg::solve_tree_cg(inst, params);
     EXPECT_TRUE(result.optimal);
     EXPECT_GE(result.objective, opt.at("grid1") * (1.0 - 0.0001));

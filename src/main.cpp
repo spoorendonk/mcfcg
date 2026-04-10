@@ -66,7 +66,14 @@ int main(int argc, char* argv[]) {
             "  --solver highs|cuopt|copt LP solver backend (default: highs)\n"
             "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
             "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
-            "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-6)\n");
+            "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-6)\n"
+            "  --strategy S             CG strategy: pricer-heavy (default) or "
+            "pricer-light.\n"
+            "                           pricer-light: throttle the pricer. Defer pricing "
+            "while\n"
+            "                           new capacity rows are being added, cap cols/iter at\n"
+            "                           num sources, disable col aging, force source "
+            "pricing filter.\n");
         return EXIT_FAILURE;
     }
 
@@ -105,6 +112,17 @@ int main(int argc, char* argv[]) {
         else if (std::strcmp(argv[i], "--neg-rc-tol") == 0) {
             params.neg_rc_tol = std::atof(argv[i + 1]);
             neg_rc_tol_overridden = true;
+        } else if (std::strcmp(argv[i], "--strategy") == 0) {
+            std::string s = argv[i + 1];
+            if (s == "pricer-heavy") {
+                params.strategy = mcfcg::CGStrategy::PricerHeavy;
+            } else if (s == "pricer-light") {
+                params.strategy = mcfcg::CGStrategy::PricerLight;
+            } else {
+                std::fprintf(stderr, "Unknown strategy '%s'. Valid: pricer-heavy, pricer-light\n",
+                             s.c_str());
+                return EXIT_FAILURE;
+            }
         }
     }
 

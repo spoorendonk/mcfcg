@@ -2,10 +2,10 @@
 
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/util/limits.h"
 
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -32,7 +32,6 @@ template <typename Derived, typename ColumnT>
 class MasterBase {
 public:
     static constexpr double BIG_M = 1e8;
-    static constexpr double INF = std::numeric_limits<double>::infinity();
 
 protected:
     const Instance* _inst = nullptr;

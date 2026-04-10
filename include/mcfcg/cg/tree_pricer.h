@@ -65,6 +65,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         }
 
         _source_postponed[s_idx] = false;
+        col.reduced_cost = tree_rc;
 
         for (auto& [arc, flow] : arc_flow_map) {
             col.arc_flows.push_back({arc, flow});

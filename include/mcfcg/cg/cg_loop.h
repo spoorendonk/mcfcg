@@ -2,10 +2,11 @@
 
 #include "mcfcg/cg/path_cg.h"
 #include "mcfcg/cg/pricer_base.h"
+#include "mcfcg/util/limits.h"
 #include "mcfcg/util/thread_pool.h"
 #include "mcfcg/util/timer.h"
 
-#include <limits>
+#include <algorithm>
 #include <unordered_map>
 #include <vector>
 
@@ -18,18 +19,25 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                   uint32_t num_entities) {
     auto pool = make_thread_pool(params.num_threads);
 
+    // Strategy bundle: resolve effective params from params.strategy.
+    // `PricerLight` caps columns per iter, disables column aging, enables the
+    // source pricing filter, and defers pricing in iterations that added
+    // lazy capacity rows.
+    const bool pricer_light = (params.strategy == CGStrategy::PricerLight);
+    const uint32_t effective_col_limit = pricer_light ? num_entities : params.max_cols_per_iter;
+    const uint32_t effective_col_age_limit = pricer_light ? INF_U32 : params.col_age_limit;
+    const bool effective_pricing_filter = pricer_light || params.pricing_filter;
+
     Master master;
     master.init(inst, params.solver_factory ? params.solver_factory() : nullptr);
 
     Pricer pricer;
     pricer.init(inst, PricingMode::AStar, pool.get(), params.pricing_batch_size, params.neg_rc_tol);
-    pricer.set_track_arcs(params.pricing_filter);
+    pricer.set_track_arcs(effective_pricing_filter);
 
     Timer timer;
     CGLogger logger(params.verbosity);
     logger.print_header();
-
-    constexpr double INF = std::numeric_limits<double>::infinity();
 
     CGResult result{};
     result.optimal = false;
@@ -95,7 +103,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
         // If cuts were added, re-solve to get correct duals before pricing
         if (!new_cap_arcs.empty()) {
-            if (params.pricing_filter) {
+            if (effective_pricing_filter) {
                 pricer.filter_for_new_caps(new_cap_arcs);
             }
 
@@ -109,6 +117,21 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                 break;
             obj = master.get_obj();
             primals = master.get_primals();
+
+            // PricerLight: defer pricing until the master reaches a
+            // cut-stable state. Skip pricing and all post-pricing housekeeping
+            // for this iter — next iter will re-separate and eventually price
+            // with fresh duals once no more capacity rows are violated.
+            if (pricer_light) {
+                iter_timer.stop(TimerCat::Total);
+                logger.print_iteration(
+                    iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(), 0, 0,
+                    num_new_caps, 0, iter_timer.elapsed(TimerCat::LP),
+                    iter_timer.elapsed(TimerCat::Pricing), iter_timer.elapsed(TimerCat::Separation),
+                    iter_timer.elapsed(TimerCat::Total));
+                result.iterations = iter + 1;
+                continue;
+            }
         }
 
         // --- Pricing (duals are from the latest solve, not affected by purges) ---
@@ -117,12 +140,10 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         auto pi = get_pricing_duals(master);
         auto mu = master.get_capacity_duals();
 
-        uint32_t col_limit = params.prefer_master ? num_entities : params.max_cols_per_iter;
-
-        auto new_cols = pricer.price(pi, mu, false, col_limit);
+        auto new_cols = pricer.price(pi, mu, false, effective_col_limit);
 
         if (new_cols.empty()) {
-            new_cols = pricer.price(pi, mu, true, col_limit);
+            new_cols = pricer.price(pi, mu, true, effective_col_limit);
             if (new_cols.empty()) {
                 iter_timer.stop(TimerCat::Pricing);
                 timer.stop(TimerCat::Pricing);
@@ -141,8 +162,14 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             pricer.reset_postponed();
         }
 
-        if (new_cols.size() > col_limit) {
-            new_cols.resize(col_limit);
+        // Cap columns at the per-iter limit. Keep the best-reduced-cost
+        // columns rather than the first-found ones so the master LP makes
+        // maximal progress per iter.
+        if (new_cols.size() > effective_col_limit) {
+            std::partial_sort(
+                new_cols.begin(), new_cols.begin() + effective_col_limit, new_cols.end(),
+                [](const auto& a, const auto& b) { return a.reduced_cost < b.reduced_cost; });
+            new_cols.resize(effective_col_limit);
         }
 
         iter_timer.stop(TimerCat::Pricing);
@@ -155,7 +182,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // get_duals / get_reduced_costs calls fail.
         master.update_capacity_row_activity(iter);
         master.update_column_ages(primals);
-        uint32_t purged = master.purge_aged_columns(params.col_age_limit);
+        uint32_t purged = master.purge_aged_columns(effective_col_age_limit);
         uint32_t num_purged =
             master.purge_nonbinding_capacity_rows(iter, params.row_inactivity_threshold);
 
