@@ -10,9 +10,9 @@
 #include <string>
 
 // Helper to write plain-numeric instance file
-static void write_instance(const std::string& path, uint32_t vertices, uint32_t arcs,
-                           uint32_t commodities, const std::string& arc_lines,
-                           const std::string& commodity_lines) {
+static void writeInstance(const std::string& path, uint32_t vertices, uint32_t arcs,
+                          uint32_t commodities, const std::string& arc_lines,
+                          const std::string& commodity_lines) {
     std::ofstream f(path);
     f << vertices << '\n' << arcs << '\n' << commodities << '\n';
     f << arc_lines << commodity_lines;
@@ -39,8 +39,8 @@ static void verifyPathTreeAgreement(const std::string& path, double expected_obj
 // --- Single source, no capacity binding, obj* = 29 ---
 TEST(TreeCGCorrectness, SingleSourceNoCap) {
     std::string path = mcfcg::test::unique_test_path("tree_ss_nocap.txt");
-    write_instance(path, 4, 5, 2, "1 2 1 10\n1 3 4 10\n2 3 2 10\n2 4 6 10\n3 4 1 10\n",
-                   "1 4 5\n1 3 3\n");
+    writeInstance(path, 4, 5, 2, "1 2 1 10\n1 3 4 10\n2 3 2 10\n2 4 6 10\n3 4 1 10\n",
+                  "1 4 5\n1 3 3\n");
     verifyPathTreeAgreement(path, 29.0);
     std::remove(path.c_str());
 }
@@ -48,7 +48,7 @@ TEST(TreeCGCorrectness, SingleSourceNoCap) {
 // --- Binding capacity forces split, obj* = 21 ---
 TEST(TreeCGCorrectness, CapacityBinding) {
     std::string path = mcfcg::test::unique_test_path("tree_cap.txt");
-    write_instance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
+    writeInstance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
     verifyPathTreeAgreement(path, 21.0);
     std::remove(path.c_str());
 }
@@ -56,7 +56,7 @@ TEST(TreeCGCorrectness, CapacityBinding) {
 // --- Multiple sources, no capacity binding, obj* = 17 ---
 TEST(TreeCGCorrectness, MultiSourceNoCap) {
     std::string path = mcfcg::test::unique_test_path("tree_ms_nocap.txt");
-    write_instance(path, 4, 3, 2, "1 3 1 10\n2 3 2 10\n3 4 1 10\n", "1 4 4\n2 4 3\n");
+    writeInstance(path, 4, 3, 2, "1 3 1 10\n2 3 2 10\n3 4 1 10\n", "1 4 4\n2 4 3\n");
     verifyPathTreeAgreement(path, 17.0);
     std::remove(path.c_str());
 }
@@ -64,7 +64,7 @@ TEST(TreeCGCorrectness, MultiSourceNoCap) {
 // --- Multiple sources + capacity binding, obj* = 21 ---
 TEST(TreeCGCorrectness, MultiSourceCapacity) {
     std::string path = mcfcg::test::unique_test_path("tree_ms_cap.txt");
-    write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
+    writeInstance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
     verifyPathTreeAgreement(path, 21.0);
     std::remove(path.c_str());
 }
@@ -72,7 +72,7 @@ TEST(TreeCGCorrectness, MultiSourceCapacity) {
 // --- Single commodity, single path (trivial), obj* = 10 ---
 TEST(TreeCGCorrectness, TrivialSinglePath) {
     std::string path = mcfcg::test::unique_test_path("tree_trivial.txt");
-    write_instance(path, 3, 2, 1, "1 2 2 10\n2 3 3 10\n", "1 3 2\n");
+    writeInstance(path, 3, 2, 1, "1 2 2 10\n2 3 3 10\n", "1 3 2\n");
     verifyPathTreeAgreement(path, 10.0);
     std::remove(path.c_str());
 }
@@ -81,8 +81,8 @@ TEST(TreeCGCorrectness, TrivialSinglePath) {
 // obj* = 49
 TEST(TreeCGCorrectness, ManyCommoditiesSameSource) {
     std::string path = mcfcg::test::unique_test_path("tree_many_k.txt");
-    write_instance(path, 4, 4, 3, "1 2 1 100\n1 3 3 100\n2 4 2 100\n3 4 1 100\n",
-                   "1 2 10\n1 4 5\n1 3 8\n");
+    writeInstance(path, 4, 4, 3, "1 2 1 100\n1 3 3 100\n2 4 2 100\n3 4 1 100\n",
+                  "1 2 10\n1 4 5\n1 3 8\n");
     verifyPathTreeAgreement(path, 49.0);
     std::remove(path.c_str());
 }
@@ -91,7 +91,7 @@ TEST(TreeCGCorrectness, ManyCommoditiesSameSource) {
 
 TEST(TreeCGRowPurge, CapacityBindingWithPurge) {
     std::string path = mcfcg::test::unique_test_path("tree_cap_purge.txt");
-    write_instance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
+    writeInstance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
     params.row_inactivity_threshold = 1;
@@ -103,7 +103,7 @@ TEST(TreeCGRowPurge, CapacityBindingWithPurge) {
 
 TEST(TreeCGRowPurge, MultiSourceCapWithPurge) {
     std::string path = mcfcg::test::unique_test_path("tree_ms_cap_purge.txt");
-    write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
+    writeInstance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
     params.row_inactivity_threshold = 1;
@@ -117,8 +117,8 @@ TEST(TreeCGRowPurge, MultiSourceCapWithPurge) {
 
 TEST(TreeCGColPurge, PurgeDoesNotChangeObjective) {
     std::string path = mcfcg::test::unique_test_path("tree_purge_nocap.txt");
-    write_instance(path, 4, 5, 2, "1 2 1 10\n1 3 4 10\n2 3 2 10\n2 4 6 10\n3 4 1 10\n",
-                   "1 4 5\n1 3 3\n");
+    writeInstance(path, 4, 5, 2, "1 2 1 10\n1 3 4 10\n2 3 2 10\n2 4 6 10\n3 4 1 10\n",
+                  "1 4 5\n1 3 3\n");
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
     params.col_age_limit = 3;
@@ -133,7 +133,7 @@ TEST(TreeCGColPurge, PurgeDoesNotChangeObjective) {
 
 TEST(TreeCGColPurge, PurgeWithCapacity) {
     std::string path = mcfcg::test::unique_test_path("tree_purge_cap.txt");
-    write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
+    writeInstance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
     params.col_age_limit = 3;
