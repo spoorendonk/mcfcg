@@ -13,9 +13,9 @@
 static void writeInstance(const std::string& path, uint32_t vertices, uint32_t arcs,
                           uint32_t commodities, const std::string& arc_lines,
                           const std::string& commodity_lines) {
-    std::ofstream f(path);
-    f << vertices << '\n' << arcs << '\n' << commodities << '\n';
-    f << arc_lines << commodity_lines;
+    std::ofstream out(path);
+    out << vertices << '\n' << arcs << '\n' << commodities << '\n';
+    out << arc_lines << commodity_lines;
 }
 
 // Helper: solve with both formulations, verify agreement
