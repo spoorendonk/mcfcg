@@ -1,13 +1,14 @@
-#include <gtest/gtest.h>
+#include "mcfcg/instance.h"
+
+#include "test_paths.h"
 
 #include <cstdio>
 #include <fstream>
-
-#include "mcfcg/instance.h"
+#include <gtest/gtest.h>
 
 // CommaLab/UniPi plain-numeric format:
 // 4 vertices, 5 arcs, 3 commodities
-static const char * SMALL_INSTANCE = R"(4
+static const char* SMALL_INSTANCE = R"(4
 5
 3
 1 2 1 10
@@ -21,8 +22,8 @@ static const char * SMALL_INSTANCE = R"(4
 )";
 
 class InstanceTest : public ::testing::Test {
-   protected:
-    std::string path = "small_test.txt";
+protected:
+    std::string path = mcfcg::test::unique_test_path("small_test.txt");
 
     void SetUp() override {
         std::ofstream f(path);
@@ -49,7 +50,7 @@ TEST_F(InstanceTest, ReadCommalab) {
 TEST_F(InstanceTest, SourceGrouping) {
     auto inst = mcfcg::read_commalab(path);
 
-    for (auto & src : inst.sources) {
+    for (auto& src : inst.sources) {
         for (uint32_t k : src.commodity_indices) {
             EXPECT_EQ(inst.commodities[k].source, src.vertex);
         }
@@ -59,7 +60,7 @@ TEST_F(InstanceTest, SourceGrouping) {
 TEST_F(InstanceTest, RoundTrip) {
     auto inst = mcfcg::read_commalab(path);
 
-    std::string out_path = "small_test_roundtrip.txt";
+    std::string out_path = mcfcg::test::unique_test_path("small_test_roundtrip.txt");
     mcfcg::write_commalab(inst, out_path);
 
     auto inst2 = mcfcg::read_commalab(out_path);
@@ -78,8 +79,7 @@ TEST_F(InstanceTest, RoundTrip) {
     for (size_t i = 0; i < inst.commodities.size(); ++i) {
         EXPECT_EQ(inst2.commodities[i].source, inst.commodities[i].source);
         EXPECT_EQ(inst2.commodities[i].sink, inst.commodities[i].sink);
-        EXPECT_DOUBLE_EQ(inst2.commodities[i].demand,
-                         inst.commodities[i].demand);
+        EXPECT_DOUBLE_EQ(inst2.commodities[i].demand, inst.commodities[i].demand);
     }
 
     std::remove(out_path.c_str());

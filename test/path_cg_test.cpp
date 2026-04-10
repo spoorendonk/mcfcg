@@ -1,6 +1,7 @@
 #include "mcfcg/cg/path_cg.h"
 
 #include "mcfcg/instance.h"
+#include "test_paths.h"
 
 #include <cstdio>
 #include <fstream>
@@ -23,7 +24,7 @@ static void write_instance(const std::string& path, uint32_t vertices, uint32_t 
 
 class PathCGSingleSource : public ::testing::Test {
 protected:
-    std::string path = "path_cg_single.txt";
+    std::string path = mcfcg::test::unique_test_path("path_cg_single.txt");
     void SetUp() override {
         write_instance(path, 4, 5, 2, "1 2 1 10\n1 3 4 10\n2 3 2 10\n2 4 6 10\n3 4 1 10\n",
                        "1 4 5\n1 3 3\n");
@@ -44,7 +45,7 @@ TEST_F(PathCGSingleSource, OptimalObjective) {
 
 class PathCGCapacityBinding : public ::testing::Test {
 protected:
-    std::string path = "path_cg_cap.txt";
+    std::string path = mcfcg::test::unique_test_path("path_cg_cap.txt");
     void SetUp() override {
         write_instance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
     }
@@ -64,7 +65,7 @@ TEST_F(PathCGCapacityBinding, OptimalWithSplitFlow) {
 
 class PathCGMultiSource : public ::testing::Test {
 protected:
-    std::string path = "path_cg_multi.txt";
+    std::string path = mcfcg::test::unique_test_path("path_cg_multi.txt");
     void SetUp() override {
         write_instance(path, 4, 3, 2, "1 3 1 10\n2 3 2 10\n3 4 1 10\n", "1 4 4\n2 4 3\n");
     }
@@ -86,7 +87,7 @@ TEST_F(PathCGMultiSource, OptimalObjective) {
 
 class PathCGMultiSourceCap : public ::testing::Test {
 protected:
-    std::string path = "path_cg_multi_cap.txt";
+    std::string path = mcfcg::test::unique_test_path("path_cg_multi_cap.txt");
     void SetUp() override {
         write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
     }
