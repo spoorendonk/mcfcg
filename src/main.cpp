@@ -62,17 +62,11 @@ static void print_usage(std::FILE* out) {
         "  --coef N                 TNTP demand coefficient\n"
         "  --threads N              Number of pricing threads (0=auto)\n"
         "  --batch-size N           Pricing batch size (0=all)\n"
-        "  --solver highs|cuopt|copt LP solver backend (default: highs)\n"
+        "  --solver NAME            LP solver: highs (default), cuopt, copt\n"
         "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
         "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
         "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-6)\n"
-        "  --strategy S             CG strategy: pricer-heavy (default) or "
-        "pricer-light.\n"
-        "                           pricer-light: throttle the pricer. Defer pricing "
-        "while\n"
-        "                           new capacity rows are being added, cap cols/iter at\n"
-        "                           num sources, disable col aging, force source "
-        "pricing filter.\n"
+        "  --strategy S             pricer-heavy (default) or pricer-light\n"
         "  -h, --help               Print this help message and exit.\n");
 }
 
