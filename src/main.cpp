@@ -51,29 +51,41 @@ static bool is_tntp_net(const std::string& path) {
     return ends_with(path, "_net.tntp") || ends_with(path, "_net.tntp.gz");
 }
 
+static void print_usage(std::FILE* out) {
+    std::fprintf(
+        out,
+        "Usage: mcfcg_cli <instance_path> [options]\n"
+        "Options:\n"
+        "  --formulation path|tree  (default: path)\n"
+        "  --max-iters N            (default: 10000)\n"
+        "  --trips PATH             TNTP trips file\n"
+        "  --coef N                 TNTP demand coefficient\n"
+        "  --threads N              Number of pricing threads (0=auto)\n"
+        "  --batch-size N           Pricing batch size (0=all)\n"
+        "  --solver highs|cuopt|copt LP solver backend (default: highs)\n"
+        "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
+        "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
+        "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-6)\n"
+        "  --strategy S             CG strategy: pricer-heavy (default) or "
+        "pricer-light.\n"
+        "                           pricer-light: throttle the pricer. Defer pricing "
+        "while\n"
+        "                           new capacity rows are being added, cap cols/iter at\n"
+        "                           num sources, disable col aging, force source "
+        "pricing filter.\n"
+        "  -h, --help               Print this help message and exit.\n");
+}
+
 int main(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
+            print_usage(stdout);
+            return EXIT_SUCCESS;
+        }
+    }
+
     if (argc < 2) {
-        std::fprintf(
-            stderr,
-            "Usage: mcfcg_cli <instance_path> [options]\n"
-            "Options:\n"
-            "  --formulation path|tree  (default: path)\n"
-            "  --max-iters N            (default: 10000)\n"
-            "  --trips PATH             TNTP trips file\n"
-            "  --coef N                 TNTP demand coefficient\n"
-            "  --threads N              Number of pricing threads (0=auto)\n"
-            "  --batch-size N           Pricing batch size (0=all)\n"
-            "  --solver highs|cuopt|copt LP solver backend (default: highs)\n"
-            "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
-            "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
-            "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-6)\n"
-            "  --strategy S             CG strategy: pricer-heavy (default) or "
-            "pricer-light.\n"
-            "                           pricer-light: throttle the pricer. Defer pricing "
-            "while\n"
-            "                           new capacity rows are being added, cap cols/iter at\n"
-            "                           num sources, disable col aging, force source "
-            "pricing filter.\n");
+        print_usage(stderr);
         return EXIT_FAILURE;
     }
 
