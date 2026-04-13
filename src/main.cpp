@@ -77,13 +77,6 @@ static void print_usage(std::FILE* out) {
 }
 
 int main(int argc, char* argv[]) {
-    for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
-            print_usage(stdout);
-            return EXIT_SUCCESS;
-        }
-    }
-
     if (argc < 2) {
         print_usage(stderr);
         return EXIT_FAILURE;
@@ -100,32 +93,41 @@ int main(int argc, char* argv[]) {
     mcfcg::CGParams params;
     bool neg_rc_tol_overridden = false;
 
-    for (int i = 2; i < argc; i += 2) {
-        if (i + 1 >= argc)
-            break;
-        if (std::strcmp(argv[i], "--formulation") == 0)
-            formulation = argv[i + 1];
-        else if (std::strcmp(argv[i], "--max-iters") == 0)
-            max_iters = static_cast<uint32_t>(std::atoi(argv[i + 1]));
-        else if (std::strcmp(argv[i], "--trips") == 0)
-            trips_path = argv[i + 1];
-        else if (std::strcmp(argv[i], "--coef") == 0)
-            coef = std::atof(argv[i + 1]);
-        else if (std::strcmp(argv[i], "--threads") == 0)
-            num_threads = static_cast<uint32_t>(std::atoi(argv[i + 1]));
-        else if (std::strcmp(argv[i], "--batch-size") == 0)
-            batch_size = static_cast<uint32_t>(std::atoi(argv[i + 1]));
-        else if (std::strcmp(argv[i], "--solver") == 0)
-            solver = argv[i + 1];
-        else if (std::strcmp(argv[i], "--col-age-limit") == 0)
-            params.col_age_limit = static_cast<uint32_t>(std::atoi(argv[i + 1]));
-        else if (std::strcmp(argv[i], "--row-inactivity") == 0)
-            params.row_inactivity_threshold = static_cast<uint32_t>(std::atoi(argv[i + 1]));
-        else if (std::strcmp(argv[i], "--neg-rc-tol") == 0) {
-            params.neg_rc_tol = std::atof(argv[i + 1]);
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
+            print_usage(stdout);
+            return EXIT_SUCCESS;
+        }
+        if (i == 1) {
+            continue;  // argv[1] is the positional instance_path
+        }
+        if (i + 1 >= argc) {
+            std::fprintf(stderr, "Option '%s' requires a value.\n", argv[i]);
+            return EXIT_FAILURE;
+        }
+        if (std::strcmp(argv[i], "--formulation") == 0) {
+            formulation = argv[++i];
+        } else if (std::strcmp(argv[i], "--max-iters") == 0) {
+            max_iters = static_cast<uint32_t>(std::atoi(argv[++i]));
+        } else if (std::strcmp(argv[i], "--trips") == 0) {
+            trips_path = argv[++i];
+        } else if (std::strcmp(argv[i], "--coef") == 0) {
+            coef = std::atof(argv[++i]);
+        } else if (std::strcmp(argv[i], "--threads") == 0) {
+            num_threads = static_cast<uint32_t>(std::atoi(argv[++i]));
+        } else if (std::strcmp(argv[i], "--batch-size") == 0) {
+            batch_size = static_cast<uint32_t>(std::atoi(argv[++i]));
+        } else if (std::strcmp(argv[i], "--solver") == 0) {
+            solver = argv[++i];
+        } else if (std::strcmp(argv[i], "--col-age-limit") == 0) {
+            params.col_age_limit = static_cast<uint32_t>(std::atoi(argv[++i]));
+        } else if (std::strcmp(argv[i], "--row-inactivity") == 0) {
+            params.row_inactivity_threshold = static_cast<uint32_t>(std::atoi(argv[++i]));
+        } else if (std::strcmp(argv[i], "--neg-rc-tol") == 0) {
+            params.neg_rc_tol = std::atof(argv[++i]);
             neg_rc_tol_overridden = true;
         } else if (std::strcmp(argv[i], "--strategy") == 0) {
-            std::string s = argv[i + 1];
+            std::string s = argv[++i];
             if (s == "pricer-heavy") {
                 params.strategy = mcfcg::CGStrategy::PricerHeavy;
             } else if (s == "pricer-light") {
@@ -135,6 +137,10 @@ int main(int argc, char* argv[]) {
                              s.c_str());
                 return EXIT_FAILURE;
             }
+        } else {
+            std::fprintf(stderr, "Unknown option '%s'.\n", argv[i]);
+            print_usage(stderr);
+            return EXIT_FAILURE;
         }
     }
 
