@@ -111,6 +111,18 @@ target_include_directories(mcfcg_tests PRIVATE include)
 include(GoogleTest)
 gtest_discover_tests(mcfcg_tests)
 
+# CLI smoke tests (no source file — just invoke the binary)
+add_test(NAME CLI.HelpLong COMMAND mcfcg_cli --help)
+set_tests_properties(CLI.HelpLong PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+add_test(NAME CLI.HelpShort COMMAND mcfcg_cli -h)
+set_tests_properties(CLI.HelpShort PROPERTIES PASS_REGULAR_EXPRESSION "Usage:")
+add_test(NAME CLI.NoArgs COMMAND mcfcg_cli)
+set_tests_properties(CLI.NoArgs PROPERTIES WILL_FAIL true)
+add_test(NAME CLI.UnknownFlag COMMAND mcfcg_cli dummy.txt --bogus val)
+set_tests_properties(CLI.UnknownFlag PROPERTIES
+    WILL_FAIL true
+    FAIL_REGULAR_EXPRESSION "Unknown option")
+
 add_executable(mcfcg_integration_tests
     test/integration_test.cpp
 )
