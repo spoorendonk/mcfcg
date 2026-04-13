@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    std::string instance_path = argv[1];
+    std::string instance_path;
     std::string formulation = "path";
     uint32_t max_iters = 10000;
     uint32_t num_threads = 1;
@@ -93,7 +93,8 @@ int main(int argc, char* argv[]) {
             return EXIT_SUCCESS;
         }
         if (i == 1) {
-            continue;  // argv[1] is the positional instance_path
+            instance_path = argv[i];
+            continue;
         }
         if (i + 1 >= argc) {
             std::fprintf(stderr, "Option '%s' requires a value.\n", argv[i]);
