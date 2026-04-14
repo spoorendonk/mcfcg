@@ -29,7 +29,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     const bool effective_pricing_filter = pricer_light || params.pricing_filter;
 
     Master master;
-    master.init(inst, params.solver_factory ? params.solver_factory() : nullptr);
+    master.init(inst, params.solver_factory ? params.solver_factory() : nullptr, pool.get());
 
     Pricer pricer;
     pricer.init(inst, PricingMode::AStar, pool.get(), params.pricing_batch_size, params.neg_rc_tol);

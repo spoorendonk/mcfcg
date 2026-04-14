@@ -109,6 +109,11 @@ public:
     static constexpr double SCALE = 1e9;
     static constexpr double DEFAULT_NEG_RC_TOL = -1e-6;
 
+    // Below these many elements the dispatch overhead of parallel_for
+    // outweighs the per-element work; fall back to a serial loop.
+    static constexpr uint32_t PAR_ARC_THRESHOLD = 4096;
+    static constexpr uint32_t PAR_SOURCE_THRESHOLD = 64;
+
 protected:
     const Instance* _inst = nullptr;
     std::vector<uint8_t> _source_postponed;
@@ -224,10 +229,17 @@ public:
     void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
         assert(_track_arcs && "filter_for_new_caps requires set_track_arcs(true)");
         std::unordered_set<uint32_t> cap_set(new_cap_arcs.begin(), new_cap_arcs.end());
-        for (uint32_t s = 0; s < _source_postponed.size(); ++s) {
+        uint32_t n = static_cast<uint32_t>(_source_postponed.size());
+        auto body = [&](uint32_t s) {
             bool affected = std::any_of(_source_arcs[s].begin(), _source_arcs[s].end(),
                                         [&](uint32_t a) { return cap_set.contains(a); });
             _source_postponed[s] = affected ? 0 : 1;
+        };
+        if (_pool != nullptr && n >= PAR_SOURCE_THRESHOLD) {
+            _pool->parallel_for(n, [&](uint32_t s, uint32_t /*tid*/) { body(s); });
+        } else {
+            for (uint32_t s = 0; s < n; ++s)
+                body(s);
         }
     }
 
@@ -240,10 +252,11 @@ protected:
     void compute_rc(const std::unordered_map<uint32_t, double>& mu,
                     const std::unordered_set<uint32_t>& forbidden_arcs) {
         constexpr int64_t BIG = shortest_path_semiring<int64_t>::infty / 2;
-        for (auto a : _inst->graph.arcs()) {
+        uint32_t n_arcs = _inst->graph.num_arcs();
+        auto body = [&](uint32_t a) {
             if (forbidden_arcs.count(a) > 0) {
                 _rc[a] = BIG;
-                continue;
+                return;
             }
             double cost_a = _inst->cost[a];
             double mu_a = 0.0;
@@ -252,6 +265,12 @@ protected:
                 mu_a = it->second;
             double val = cost_a - mu_a;
             _rc[a] = (val <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(val * SCALE));
+        };
+        if (_pool != nullptr && n_arcs >= PAR_ARC_THRESHOLD) {
+            _pool->parallel_for(n_arcs, [&](uint32_t a, uint32_t /*tid*/) { body(a); });
+        } else {
+            for (uint32_t a = 0; a < n_arcs; ++a)
+                body(a);
         }
     }
 
