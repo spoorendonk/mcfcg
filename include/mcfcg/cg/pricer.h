@@ -13,7 +13,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
     friend class PricerBase<PathPricer, Column>;
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi,
-                        const std::unordered_map<uint32_t, double>& mu, auto& dijk,
+                        const static_map<uint32_t, double>& mu, auto& dijk,
                         std::vector<Column>& new_columns) {
         bool found_any = false;
         if (_track_arcs)
@@ -36,11 +36,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
                 if (_track_arcs)
                     _source_arcs[s_idx].push_back(a);
                 col.cost += _inst->cost[a];
-                double mu_a = 0.0;
-                auto mit = mu.find(a);
-                if (mit != mu.end())
-                    mu_a = mit->second;
-                true_rc += _inst->cost[a] - mu_a;
+                true_rc += _inst->cost[a] - mu[a];
                 v = _inst->graph.arc_source(a);
             }
 
@@ -58,7 +54,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
 
     void price_source_dijkstra(uint32_t s_idx, const Source& src, vertex_t source_v,
                                const std::vector<double>& pi,
-                               const std::unordered_map<uint32_t, double>& mu,
+                               const static_map<uint32_t, double>& mu,
                                std::vector<Column>& new_columns, uint32_t thread_id) {
         constexpr auto MAX_BOUND = shortest_path_semiring<int64_t>::infty / 2;
 

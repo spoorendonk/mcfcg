@@ -7,7 +7,6 @@
 #include "mcfcg/util/timer.h"
 
 #include <algorithm>
-#include <unordered_map>
 #include <vector>
 
 namespace mcfcg {
@@ -69,7 +68,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // applies inside the main loop below).
         timer.start(TimerCat::Pricing);
         std::vector<double> big_duals(num_entities, Master::BIG_M);
-        std::unordered_map<uint32_t, double> empty_mu;
+        auto empty_mu = inst.graph.create_arc_map<double>(0.0);
         auto init_cols = pricer.price(big_duals, empty_mu, true);
         if (!init_cols.empty()) {
             master.add_columns(std::move(init_cols));
@@ -146,7 +145,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         timer.start(TimerCat::Pricing);
         iter_timer.start(TimerCat::Pricing);
         auto pi = get_pricing_duals(master);
-        auto mu = master.get_capacity_duals();
+        const auto& mu = master.get_capacity_duals();
 
         auto new_cols = pricer.price(pi, mu, false, effective_col_limit);
 

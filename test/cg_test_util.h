@@ -6,12 +6,12 @@
 #include "mcfcg/cg/tree_column.h"
 #include "mcfcg/cg/tree_master.h"
 #include "mcfcg/cg/tree_pricer.h"
+#include "mcfcg/graph/static_map.h"
 #include "mcfcg/instance.h"
 
 #include <cmath>
 #include <cstdint>
 #include <gtest/gtest.h>
-#include <unordered_map>
 #include <vector>
 
 namespace mcfcg::test {
@@ -26,25 +26,19 @@ constexpr double NEW_COL_RC_TOL = 1e-6;
 constexpr double EXISTING_COL_RC_TOL = 1e-3;
 
 inline double recompute_path_rc(const Column& col, const std::vector<double>& pi,
-                                const std::unordered_map<uint32_t, double>& mu) {
+                                const static_map<uint32_t, double>& mu) {
     double rc = col.cost - pi[col.commodity];
     for (uint32_t arc : col.arcs) {
-        auto it = mu.find(arc);
-        if (it != mu.end()) {
-            rc -= it->second;
-        }
+        rc -= mu[arc];
     }
     return rc;
 }
 
 inline double recompute_tree_rc(const TreeColumn& col, const std::vector<double>& pi_s,
-                                const std::unordered_map<uint32_t, double>& mu) {
+                                const static_map<uint32_t, double>& mu) {
     double rc = col.cost - pi_s[col.source_idx];
     for (const auto& af : col.arc_flows) {
-        auto it = mu.find(af.arc);
-        if (it != mu.end()) {
-            rc -= af.flow * it->second;
-        }
+        rc -= af.flow * mu[af.arc];
     }
     return rc;
 }
@@ -60,7 +54,7 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, dou
     pricer.init(inst);
 
     std::vector<double> big_pi(inst.commodities.size(), PathMaster::BIG_M);
-    std::unordered_map<uint32_t, double> empty_mu;
+    auto empty_mu = inst.graph.create_arc_map<double>(0.0);
     auto init_cols = pricer.price(big_pi, empty_mu, true);
     if (!init_cols.empty()) {
         master.add_columns(std::move(init_cols));
@@ -80,7 +74,7 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, dou
         }
 
         auto pi = master.get_demand_duals();
-        auto mu = master.get_capacity_duals();
+        const auto& mu = master.get_capacity_duals();
 
         for (const auto& col : master.columns()) {
             double rc = recompute_path_rc(col, pi, mu);
@@ -133,7 +127,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, dou
     pricer.init(inst);
 
     std::vector<double> big_pi(inst.sources.size(), TreeMaster::BIG_M);
-    std::unordered_map<uint32_t, double> empty_mu;
+    auto empty_mu = inst.graph.create_arc_map<double>(0.0);
     auto init_cols = pricer.price(big_pi, empty_mu, true);
     if (!init_cols.empty()) {
         master.add_columns(std::move(init_cols));
@@ -153,7 +147,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, dou
         }
 
         auto pi_s = master.get_source_duals();
-        auto mu = master.get_capacity_duals();
+        const auto& mu = master.get_capacity_duals();
 
         for (const auto& col : master.columns()) {
             double rc = recompute_tree_rc(col, pi_s, mu);

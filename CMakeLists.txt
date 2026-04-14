@@ -9,6 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(MCFCG_USE_CUOPT "Enable cuOpt LP solver backend" OFF)
 option(MCFCG_USE_COPT "Enable COPT LP solver backend" OFF)
 option(MCFCG_USE_MOSEK "Enable MOSEK LP solver backend" OFF)
+option(MCFCG_NATIVE_ARCH "Build with -march=native (host CPU tuning, non-portable binary)" ON)
 
 # HiGHS — always available as default fallback
 include(FetchContent)
@@ -38,6 +39,13 @@ add_library(mcfcg
 target_include_directories(mcfcg PUBLIC include)
 find_package(ZLIB REQUIRED)
 target_link_libraries(mcfcg PUBLIC highs ZLIB::ZLIB)
+
+# PUBLIC so the test/CLI binaries (which compile mcfcg's header-only
+# templates as part of their own TUs) also benefit from native tuning.
+# Disable with -DMCFCG_NATIVE_ARCH=OFF for portable binaries.
+if(MCFCG_NATIVE_ARCH AND CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
+    target_compile_options(mcfcg PUBLIC -march=native)
+endif()
 
 if(MCFCG_USE_CUOPT)
     target_compile_definitions(mcfcg PUBLIC MCFCG_USE_CUOPT)

@@ -14,7 +14,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
     friend class PricerBase<TreePricer, TreeColumn>;
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
-                        const std::unordered_map<uint32_t, double>& mu, auto& dijk,
+                        const static_map<uint32_t, double>& mu, auto& dijk,
                         std::vector<TreeColumn>& new_columns) {
         bool all_reachable = true;
         TreeColumn col;
@@ -37,12 +37,8 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             uint32_t v = sink;
             while (dijk.has_pred(v)) {
                 uint32_t a = dijk.pred_arc(v);
-                double mu_a = 0.0;
-                auto mit = mu.find(a);
-                if (mit != mu.end())
-                    mu_a = mit->second;
                 path_orig_cost += _inst->cost[a];
-                path_rc += _inst->cost[a] - mu_a;
+                path_rc += _inst->cost[a] - mu[a];
                 arc_flow_map[a] += d;
                 v = _inst->graph.arc_source(a);
             }
@@ -76,7 +72,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
     void price_source_dijkstra(uint32_t s_idx, const Source& src, uint32_t source_v,
                                const std::vector<double>& pi_s,
-                               const std::unordered_map<uint32_t, double>& mu,
+                               const static_map<uint32_t, double>& mu,
                                std::vector<TreeColumn>& new_columns, uint32_t thread_id) {
         constexpr auto MAX_BOUND = shortest_path_semiring<int64_t>::infty / 2;
 

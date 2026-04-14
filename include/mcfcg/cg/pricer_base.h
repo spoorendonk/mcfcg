@@ -11,7 +11,6 @@
 #include <cmath>
 #include <cstdint>
 #include <iterator>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -171,14 +170,14 @@ public:
     }
 
     std::vector<ColumnT> price(const std::vector<double>& duals,
-                               const std::unordered_map<uint32_t, double>& mu,
-                               bool final_round = false, uint32_t max_cols = 0) {
+                               const static_map<uint32_t, double>& mu, bool final_round = false,
+                               uint32_t max_cols = 0) {
         static const std::unordered_set<uint32_t> no_forbidden;
         return price(duals, mu, no_forbidden, final_round, max_cols);
     }
 
     std::vector<ColumnT> price(const std::vector<double>& duals,
-                               const std::unordered_map<uint32_t, double>& mu,
+                               const static_map<uint32_t, double>& mu,
                                const std::unordered_set<uint32_t>& forbidden_arcs, bool final_round,
                                uint32_t max_cols = 0) {
         compute_rc(mu, forbidden_arcs);
@@ -245,21 +244,34 @@ public:
     }
 
 protected:
-    void compute_rc(const std::unordered_map<uint32_t, double>& mu,
+    void compute_rc(const static_map<uint32_t, double>& mu,
                     const std::unordered_set<uint32_t>& forbidden_arcs) {
         constexpr int64_t BIG = shortest_path_semiring<int64_t>::infty / 2;
         uint32_t n_arcs = _inst->graph.num_arcs();
+
+        // Fast path: no forbidden arcs, branch-free body so the compiler
+        // can auto-vectorize the dense cost/mu/_rc loop under -march=native.
+        // Hit by every live caller (pricing without diversification cuts).
+        if (forbidden_arcs.empty()) {
+            auto body = [&](uint32_t a) {
+                double val = _inst->cost[a] - mu[a];
+                _rc[a] = (val <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(val * SCALE));
+            };
+            if (_pool != nullptr && n_arcs >= PAR_ARC_THRESHOLD) {
+                _pool->parallel_for(n_arcs, [&](uint32_t a, uint32_t /*tid*/) { body(a); });
+            } else {
+                for (uint32_t a = 0; a < n_arcs; ++a)
+                    body(a);
+            }
+            return;
+        }
+
         auto body = [&](uint32_t a) {
             if (forbidden_arcs.count(a) > 0) {
                 _rc[a] = BIG;
                 return;
             }
-            double cost_a = _inst->cost[a];
-            double mu_a = 0.0;
-            auto it = mu.find(a);
-            if (it != mu.end())
-                mu_a = it->second;
-            double val = cost_a - mu_a;
+            double val = _inst->cost[a] - mu[a];
             _rc[a] = (val <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(val * SCALE));
         };
         if (_pool != nullptr && n_arcs >= PAR_ARC_THRESHOLD) {
@@ -272,7 +284,7 @@ protected:
 
     std::vector<ColumnT> price_batch(const std::vector<uint32_t>& batch,
                                      const std::vector<double>& duals,
-                                     const std::unordered_map<uint32_t, double>& mu) {
+                                     const static_map<uint32_t, double>& mu) {
         uint32_t batch_n = static_cast<uint32_t>(batch.size());
 
         if (!_pool || _pool->num_threads() <= 1 || batch_n <= 1) {
@@ -304,7 +316,7 @@ protected:
     }
 
     void price_one_source(uint32_t s_idx, const std::vector<double>& duals,
-                          const std::unordered_map<uint32_t, double>& mu, std::vector<ColumnT>& out,
+                          const static_map<uint32_t, double>& mu, std::vector<ColumnT>& out,
                           uint32_t thread_id) {
         const auto& src = _inst->sources[s_idx];
         vertex_t source_v = src.vertex;
@@ -318,7 +330,7 @@ protected:
 
     void price_source_astar(uint32_t s_idx, const Source& src, vertex_t source_v,
                             const std::vector<double>& duals,
-                            const std::unordered_map<uint32_t, double>& mu,
+                            const static_map<uint32_t, double>& mu,
                             std::vector<ColumnT>& new_columns, uint32_t thread_id) {
         auto& ws = _workspaces[thread_id];
         auto& is_target = _is_targets[thread_id];

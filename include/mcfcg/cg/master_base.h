@@ -78,6 +78,15 @@ protected:
     std::vector<static_map<uint32_t, double>> _thread_flow;
     std::vector<std::vector<uint32_t>> _thread_violated_arcs;
 
+    // Persistent dense cache for capacity duals returned from
+    // get_capacity_duals.  Sized to num_arcs at init() so the pricer's
+    // compute_rc loop sees a contiguous mu[a] for every arc (default 0).
+    // _mu_cache_dirty tracks the arcs we wrote on the previous call so we
+    // can zero them in O(num_cap_rows) instead of fill()ing num_arcs.
+    // mutable: get_capacity_duals is logically a query but memoizes here.
+    mutable static_map<uint32_t, double> _mu_cache;
+    mutable std::vector<uint32_t> _mu_cache_dirty;
+
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
     const Derived& self() const noexcept { return static_cast<const Derived&>(*this); }
 
@@ -110,6 +119,8 @@ public:
         _arc_to_cap_row.clear();
         _cap_row_to_arc.clear();
         _cap_row_last_active.clear();
+        _mu_cache = inst.graph.create_arc_map<double>(0.0);
+        _mu_cache_dirty.clear();
 
         // Create LP once
         _lp = lp ? std::move(lp) : create_lp_solver();
@@ -238,16 +249,25 @@ public:
         return std::vector<double>(all.begin(), all.begin() + _num_structural_rows);
     }
 
-    std::unordered_map<uint32_t, double> get_capacity_duals() const {
+    const static_map<uint32_t, double>& get_capacity_duals() const {
+        // Reset only the arcs we wrote last time, then scatter the new
+        // duals into the persistent cache.  Avoids the per-iteration
+        // O(num_arcs) alloc + memset that a fresh static_map would cost.
+        for (uint32_t arc : _mu_cache_dirty) {
+            _mu_cache[arc] = 0.0;
+        }
+        _mu_cache_dirty.clear();
+
         auto all = _lp->get_duals();
-        std::unordered_map<uint32_t, double> result;
         for (uint32_t i = 0; i < _cap_row_to_arc.size(); ++i) {
             uint32_t row = _num_structural_rows + i;
             if (row < all.size()) {
-                result[_cap_row_to_arc[i]] = all[row];
+                uint32_t arc = _cap_row_to_arc[i];
+                _mu_cache[arc] = all[row];
+                _mu_cache_dirty.push_back(arc);
             }
         }
-        return result;
+        return _mu_cache;
     }
 
     std::vector<uint32_t> add_violated_capacity_constraints(const std::vector<double>& primals,
