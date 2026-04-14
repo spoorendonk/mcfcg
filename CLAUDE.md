@@ -34,7 +34,7 @@ Column generation solver for minimum-cost multicommodity flow (MCF). Supports pa
 
 The CG loop (`include/mcfcg/cg/cg_loop.h`) is a single template function `solve_cg<Master, Pricer>` shared by both formulations. It drives the interaction between three components:
 
-1. **Master problem** (`include/mcfcg/cg/master.h`, `tree_master.h`) — restricted LP with incremental column/row addition. Path formulation has one demand row per commodity; tree formulation has one convexity row per source. Both use BIG_M slack variables and lazy capacity constraints (added on violation).
+1. **Master problem** (`include/mcfcg/cg/master.h`, `tree_master.h`) — restricted LP with incremental column/row addition. Path formulation has one demand row per commodity; tree formulation has one convexity row per source. Slack variables sit on the structural rows with initial cost = max arc cost, grown geometrically by `MasterBase::bump_active_slacks` once per CG iteration while any slack is still basic. Bumps happen at end-of-iter, before purges (see the comment on the method for why a `solve()`-wrapped fixed-point loop would not terminate under lazy capacity constraints). `SLACK_BUMP_FACTOR` / `SLACK_MAX_BUMPS_PER_SLACK` in `cg_loop.h` plus a 1e8 absolute ceiling bound the growth. Capacity constraints are lazy (added on violation) and have no slacks.
 
 2. **Pricer** (`include/mcfcg/cg/pricer.h`, `tree_pricer.h`) — computes reduced costs using dual values from the master. Runs Dijkstra from each source with clamped integer-scaled arc costs (SCALE=1e9). Source postponement skips sources that produced no negative-RC column last round. Path pricer extracts one column per commodity; tree pricer builds a single tree column per source aggregating demand-weighted arc flows.
 

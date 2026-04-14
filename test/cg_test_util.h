@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mcfcg/cg/cg_loop.h"
 #include "mcfcg/cg/column.h"
 #include "mcfcg/cg/master.h"
 #include "mcfcg/cg/pricer.h"
@@ -12,6 +13,7 @@
 #include <cmath>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <limits>
 #include <vector>
 
 namespace mcfcg::test {
@@ -53,7 +55,7 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, dou
     PathPricer pricer;
     pricer.init(inst);
 
-    std::vector<double> big_pi(inst.commodities.size(), PathMaster::BIG_M);
+    std::vector<double> big_pi(inst.commodities.size(), std::numeric_limits<double>::infinity());
     auto empty_mu = inst.graph.create_arc_map<double>(0.0);
     auto init_cols = pricer.price(big_pi, empty_mu, true);
     if (!init_cols.empty()) {
@@ -86,8 +88,22 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, dou
         if (new_cols.empty()) {
             new_cols = pricer.price(pi, mu, true);
             if (new_cols.empty()) {
-                optimal = true;
-                break;
+                // Pricing exhausted.  Only optimal if no slack is still
+                // carrying demand — otherwise bump and try again so the
+                // LP can pivot the slacks out in the next iteration.
+                if (!master.has_active_slacks(primals)) {
+                    optimal = true;
+                    break;
+                }
+                uint32_t bumped = master.bump_active_slacks(primals, SLACK_BUMP_FACTOR,
+                                                            SLACK_MAX_BUMPS_PER_SLACK);
+                if (bumped == 0) {
+                    // Every active slack is capped; no further progress
+                    // via bumping.  Break instead of spinning.
+                    break;
+                }
+                pricer.reset_postponed();
+                continue;
             }
             pricer.reset_postponed();
         }
@@ -111,6 +127,10 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, dou
         if (new_cols.size() > 1000) {
             new_cols.resize(1000);
         }
+        // Bump before add_columns, same reason as cg_loop.h: the primals
+        // captured above reflect the solved LP; adding columns is fine
+        // but any purge would invalidate get_primals().
+        (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR, SLACK_MAX_BUMPS_PER_SLACK);
         master.add_columns(std::move(new_cols));
     }
     EXPECT_TRUE(optimal);
@@ -126,7 +146,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, dou
     TreePricer pricer;
     pricer.init(inst);
 
-    std::vector<double> big_pi(inst.sources.size(), TreeMaster::BIG_M);
+    std::vector<double> big_pi(inst.sources.size(), std::numeric_limits<double>::infinity());
     auto empty_mu = inst.graph.create_arc_map<double>(0.0);
     auto init_cols = pricer.price(big_pi, empty_mu, true);
     if (!init_cols.empty()) {
@@ -159,8 +179,17 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, dou
         if (new_cols.empty()) {
             new_cols = pricer.price(pi_s, mu, true);
             if (new_cols.empty()) {
-                optimal = true;
-                break;
+                if (!master.has_active_slacks(primals)) {
+                    optimal = true;
+                    break;
+                }
+                uint32_t bumped = master.bump_active_slacks(primals, SLACK_BUMP_FACTOR,
+                                                            SLACK_MAX_BUMPS_PER_SLACK);
+                if (bumped == 0) {
+                    break;
+                }
+                pricer.reset_postponed();
+                continue;
             }
             pricer.reset_postponed();
         }
@@ -204,6 +233,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, dou
         if (new_cols.size() > 1000) {
             new_cols.resize(1000);
         }
+        (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR, SLACK_MAX_BUMPS_PER_SLACK);
         master.add_columns(std::move(new_cols));
     }
     EXPECT_TRUE(optimal);

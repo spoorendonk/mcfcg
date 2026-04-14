@@ -7,9 +7,21 @@
 #include "mcfcg/util/timer.h"
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 
 namespace mcfcg {
+
+// Slack-cost bump parameters shared with the test helpers in
+// test/cg_test_util.h.  BUMP_FACTOR is the per-iter growth factor for
+// any slack column still basic with positive primal; MAX_BUMPS_PER_SLACK
+// caps per-slack growth so the LP stays numerically conditioned even on
+// instances where some demand is genuinely infeasible under the current
+// column set.  Replaces the legacy fixed BIG_M = 1e8; combined with
+// MasterBase::bump_active_slacks, the effective max slack cost is
+// min(max_arc_cost * BUMP_FACTOR^MAX_BUMPS_PER_SLACK, 1e8).
+inline constexpr double SLACK_BUMP_FACTOR = 10.0;
+inline constexpr uint32_t SLACK_MAX_BUMPS_PER_SLACK = 6;
 
 // Generic CG loop parameterized on Master, Pricer, and a dual-extraction callable.
 // GetDuals: (const Master&) -> std::vector<double>
@@ -62,12 +74,16 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     timer.start(TimerCat::Total);
 
     if (params.warm_start) {
-        // One-shot initialization: price every source against BIG_M duals to
-        // seed the master with at least one column per source.  This pass
-        // intentionally bypasses effective_col_limit (the per-iter cap only
-        // applies inside the main loop below).
+        // One-shot initialization: price every source against +inf duals to
+        // seed the master with at least one column per source.  +inf
+        // disables the dijkstra cutoff (clamped to MAX_BOUND in the
+        // pricer) so we explore the full reachable graph.  Replaces the
+        // legacy Master::BIG_M coupling — the warm-start cutoff has
+        // nothing to do with the slack cost.  This pass intentionally
+        // bypasses effective_col_limit (the per-iter cap only applies
+        // inside the main loop below).
         timer.start(TimerCat::Pricing);
-        std::vector<double> big_duals(num_entities, Master::BIG_M);
+        std::vector<double> big_duals(num_entities, std::numeric_limits<double>::infinity());
         auto empty_mu = inst.graph.create_arc_map<double>(0.0);
         auto init_cols = pricer.price(big_duals, empty_mu, true);
         if (!init_cols.empty()) {
@@ -152,6 +168,50 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         if (new_cols.empty()) {
             new_cols = pricer.price(pi, mu, true, effective_col_limit);
             if (new_cols.empty()) {
+                // Pricing exhausted.  Optimal iff no slack is still
+                // basic; otherwise bump and let the next iteration's
+                // solve pivot the slacks out.  A zero-bump return means
+                // every active slack is capped — no more progress is
+                // possible, so terminate with result.optimal == false
+                // rather than spin until max_iterations.
+                if (master.has_active_slacks(primals)) {
+                    uint32_t bumped = master.bump_active_slacks(primals, SLACK_BUMP_FACTOR,
+                                                                SLACK_MAX_BUMPS_PER_SLACK);
+                    if (bumped > 0) {
+                        pricer.reset_postponed();
+                        iter_timer.stop(TimerCat::Pricing);
+                        timer.stop(TimerCat::Pricing);
+                        iter_timer.stop(TimerCat::Total);
+                        logger.print_iteration(iter + 1, obj, -INF, obj, master.num_lp_cols(),
+                                               master.num_lp_rows(), 0, 0, num_new_caps, 0,
+                                               iter_timer.elapsed(TimerCat::LP),
+                                               iter_timer.elapsed(TimerCat::Pricing),
+                                               iter_timer.elapsed(TimerCat::Separation),
+                                               iter_timer.elapsed(TimerCat::Total));
+                        result.iterations = iter + 1;
+                        continue;
+                    }
+                    // Bump cap hit with slack still basic: honest failure.
+                    iter_timer.stop(TimerCat::Pricing);
+                    timer.stop(TimerCat::Pricing);
+                    timer.stop(TimerCat::Total);
+                    iter_timer.stop(TimerCat::Total);
+                    logger.print_iteration(iter + 1, obj, -INF, obj, master.num_lp_cols(),
+                                           master.num_lp_rows(), 0, 0, num_new_caps, 0,
+                                           iter_timer.elapsed(TimerCat::LP),
+                                           iter_timer.elapsed(TimerCat::Pricing),
+                                           iter_timer.elapsed(TimerCat::Separation),
+                                           iter_timer.elapsed(TimerCat::Total));
+                    result.iterations = iter + 1;
+                    result.objective = obj;
+                    result.total_columns = master.num_columns();
+                    populate_timing();
+                    logger.print_summary(result.iterations, obj, false, result.time_lp,
+                                         result.time_pricing, result.time_separation,
+                                         result.time_total);
+                    return result;
+                }
+
                 iter_timer.stop(TimerCat::Pricing);
                 timer.stop(TimerCat::Pricing);
                 timer.stop(TimerCat::Total);
@@ -184,11 +244,18 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
         // --- Purge (after pricing consumed duals, before add_columns so
         // primals and LP column indices stay consistent) ---
-        // Activity updates must happen BEFORE any delete_*, because some
-        // backends (COPT) invalidate the solution on delete and subsequent
-        // get_duals / get_reduced_costs calls fail.
+        // Activity updates AND the slack-cost bump must happen BEFORE
+        // any delete_*, because some backends (COPT, HiGHS) invalidate
+        // the cached primal/dual solution on delete and subsequent
+        // get_primals / get_duals / get_reduced_costs calls return
+        // stale or empty vectors.
         master.update_capacity_row_activity(iter);
         master.update_column_ages(primals);
+        // Bump any slacks that were basic in this iteration's LP.
+        // Return value intentionally ignored here: at end-of-iter we
+        // just want to grow the cost for next iter; whether the cap
+        // was hit doesn't change the loop structure.
+        (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR, SLACK_MAX_BUMPS_PER_SLACK);
         uint32_t purged = master.purge_aged_columns(effective_col_age_limit);
         uint32_t num_purged =
             master.purge_nonbinding_capacity_rows(iter, params.row_inactivity_threshold);

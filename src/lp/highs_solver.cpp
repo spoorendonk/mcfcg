@@ -96,6 +96,10 @@ public:
         _num_cols = surviving;
     }
 
+    void set_col_cost(uint32_t col, double cost) override {
+        _highs.changeColCost(static_cast<HighsInt>(col), cost);
+    }
+
     void delete_rows(std::vector<int32_t>& mask) override {
         std::vector<HighsInt> h_mask(mask.begin(), mask.end());
         _highs.deleteRows(h_mask.data());

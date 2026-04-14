@@ -33,9 +33,6 @@ namespace mcfcg {
 // per-arc flow into a unique-arc map in the pricer.
 template <typename Derived, typename ColumnT>
 class MasterBase {
-public:
-    static constexpr double BIG_M = 1e8;
-
 protected:
     const Instance* _inst = nullptr;
     std::unique_ptr<LPSolver> _lp;
@@ -87,6 +84,24 @@ protected:
     mutable static_map<uint32_t, double> _mu_cache;
     mutable std::vector<uint32_t> _mu_cache_dirty;
 
+    // Slack-cost bookkeeping.  Each structural row has one slack column
+    // added at init() with cost = max arc cost (good LP conditioning on
+    // small instances).  bump_active_slacks grows the cost geometrically
+    // each CG iteration while the slack remains basic; see cg_loop.h for
+    // the call site and the termination contract.
+    //
+    // INVARIANT: _slack_col_lp[k] is the LP column index of slack k.
+    // Slacks are the very first columns added to the LP (_col_to_lp for
+    // user columns only starts after the slack block), so these indices
+    // are just 0..num_structural-1 at init.  They never shift afterwards
+    // because purge_aged_columns only marks user columns for delete and
+    // HiGHS/COPT/cuOpt all preserve relative column order on delete.  Do
+    // not insert any column type ahead of the slacks without updating
+    // this vector.
+    std::vector<uint32_t> _slack_col_lp;
+    std::vector<double> _slack_cost;          // current obj coeff of each slack
+    std::vector<uint32_t> _slack_bump_count;  // bumps applied so far per slack
+
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
     const Derived& self() const noexcept { return static_cast<const Derived&>(*this); }
 
@@ -122,14 +137,35 @@ public:
         _mu_cache = inst.graph.create_arc_map<double>(0.0);
         _mu_cache_dirty.clear();
 
+        // Conditioning-friendly initial slack cost: the max arc cost in
+        // the instance.  The bump loop in cg_loop.h grows it
+        // geometrically while any slack remains basic, so the LP is
+        // well-conditioned on small instances and the legacy fixed
+        // BIG_M = 1e8 is reached only when the instance actually needs
+        // it.  Zero-cost graphs get 1.0 as a degenerate floor.
+        double max_cost = 0.0;
+        for (uint32_t a : inst.graph.arcs()) {
+            max_cost = std::max(max_cost, inst.cost[a]);
+        }
+        if (max_cost <= 0.0) {
+            max_cost = 1.0;
+        }
+
         // Create LP once
         _lp = lp ? std::move(lp) : create_lp_solver();
 
         // Add slack columns (one per structural row, no row coefficients yet)
-        std::vector<double> slack_obj(_num_structural_rows, BIG_M);
+        std::vector<double> slack_obj(_num_structural_rows, max_cost);
         std::vector<double> slack_lb(_num_structural_rows, 0.0);
         std::vector<double> slack_ub(_num_structural_rows, INF);
-        _lp->add_cols(slack_obj, slack_lb, slack_ub);
+        uint32_t first_slack = _lp->add_cols(slack_obj, slack_lb, slack_ub);
+
+        _slack_col_lp.resize(_num_structural_rows);
+        _slack_cost.assign(_num_structural_rows, max_cost);
+        _slack_bump_count.assign(_num_structural_rows, 0);
+        for (uint32_t k = 0; k < _num_structural_rows; ++k) {
+            _slack_col_lp[k] = first_slack + k;
+        }
 
         // Add structural rows with slack column coefficients
         std::vector<double> row_lb;
@@ -241,8 +277,86 @@ public:
     }
 
     LPStatus solve() { return _lp->solve(); }
+
     double get_obj() const { return _lp->get_obj(); }
     std::vector<double> get_primals() const { return _lp->get_primals(); }
+
+    // True iff any slack column is basic with positive primal in the
+    // supplied LP primal vector.  Pricing convergence is only meaningful
+    // when no slack is still carrying demand — otherwise the reported
+    // objective is slack-dominated.  Callers that already have the
+    // solved LP's primals in scope pass them here to avoid re-copying.
+    bool has_active_slacks(const std::vector<double>& primals) const {
+        if (_slack_col_lp.empty()) {
+            return false;
+        }
+        constexpr double SLACK_ACTIVE_EPS = 1e-9;
+        for (uint32_t lp_col : _slack_col_lp) {
+            if (lp_col < primals.size() && primals[lp_col] > SLACK_ACTIVE_EPS) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Grow the cost of any slack column currently basic with positive
+    // primal by `factor`, capped at `max_bumps_per_slack` bumps per
+    // slack and at an absolute ceiling below HiGHS's dual simplex
+    // ratio-test threshold.  Bumps do not re-solve the LP — the new
+    // costs take effect on the next call to solve().  Returns the
+    // number of slacks actually bumped; a zero return with
+    // has_active_slacks() still true means every active slack has hit
+    // one of the caps and no further progress is possible via bumping.
+    //
+    // Must be called at the END of a CG iteration, before any purge
+    // that deletes LP rows/columns.  Two reasons:
+    //   (1) issue #16 originally proposed a bump-to-fixed-point loop
+    //       wrapping solve(); that does not terminate when lazy
+    //       capacity constraints force a slack basic until pricing
+    //       adds a new column, so we interleave bumps with pricing by
+    //       running bumps once per iter.
+    //   (2) HiGHS/COPT invalidate their cached primal/dual solution on
+    //       delete_cols / delete_rows, so calling bump_active_slacks
+    //       after purge_aged_columns reads stale or empty primals and
+    //       silently skips every slack.  Callers pass the pre-purge
+    //       primals captured right after solve().
+    [[nodiscard]] uint32_t bump_active_slacks(const std::vector<double>& primals, double factor,
+                                              uint32_t max_bumps_per_slack) {
+        if (_slack_col_lp.empty()) {
+            return 0;
+        }
+        constexpr double SLACK_ACTIVE_EPS = 1e-9;
+        // Absolute cap on slack cost.  HiGHS's dual simplex ratio test
+        // starts failing ("consider scaling down the LP objective
+        // coefficients") once cost coefficients combine with O(1e9)+
+        // LP objective values from tree columns.  1e8 matches the
+        // legacy BIG_M and is the largest safe ceiling verified
+        // across path and tree on the shipped instances.  Known limit:
+        // instances where the true optimal dual pi[s] exceeds 1e8
+        // (planar1000/2500 tree per issue #16) will stay slack-
+        // dominated at the ceiling; the cg_loop termination guard
+        // surfaces this as result.optimal == false.
+        constexpr double SLACK_COST_CEILING = 1e8;
+        uint32_t bumped = 0;
+        for (uint32_t k = 0; k < _slack_col_lp.size(); ++k) {
+            uint32_t lp_col = _slack_col_lp[k];
+            if (lp_col >= primals.size() || primals[lp_col] <= SLACK_ACTIVE_EPS) {
+                continue;
+            }
+            if (_slack_bump_count[k] >= max_bumps_per_slack) {
+                continue;  // hit per-slack growth cap; accept current value
+            }
+            double new_cost = _slack_cost[k] * factor;
+            if (new_cost > SLACK_COST_CEILING) {
+                continue;  // would push LP past HiGHS's numerical tolerance
+            }
+            _slack_cost[k] = new_cost;
+            _slack_bump_count[k] += 1;
+            _lp->set_col_cost(lp_col, _slack_cost[k]);
+            ++bumped;
+        }
+        return bumped;
+    }
 
     std::vector<double> get_structural_duals() const {
         auto all = _lp->get_duals();

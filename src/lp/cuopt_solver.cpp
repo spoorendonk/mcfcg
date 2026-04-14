@@ -3,6 +3,7 @@
 #include "mcfcg/lp/lp_solver.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <cuopt/linear_programming/constants.h>
 #include <cuopt/linear_programming/cuopt_c.h>
@@ -151,6 +152,11 @@ public:
         for (uint32_t i = 0; i < n; ++i) {
             mask[i] = (old_to_new[i] == UINT32_MAX) ? -1 : static_cast<int32_t>(old_to_new[i]);
         }
+    }
+
+    void set_col_cost(uint32_t col, double cost) override {
+        assert(col < _obj.size());
+        _obj[col] = cost;
     }
 
     void delete_rows(std::vector<int32_t>& mask) override {

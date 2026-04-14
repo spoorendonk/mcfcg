@@ -39,6 +39,10 @@ public:
     // After call, mask[i] contains the new index of row i (or -1 if deleted).
     virtual void delete_rows(std::vector<int32_t>& mask) = 0;
 
+    // Update a single column's objective coefficient. Used by the master's
+    // bump-to-fixed-point slack-cost loop.
+    virtual void set_col_cost(uint32_t col, double cost) = 0;
+
     // Solve the LP
     virtual LPStatus solve() = 0;
 

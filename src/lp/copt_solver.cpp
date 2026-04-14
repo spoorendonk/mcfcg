@@ -167,6 +167,11 @@ public:
         }
     }
 
+    void set_col_cost(uint32_t col, double cost) override {
+        int idx = static_cast<int>(col);
+        check_copt(COPT_SetColObj(_prob, 1, &idx, &cost), "SetColObj");
+    }
+
     LPStatus solve() override {
         int status = COPT_SolveLp(_prob);
         if (status != COPT_RETCODE_OK) {
