@@ -3,6 +3,7 @@
 #include "mcfcg/cg/column.h"
 #include "mcfcg/graph/dijkstra.h"
 #include "mcfcg/instance.h"
+#include "mcfcg/util/limits.h"
 #include "mcfcg/util/thread_pool.h"
 
 #include <algorithm>
@@ -108,11 +109,6 @@ public:
 
     static constexpr double SCALE = 1e9;
     static constexpr double DEFAULT_NEG_RC_TOL = -1e-6;
-
-    // Below these many elements the dispatch overhead of parallel_for
-    // outweighs the per-element work; fall back to a serial loop.
-    static constexpr uint32_t PAR_ARC_THRESHOLD = 4096;
-    static constexpr uint32_t PAR_SOURCE_THRESHOLD = 64;
 
 protected:
     const Instance* _inst = nullptr;

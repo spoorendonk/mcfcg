@@ -36,13 +36,6 @@ class MasterBase {
 public:
     static constexpr double BIG_M = 1e8;
 
-    // Below this many arcs (or columns) the dispatch overhead of
-    // parallel_for outweighs the per-element work.  Tuned for the
-    // typical instance sizes the solver targets; keep these together so
-    // all parallel paths use a consistent policy.
-    static constexpr uint32_t PAR_ARC_THRESHOLD = 4096;
-    static constexpr uint32_t PAR_COL_THRESHOLD = 256;
-
 protected:
     const Instance* _inst = nullptr;
     std::unique_ptr<LPSolver> _lp;
@@ -76,10 +69,14 @@ protected:
     // build).  Owned by the caller; nullptr means run sequentially.
     thread_pool* _pool = nullptr;
 
-    // Per-thread workspaces reused across iterations.
-    // _thread_flow holds partial flow accumulators for
-    // add_violated_capacity_constraints; sized [num_threads].
+    // Per-thread workspaces reused across iterations, both sized
+    // [num_threads] when a pool is present and empty otherwise.
+    // _thread_flow holds partial flow accumulators for compute_arc_flow;
+    // _thread_violated_arcs holds per-thread violated-arc collections
+    // for find_violated_arcs.  Reused across calls so the inner vectors
+    // keep their amortized capacity.
     std::vector<static_map<uint32_t, double>> _thread_flow;
+    std::vector<std::vector<uint32_t>> _thread_violated_arcs;
 
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
     const Derived& self() const noexcept { return static_cast<const Derived&>(*this); }
@@ -92,16 +89,19 @@ public:
         _inst = &inst;
         _pool = pool;
         _arc_to_col_entries = inst.graph.create_arc_map<std::vector<ArcColEntry>>();
-        // Per-thread flow accumulators are only used by the parallel
-        // path in compute_arc_flow.  Skip the allocation entirely when
-        // there is no pool — the serial path uses a stack-local map.
+        // Per-thread workspaces are only used by the parallel paths in
+        // compute_arc_flow / find_violated_arcs.  Skip allocation
+        // entirely when there is no pool — the serial paths use stack
+        // locals and don't need them.
         _thread_flow.clear();
+        _thread_violated_arcs.clear();
         if (pool != nullptr) {
             uint32_t num_threads = pool->num_threads();
             _thread_flow.reserve(num_threads);
             for (uint32_t tid = 0; tid < num_threads; ++tid) {
                 _thread_flow.push_back(inst.graph.create_arc_map<double>(0.0));
             }
+            _thread_violated_arcs.resize(num_threads);
         }
         _num_structural_rows = self().num_structural_entities();
         _columns.clear();
@@ -514,26 +514,28 @@ private:
     }
 
     // Find arcs where flow exceeds capacity and no row exists yet.
-    // Returns the violated arc ids in ascending order to keep the cut
-    // ordering deterministic across pool/no-pool runs.
-    std::vector<uint32_t> find_violated_arcs(const static_map<uint32_t, double>& flow) const {
+    // Returns the violated arc ids in ascending order so the cut
+    // ordering is deterministic across pool/no-pool runs.
+    std::vector<uint32_t> find_violated_arcs(const static_map<uint32_t, double>& flow) {
         uint32_t num_arcs = _inst->graph.num_arcs();
         std::vector<uint32_t> new_arcs;
 
         if (_pool != nullptr && num_arcs >= PAR_ARC_THRESHOLD) {
             uint32_t num_threads = _pool->num_threads();
-            std::vector<std::vector<uint32_t>> thread_new_arcs(num_threads);
+            for (uint32_t tid = 0; tid < num_threads; ++tid) {
+                _thread_violated_arcs[tid].clear();
+            }
             _pool->parallel_for(num_arcs, [&](uint32_t a, uint32_t tid) {
                 if (flow[a] > _inst->capacity[a] + 1e-6 &&
                     _arc_to_cap_row.find(a) == _arc_to_cap_row.end()) {
-                    thread_new_arcs[tid].push_back(a);
+                    _thread_violated_arcs[tid].push_back(a);
                 }
             });
             size_t total = 0;
-            for (auto& v : thread_new_arcs)
+            for (auto& v : _thread_violated_arcs)
                 total += v.size();
             new_arcs.reserve(total);
-            for (auto& v : thread_new_arcs) {
+            for (auto& v : _thread_violated_arcs) {
                 new_arcs.insert(new_arcs.end(), v.begin(), v.end());
             }
             std::sort(new_arcs.begin(), new_arcs.end());

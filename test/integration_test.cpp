@@ -210,13 +210,13 @@ TEST(RCValidation, WinnipegTree) {
 // converges to the reference objective.  They also catch any FP
 // non-determinism that flips cuts at the +1e-6 capacity threshold.
 
-static void solve_threaded(const mcfcg::Instance& inst, double ref_obj, bool tree_formulation,
+template <typename SolveFn>
+static void solve_threaded(const mcfcg::Instance& inst, double ref_obj, SolveFn solve_fn,
                            uint32_t num_threads, double tol = 0.0001) {
     mcfcg::CGParams params;
     params.max_iterations = 10000;
     params.num_threads = num_threads;
-    auto result =
-        tree_formulation ? mcfcg::solve_tree_cg(inst, params) : mcfcg::solve_path_cg(inst, params);
+    auto result = solve_fn(inst, params);
     EXPECT_TRUE(result.optimal) << "Did not reach optimality with " << num_threads << " threads";
     EXPECT_GE(result.objective, ref_obj * (1.0 - tol));
     EXPECT_LE(result.objective, ref_obj * (1.0 + tol));
@@ -225,25 +225,25 @@ static void solve_threaded(const mcfcg::Instance& inst, double ref_obj, bool tre
 TEST(ThreadedExecution, Planar80Path) {
     auto opt = load_optimal(data_dir("commalab/planar"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar80");
-    solve_threaded(inst, opt.at("planar80"), false, 4);
+    solve_threaded(inst, opt.at("planar80"), mcfcg::solve_path_cg, 4);
 }
 
 TEST(ThreadedExecution, Planar80Tree) {
     auto opt = load_optimal(data_dir("commalab/planar"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar80");
-    solve_threaded(inst, opt.at("planar80"), true, 4);
+    solve_threaded(inst, opt.at("planar80"), mcfcg::solve_tree_cg, 4);
 }
 
 TEST(ThreadedExecution, Grid2Path) {
     auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid2");
-    solve_threaded(inst, opt.at("grid2"), false, 4);
+    solve_threaded(inst, opt.at("grid2"), mcfcg::solve_path_cg, 4);
 }
 
 TEST(ThreadedExecution, Grid2Tree) {
     auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid2");
-    solve_threaded(inst, opt.at("grid2"), true, 4);
+    solve_threaded(inst, opt.at("grid2"), mcfcg::solve_tree_cg, 4);
 }
 
 // Winnipeg has ~80k arcs which clears PAR_ARC_THRESHOLD (4096), so
@@ -256,7 +256,7 @@ TEST(ThreadedExecution, WinnipegPath) {
         GTEST_SKIP() << "data/transportation not found";
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
-    solve_threaded(inst, opt.at("Winnipeg"), false, 4);
+    solve_threaded(inst, opt.at("Winnipeg"), mcfcg::solve_path_cg, 4);
 }
 
 // --- Feature tests: strategy bundle, pricing_filter, A* admissibility ---

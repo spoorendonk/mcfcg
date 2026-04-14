@@ -18,4 +18,11 @@ inline constexpr double INF = std::numeric_limits<double>::infinity();
 // within any realistic CG run (2.1e9 iterations).
 inline constexpr std::uint32_t INF_U32 = std::numeric_limits<std::uint32_t>::max() / 2;
 
+// Minimum problem sizes below which thread_pool dispatch overhead
+// dominates the per-element work, so the parallel paths in master/pricer
+// fall back to a serial loop.  Tuned for typical instance sizes.
+inline constexpr std::uint32_t PAR_ARC_THRESHOLD = 4096;
+inline constexpr std::uint32_t PAR_COL_THRESHOLD = 256;
+inline constexpr std::uint32_t PAR_SOURCE_THRESHOLD = 64;
+
 }  // namespace mcfcg
