@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
@@ -29,8 +30,9 @@ public:
             ++_generation;
         }
         _work_cv.notify_all();
-        for (auto& worker : _workers)
+        for (auto& worker : _workers) {
             worker.join();
+        }
     }
 
     thread_pool(const thread_pool&) = delete;
@@ -40,14 +42,23 @@ public:
     // Blocks until all tasks complete.
     template <typename F>
     void parallel_for(uint32_t n, F&& task) {
-        if (n == 0)
-            return;
-
-        if (_num_threads <= 1 || n == 1) {
-            for (uint32_t idx = 0; idx < n; ++idx)
-                task(idx, uint32_t{0});
+        if (n == 0) {
             return;
         }
+
+        if (_num_threads <= 1 || n == 1) {
+            for (uint32_t idx = 0; idx < n; ++idx) {
+                task(idx, uint32_t{0});
+            }
+            return;
+        }
+
+        // Reset the dynamic-dispatch counter. Relaxed is safe because
+        // the store is sequenced-before the mutex lock below; the mutex
+        // release/acquire chain synchronizes it with workers waking from
+        // _work_cv.wait. Do not move this store after notify_all() without
+        // restoring an explicit release ordering.
+        _next_task.store(0, std::memory_order_relaxed);
 
         // Publish work inside the lock so the mutex release establishes
         // happens-before with worker acquire (guarantees visibility).
@@ -60,8 +71,8 @@ public:
         }
         _work_cv.notify_all();
 
-        // Calling thread does its share as thread 0
-        run_range(0, n);
+        // Calling thread participates as thread 0, pulling from the shared counter
+        run_tasks(0);
 
         // Wait for all workers to finish
         {
@@ -81,12 +92,13 @@ private:
             {
                 std::unique_lock lock(_mutex);
                 _work_cv.wait(lock, [&] { return _generation > seen_gen || _stop; });
-                if (_stop)
+                if (_stop) {
                     return;
+                }
                 seen_gen = _generation;
             }
 
-            run_range(thread_id, _task_count);
+            run_tasks(thread_id);
 
             {
                 std::lock_guard lock(_mutex);
@@ -96,19 +108,15 @@ private:
         }
     }
 
-    void run_range(uint32_t thread_id, uint32_t n) {
-        uint32_t active = std::min(_num_threads, n);
-        if (thread_id >= active)
-            return;
-
-        uint32_t chunk = n / active;
-        uint32_t remainder = n % active;
-
-        uint32_t begin = thread_id * chunk + std::min(thread_id, remainder);
-        uint32_t end = begin + chunk + (thread_id < remainder ? 1 : 0);
-
-        for (uint32_t idx = begin; idx < end; ++idx)
+    void run_tasks(uint32_t thread_id) {
+        const uint32_t total = _task_count;
+        while (true) {
+            auto idx = _next_task.fetch_add(1, std::memory_order_relaxed);
+            if (idx >= total) {
+                return;
+            }
             _task_fn(idx, thread_id);
+        }
     }
 
     uint32_t _num_threads;
@@ -125,13 +133,19 @@ private:
     // Current task
     std::function<void(uint32_t, uint32_t)> _task_fn;
     uint32_t _task_count = 0;
+    // On its own cache line: hammered by fetch_add on every task. Sharing
+    // a line with _task_fn/_task_count would bounce those reads on every
+    // increment. 64 is the dominant cache-line size on x86_64 / aarch64.
+    alignas(64) std::atomic<uint32_t> _next_task{0};
 };
 
 inline std::unique_ptr<thread_pool> make_thread_pool(uint32_t num_threads) {
-    if (num_threads == 0)
+    if (num_threads == 0) {
         num_threads = std::max(1u, std::thread::hardware_concurrency());
-    if (num_threads <= 1)
+    }
+    if (num_threads <= 1) {
         return nullptr;
+    }
     return std::make_unique<thread_pool>(num_threads);
 }
 
