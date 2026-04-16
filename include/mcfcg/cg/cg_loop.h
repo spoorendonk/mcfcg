@@ -12,16 +12,14 @@
 
 namespace mcfcg {
 
-// Slack-cost bump parameters shared with the test helpers in
-// test/cg_test_util.h.  BUMP_FACTOR is the per-iter growth factor for
-// any slack column still basic with positive primal; MAX_BUMPS_PER_SLACK
-// caps per-slack growth so the LP stays numerically conditioned even on
-// instances where some demand is genuinely infeasible under the current
-// column set.  Replaces the legacy fixed BIG_M = 1e8; combined with
-// MasterBase::bump_active_slacks, the effective max slack cost is
-// min(max_arc_cost * BUMP_FACTOR^MAX_BUMPS_PER_SLACK, 1e8).
+// Slack-cost bump factor shared with the test helpers in
+// test/cg_test_util.h.  Any slack still basic with positive primal has
+// its cost multiplied by this factor once per CG iteration; the LP
+// then pivots the slack out on the next solve once the slack cost
+// exceeds the reduced cost of whatever column serves the row.  Replaces
+// the legacy fixed BIG_M = 1e8; MasterBase::bump_active_slacks clamps
+// each slack cost to an absolute ceiling inside the method.
 inline constexpr double SLACK_BUMP_FACTOR = 10.0;
-inline constexpr uint32_t SLACK_MAX_BUMPS_PER_SLACK = 6;
 
 // Generic CG loop parameterized on Master, Pricer, and a dual-extraction callable.
 // GetDuals: (const Master&) -> std::vector<double>
@@ -169,32 +167,17 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             new_cols = pricer.price(pi, mu, true, effective_col_limit);
             if (new_cols.empty()) {
                 // Pricing exhausted.  Optimal iff no slack is still
-                // basic; otherwise bump and let the next iteration's
-                // solve pivot the slacks out.  A zero-bump return means
-                // every active slack is capped — no more progress is
-                // possible, so terminate with result.optimal == false
-                // rather than spin until max_iterations.
+                // basic.  Otherwise bump and let the next iteration's
+                // solve pivot the slacks out — we do not terminate on
+                // saturated bumps here; the LP backend's numerical
+                // ceiling is enforced inside bump_active_slacks, and
+                // the outer max_iterations guard is the only escape
+                // hatch for pathologically slack-dominated instances.
                 if (master.has_active_slacks(primals)) {
-                    uint32_t bumped = master.bump_active_slacks(primals, SLACK_BUMP_FACTOR,
-                                                                SLACK_MAX_BUMPS_PER_SLACK);
-                    if (bumped > 0) {
-                        pricer.reset_postponed();
-                        iter_timer.stop(TimerCat::Pricing);
-                        timer.stop(TimerCat::Pricing);
-                        iter_timer.stop(TimerCat::Total);
-                        logger.print_iteration(iter + 1, obj, -INF, obj, master.num_lp_cols(),
-                                               master.num_lp_rows(), 0, 0, num_new_caps, 0,
-                                               iter_timer.elapsed(TimerCat::LP),
-                                               iter_timer.elapsed(TimerCat::Pricing),
-                                               iter_timer.elapsed(TimerCat::Separation),
-                                               iter_timer.elapsed(TimerCat::Total));
-                        result.iterations = iter + 1;
-                        continue;
-                    }
-                    // Bump cap hit with slack still basic: honest failure.
+                    (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
+                    pricer.reset_postponed();
                     iter_timer.stop(TimerCat::Pricing);
                     timer.stop(TimerCat::Pricing);
-                    timer.stop(TimerCat::Total);
                     iter_timer.stop(TimerCat::Total);
                     logger.print_iteration(iter + 1, obj, -INF, obj, master.num_lp_cols(),
                                            master.num_lp_rows(), 0, 0, num_new_caps, 0,
@@ -203,13 +186,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                                            iter_timer.elapsed(TimerCat::Separation),
                                            iter_timer.elapsed(TimerCat::Total));
                     result.iterations = iter + 1;
-                    result.objective = obj;
-                    result.total_columns = master.num_columns();
-                    populate_timing();
-                    logger.print_summary(result.iterations, obj, false, result.time_lp,
-                                         result.time_pricing, result.time_separation,
-                                         result.time_total);
-                    return result;
+                    continue;
                 }
 
                 iter_timer.stop(TimerCat::Pricing);
@@ -255,7 +232,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // Return value intentionally ignored here: at end-of-iter we
         // just want to grow the cost for next iter; whether the cap
         // was hit doesn't change the loop structure.
-        (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR, SLACK_MAX_BUMPS_PER_SLACK);
+        (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
         uint32_t purged = master.purge_aged_columns(effective_col_age_limit);
         uint32_t num_purged =
             master.purge_nonbinding_capacity_rows(iter, params.row_inactivity_threshold);

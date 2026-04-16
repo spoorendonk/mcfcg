@@ -99,8 +99,7 @@ protected:
     // not insert any column type ahead of the slacks without updating
     // this vector.
     std::vector<uint32_t> _slack_col_lp;
-    std::vector<double> _slack_cost;          // current obj coeff of each slack
-    std::vector<uint32_t> _slack_bump_count;  // bumps applied so far per slack
+    std::vector<double> _slack_cost;  // current obj coeff of each slack
 
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
     const Derived& self() const noexcept { return static_cast<const Derived&>(*this); }
@@ -162,7 +161,6 @@ public:
 
         _slack_col_lp.resize(_num_structural_rows);
         _slack_cost.assign(_num_structural_rows, max_cost);
-        _slack_bump_count.assign(_num_structural_rows, 0);
         for (uint32_t k = 0; k < _num_structural_rows; ++k) {
             _slack_col_lp[k] = first_slack + k;
         }
@@ -299,43 +297,38 @@ public:
         return false;
     }
 
-    // Grow the cost of any slack column currently basic with positive
-    // primal by `factor`, capped at `max_bumps_per_slack` bumps per
-    // slack and at an absolute ceiling below HiGHS's dual simplex
-    // ratio-test threshold.  Bumps do not re-solve the LP — the new
-    // costs take effect on the next call to solve().  Returns the
-    // number of slacks actually bumped; a zero return with
-    // has_active_slacks() still true means every active slack has hit
-    // one of the caps and no further progress is possible via bumping.
+    // Grow the cost of every slack column currently basic with positive
+    // primal by `factor`.  The goal is to keep growing until no slack
+    // remains basic — the LP will pivot each slack out as its cost
+    // exceeds the reduced cost of whatever column serves that row.
+    // Bumps do not re-solve the LP; the new cost takes effect on the
+    // next `solve()` call.  Returns the number of slacks actually
+    // bumped.
+    //
+    // Absolute ceiling on the per-slack cost: HiGHS's dual simplex
+    // ratio test eventually refuses to pivot with "excessive dual
+    // values" above ~1e10.  Slacks already at the ceiling stop growing
+    // — the CG loop keeps iterating (pricing may still find a column
+    // that pivots the slack out naturally) until max_iterations if
+    // necessary.
     //
     // Must be called at the END of a CG iteration, before any purge
-    // that deletes LP rows/columns.  Two reasons:
-    //   (1) issue #16 originally proposed a bump-to-fixed-point loop
-    //       wrapping solve(); that does not terminate when lazy
-    //       capacity constraints force a slack basic until pricing
-    //       adds a new column, so we interleave bumps with pricing by
-    //       running bumps once per iter.
-    //   (2) HiGHS/COPT invalidate their cached primal/dual solution on
-    //       delete_cols / delete_rows, so calling bump_active_slacks
-    //       after purge_aged_columns reads stale or empty primals and
-    //       silently skips every slack.  Callers pass the pre-purge
-    //       primals captured right after solve().
-    [[nodiscard]] uint32_t bump_active_slacks(const std::vector<double>& primals, double factor,
-                                              uint32_t max_bumps_per_slack) {
+    // that deletes LP rows/columns: HiGHS/COPT invalidate their cached
+    // primal/dual solution on delete_cols / delete_rows, so calling
+    // after purge reads stale primals and silently skips every slack.
+    // Callers pass the pre-purge primals captured right after solve().
+    uint32_t bump_active_slacks(const std::vector<double>& primals, double factor) {
         if (_slack_col_lp.empty()) {
             return 0;
         }
         constexpr double SLACK_ACTIVE_EPS = 1e-9;
-        // Absolute cap on slack cost.  HiGHS's dual simplex ratio test
-        // starts failing ("consider scaling down the LP objective
-        // coefficients") once cost coefficients combine with O(1e9)+
-        // LP objective values from tree columns.  1e8 matches the
-        // legacy BIG_M and is the largest safe ceiling verified
-        // across path and tree on the shipped instances.  Known limit:
-        // instances where the true optimal dual pi[s] exceeds 1e8
-        // (planar1000/2500 tree per issue #16) will stay slack-
-        // dominated at the ceiling; the cg_loop termination guard
-        // surfaces this as result.optimal == false.
+        // Absolute cap. HiGHS's dual simplex ratio test starts failing
+        // above ~1e9 on tree formulations where the LP obj is already
+        // in the 1e9 range, especially after many repeated
+        // changeColCost+solve cycles accumulate numerical error in the
+        // basis.  1e8 matches the legacy BIG_M and is the largest
+        // ceiling verified across path and tree on the shipped
+        // instances.
         constexpr double SLACK_COST_CEILING = 1e8;
         uint32_t bumped = 0;
         for (uint32_t k = 0; k < _slack_col_lp.size(); ++k) {
@@ -343,15 +336,10 @@ public:
             if (lp_col >= primals.size() || primals[lp_col] <= SLACK_ACTIVE_EPS) {
                 continue;
             }
-            if (_slack_bump_count[k] >= max_bumps_per_slack) {
-                continue;  // hit per-slack growth cap; accept current value
+            if (_slack_cost[k] >= SLACK_COST_CEILING) {
+                continue;  // already at LP-backend numerical ceiling
             }
-            double new_cost = _slack_cost[k] * factor;
-            if (new_cost > SLACK_COST_CEILING) {
-                continue;  // would push LP past HiGHS's numerical tolerance
-            }
-            _slack_cost[k] = new_cost;
-            _slack_bump_count[k] += 1;
+            _slack_cost[k] = std::min(_slack_cost[k] * factor, SLACK_COST_CEILING);
             _lp->set_col_cost(lp_col, _slack_cost[k]);
             ++bumped;
         }

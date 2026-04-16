@@ -95,13 +95,7 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, dou
                     optimal = true;
                     break;
                 }
-                uint32_t bumped = master.bump_active_slacks(primals, SLACK_BUMP_FACTOR,
-                                                            SLACK_MAX_BUMPS_PER_SLACK);
-                if (bumped == 0) {
-                    // Every active slack is capped; no further progress
-                    // via bumping.  Break instead of spinning.
-                    break;
-                }
+                (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
                 pricer.reset_postponed();
                 continue;
             }
@@ -128,9 +122,9 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, dou
             new_cols.resize(1000);
         }
         // Bump before add_columns, same reason as cg_loop.h: the primals
-        // captured above reflect the solved LP; adding columns is fine
-        // but any purge would invalidate get_primals().
-        (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR, SLACK_MAX_BUMPS_PER_SLACK);
+        // captured above reflect the solved LP; any purge would
+        // invalidate get_primals().
+        (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
         master.add_columns(std::move(new_cols));
     }
     EXPECT_TRUE(optimal);
@@ -183,11 +177,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, dou
                     optimal = true;
                     break;
                 }
-                uint32_t bumped = master.bump_active_slacks(primals, SLACK_BUMP_FACTOR,
-                                                            SLACK_MAX_BUMPS_PER_SLACK);
-                if (bumped == 0) {
-                    break;
-                }
+                (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
                 pricer.reset_postponed();
                 continue;
             }
@@ -233,7 +223,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, dou
         if (new_cols.size() > 1000) {
             new_cols.resize(1000);
         }
-        (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR, SLACK_MAX_BUMPS_PER_SLACK);
+        (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
         master.add_columns(std::move(new_cols));
     }
     EXPECT_TRUE(optimal);
