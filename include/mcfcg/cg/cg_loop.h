@@ -51,6 +51,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     CGResult result{};
     result.optimal = false;
     bool solved = false;
+    double last_obj = 0.0;  // last successful LP obj; survives a hit on max_iterations
 
     auto populate_timing = [&] {
         result.time_lp = timer.elapsed(TimerCat::LP);
@@ -107,6 +108,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         solved = true;
 
         double obj = master.get_obj();
+        last_obj = obj;
         auto primals = master.get_primals();
 
         // --- Separation ---
@@ -252,8 +254,12 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
     timer.stop(TimerCat::Total);
 
+    // Use the last successful obj captured inside the loop, not
+    // master.get_obj() — by the time we reach here, the LP state has
+    // been mutated by add_columns/purge/bump without a re-solve, so
+    // get_obj() returns 0 / stale on HiGHS and COPT.
     if (solved)
-        result.objective = master.get_obj();
+        result.objective = last_obj;
     populate_timing();
     logger.print_summary(result.iterations, result.objective, result.optimal, result.time_lp,
                          result.time_pricing, result.time_separation, result.time_total);
