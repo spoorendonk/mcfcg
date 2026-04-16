@@ -22,10 +22,11 @@ namespace mcfcg::test {
 constexpr double NEW_COL_RC_TOL = 1e-6;
 
 // Tolerance for existing columns at optimality: allow small numerical noise.
-// Tree formulation accumulates demand-weighted floating-point error, so existing
-// columns can show slightly negative recomputed RC (observed up to ~3.5e-4 on
-// planar100 tree). This grows with instance size.
-constexpr double EXISTING_COL_RC_TOL = 1e-3;
+// Tree formulation accumulates demand-weighted floating-point error, so
+// existing columns can show slightly negative recomputed RC (observed up
+// to ~3.5e-4 on planar80 tree after the dynamic-slack-cost fix, tighter
+// than the previous 1e-3 which masked conditioning issues).
+constexpr double EXISTING_COL_RC_TOL = 5e-4;
 
 inline double recompute_path_rc(const Column& col, const std::vector<double>& pi,
                                 const static_map<uint32_t, double>& mu) {
