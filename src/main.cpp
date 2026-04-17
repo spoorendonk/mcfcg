@@ -176,10 +176,6 @@ int main(int argc, char* argv[]) {
     if (solver == "cuopt") {
 #ifdef MCFCG_USE_CUOPT
         params.solver_factory = [] { return mcfcg::create_cuopt_solver(); };
-        // Barrier duals are less precise than simplex — loosen RC tolerance
-        // to avoid tailing off on spurious negative-RC columns.
-        if (!neg_rc_tol_overridden)
-            params.neg_rc_tol = -1e-4;
 #else
         std::fprintf(stderr, "cuOpt not available. Rebuild with -DMCFCG_USE_CUOPT=ON.\n");
         return EXIT_FAILURE;

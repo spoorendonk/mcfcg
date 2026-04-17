@@ -4,6 +4,7 @@
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/util/limits.h"
 #include "mcfcg/util/thread_pool.h"
+#include "mcfcg/util/tolerances.h"
 
 #include <algorithm>
 #include <cmath>
@@ -288,7 +289,7 @@ public:
         if (_slack_col_lp.empty()) {
             return false;
         }
-        constexpr double SLACK_ACTIVE_EPS = 1e-9;
+        constexpr double SLACK_ACTIVE_EPS = COL_ACTIVE_EPS;
         for (uint32_t lp_col : _slack_col_lp) {
             if (lp_col < primals.size() && primals[lp_col] > SLACK_ACTIVE_EPS) {
                 return true;
@@ -321,7 +322,7 @@ public:
         if (_slack_col_lp.empty()) {
             return 0;
         }
-        constexpr double SLACK_ACTIVE_EPS = 1e-9;
+        constexpr double SLACK_ACTIVE_EPS = COL_ACTIVE_EPS;
         // Absolute cap. HiGHS's dual simplex ratio test starts failing
         // above ~1e9 on tree formulations where the LP obj is already
         // in the 1e9 range, especially after many repeated
@@ -414,7 +415,7 @@ public:
         auto duals = _lp->get_duals();
         for (uint32_t i = 0; i < _cap_row_to_arc.size(); ++i) {
             uint32_t row = _num_structural_rows + i;
-            if (row < duals.size() && std::abs(duals[row]) > 1e-9) {
+            if (row < duals.size() && std::abs(duals[row]) > DUAL_ACTIVE_EPS) {
                 _cap_row_last_active[i] = current_iter;
             }
         }
@@ -433,7 +434,7 @@ public:
         } else {
             // Barrier solver fallback: a column is active if primal > eps
             // or reduced cost < -eps (matches Flowty MCF model).
-            constexpr double EPS = 1e-6;
+            constexpr double EPS = COL_ACTIVE_EPS;
             auto reduced_costs = _lp->get_reduced_costs();
             bool have_rc = !reduced_costs.empty();
             for (uint32_t c = 0; c < _columns.size(); ++c) {
@@ -648,7 +649,7 @@ private:
                 _thread_violated_arcs[tid].clear();
             }
             _pool->parallel_for(num_arcs, [&](uint32_t a, uint32_t tid) {
-                if (flow[a] > _inst->capacity[a] + 1e-6 &&
+                if (flow[a] > _inst->capacity[a] + CAP_VIOL_TOL &&
                     _arc_to_cap_row.find(a) == _arc_to_cap_row.end()) {
                     _thread_violated_arcs[tid].push_back(a);
                 }
@@ -663,7 +664,7 @@ private:
             std::sort(new_arcs.begin(), new_arcs.end());
         } else {
             for (uint32_t a = 0; a < num_arcs; ++a) {
-                if (flow[a] > _inst->capacity[a] + 1e-6 &&
+                if (flow[a] > _inst->capacity[a] + CAP_VIOL_TOL &&
                     _arc_to_cap_row.find(a) == _arc_to_cap_row.end()) {
                     new_arcs.push_back(a);
                 }

@@ -1,4 +1,5 @@
 #include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/util/tolerances.h"
 
 #include <Highs.h>
 
@@ -13,6 +14,8 @@ private:
 public:
     HiGHSSolver() {
         _highs.setOptionValue("output_flag", false);
+        _highs.setOptionValue("primal_feasibility_tolerance", LP_FEAS_TOL);
+        _highs.setOptionValue("dual_feasibility_tolerance", LP_FEAS_TOL);
         HighsModel model;
         model.lp_.sense_ = ObjSense::kMinimize;
         model.lp_.offset_ = 0.0;

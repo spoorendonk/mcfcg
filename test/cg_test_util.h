@@ -18,15 +18,13 @@
 
 namespace mcfcg::test {
 
-// Tolerance for new columns: must have strictly negative RC
-constexpr double NEW_COL_RC_TOL = 1e-6;
-
-// Tolerance for existing columns at optimality: allow small numerical noise.
-// Tree formulation accumulates demand-weighted floating-point error, so
-// existing columns can show slightly negative recomputed RC (observed up
-// to ~3.5e-4 on planar80 tree after the dynamic-slack-cost fix, tighter
-// than the previous 1e-3 which masked conditioning issues).
-constexpr double EXISTING_COL_RC_TOL = 5e-4;
+// Test RC tolerances derived from the central RELATIVE_FEAS_TOL.
+// NEW_COL_RC_TOL: new columns must have genuinely negative RC, not
+// just dual noise (which is ~10 × LP_FEAS_TOL for a 10-arc path).
+// EXISTING_COL_RC_TOL: existing columns may drift slightly negative
+// from demand-weighted FP accumulation in the tree formulation.
+constexpr double NEW_COL_RC_TOL = COL_ACTIVE_EPS;
+constexpr double EXISTING_COL_RC_TOL = COL_ACTIVE_EPS;
 
 inline double recompute_path_rc(const Column& col, const std::vector<double>& pi,
                                 const static_map<uint32_t, double>& mu) {
@@ -49,7 +47,8 @@ inline double recompute_tree_rc(const TreeColumn& col, const std::vector<double>
 // Run path CG manually, validating RC at each iteration.
 // Checks: new columns have negative RC, existing columns have non-negative RC.
 // If check_duplicates is true, also asserts no duplicate columns.
-inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, double tol = 0.0001,
+inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
+                                       double tol = RELATIVE_FEAS_TOL * 10,
                                        bool check_duplicates = false) {
     PathMaster master;
     master.init(inst);
@@ -134,7 +133,8 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj, dou
 }
 
 // Run tree CG manually, validating RC at each iteration.
-inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj, double tol = 0.0001,
+inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj,
+                                       double tol = RELATIVE_FEAS_TOL * 10,
                                        bool check_duplicates = false) {
     TreeMaster master;
     master.init(inst);

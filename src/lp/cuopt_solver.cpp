@@ -1,6 +1,7 @@
 #ifdef MCFCG_USE_CUOPT
 
 #include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/util/tolerances.h"
 
 #include <algorithm>
 #include <cassert>
@@ -274,11 +275,11 @@ public:
             return LPStatus::Error;
         }
 
-        // Use GPU barrier solver with tight tolerances (1e-8 relative)
         cuOptSetParameter(settings, CUOPT_METHOD, std::to_string(CUOPT_METHOD_BARRIER).c_str());
-        cuOptSetParameter(settings, CUOPT_RELATIVE_GAP_TOLERANCE, "1e-8");
-        cuOptSetParameter(settings, CUOPT_RELATIVE_PRIMAL_TOLERANCE, "1e-8");
-        cuOptSetParameter(settings, CUOPT_RELATIVE_DUAL_TOLERANCE, "1e-8");
+        auto tol_str = std::to_string(LP_FEAS_TOL);
+        cuOptSetParameter(settings, CUOPT_RELATIVE_GAP_TOLERANCE, tol_str.c_str());
+        cuOptSetParameter(settings, CUOPT_RELATIVE_PRIMAL_TOLERANCE, tol_str.c_str());
+        cuOptSetParameter(settings, CUOPT_RELATIVE_DUAL_TOLERANCE, tol_str.c_str());
 
         cuOptSetParameter(settings, CUOPT_LOG_TO_CONSOLE, _verbose ? "1" : "0");
 

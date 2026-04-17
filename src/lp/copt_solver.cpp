@@ -1,6 +1,7 @@
 #ifdef MCFCG_USE_COPT
 
 #include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/util/tolerances.h"
 
 #include <copt.h>
 #include <stdexcept>
@@ -35,6 +36,14 @@ public:
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_PRESOLVE, 0), "Presolve=off");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_CROSSOVER, 0), "Crossover=off");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_LOGGING, verbose ? 1 : 0), "Logging");
+        // COPT barrier without crossover: keep feastol one order
+        // tighter than LP_FEAS_TOL so that barrier duals are precise
+        // enough for the pricer's NEG_RC_TOL.  The 0.06% obj gap on
+        // small tree instances (e.g. planar30) is inherent to barrier
+        // interior-point convergence, not feastol — only crossover or
+        // simplex eliminates it.
+        check_copt(COPT_SetDblParam(_prob, COPT_DBLPARAM_FEASTOL, LP_FEAS_TOL / 10), "FeasTol");
+        check_copt(COPT_SetDblParam(_prob, COPT_DBLPARAM_DUALTOL, LP_FEAS_TOL / 10), "DualTol");
     }
 
     ~CoptSolver() override {

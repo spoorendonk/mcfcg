@@ -5,6 +5,7 @@
 #include "mcfcg/instance.h"
 #include "mcfcg/util/limits.h"
 #include "mcfcg/util/thread_pool.h"
+#include "mcfcg/util/tolerances.h"
 
 #include <algorithm>
 #include <cassert>
@@ -107,7 +108,6 @@ public:
     using vertex_t = uint32_t;
 
     static constexpr double SCALE = 1e9;
-    static constexpr double DEFAULT_NEG_RC_TOL = -1e-6;
 
 protected:
     const Instance* _inst = nullptr;
@@ -115,7 +115,7 @@ protected:
     std::vector<std::vector<uint32_t>> _source_arcs;
     bool _track_arcs = false;
     PricingMode _mode = PricingMode::AStar;
-    double _neg_rc_tol = DEFAULT_NEG_RC_TOL;
+    double _neg_rc_tol = NEG_RC_TOL;
     static_map<vertex_t, int64_t> _lower_bounds;
     static_map<uint32_t, int64_t> _rc;
 
@@ -136,7 +136,7 @@ public:
 
     void init(const Instance& inst, PricingMode mode = PricingMode::AStar,
               thread_pool* pool = nullptr, uint32_t batch_size = 0,
-              double neg_rc_tol = DEFAULT_NEG_RC_TOL) {
+              double neg_rc_tol = NEG_RC_TOL) {
         _inst = &inst;
         _source_postponed.assign(inst.sources.size(), 0);
         _mode = mode;

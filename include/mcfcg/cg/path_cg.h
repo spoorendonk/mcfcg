@@ -3,6 +3,7 @@
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/util/logger.h"
+#include "mcfcg/util/tolerances.h"
 
 #include <cstdint>
 #include <functional>
@@ -59,7 +60,7 @@ struct CGParams {
     bool pricing_filter = false;
     uint32_t num_threads = 1;         // 0 = auto-detect via hardware_concurrency
     uint32_t pricing_batch_size = 0;  // 0 = all sources in one batch
-    double neg_rc_tol = -1e-6;        // reduced cost tolerance for column acceptance
+    double neg_rc_tol = NEG_RC_TOL;   // see tolerances.h
     uint32_t row_inactivity_threshold =
         5;  // remove capacity rows inactive for this many iterations
     // Purge inactive columns after this many iters (0=off).  Ignored under

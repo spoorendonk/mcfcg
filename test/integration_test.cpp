@@ -42,7 +42,8 @@ using mcfcg::test::solve_and_validate_tree_rc;
 
 // --- Correctness tests: solve instances, verify against optimal.csv ---
 
-static void solve_and_check(const mcfcg::Instance& inst, double ref_obj, double tol = 0.0001) {
+static void solve_and_check(const mcfcg::Instance& inst, double ref_obj,
+                            double tol = mcfcg::RELATIVE_FEAS_TOL * 10) {
     mcfcg::CGParams params;
     params.max_iterations = 10000;
     auto result = mcfcg::solve_path_cg(inst, params);
@@ -212,7 +213,7 @@ TEST(RCValidation, WinnipegTree) {
 
 template <typename SolveFn>
 static void solve_threaded(const mcfcg::Instance& inst, double ref_obj, SolveFn solve_fn,
-                           uint32_t num_threads, double tol = 0.0001) {
+                           uint32_t num_threads, double tol = mcfcg::RELATIVE_FEAS_TOL * 10) {
     mcfcg::CGParams params;
     params.max_iterations = 10000;
     params.num_threads = num_threads;
@@ -317,7 +318,6 @@ static void solve_and_check_cuopt(const mcfcg::Instance& inst, double ref_obj, d
     mcfcg::CGParams params;
     params.max_iterations = 10000;
     params.solver_factory = []() { return mcfcg::create_cuopt_solver(); };
-    params.neg_rc_tol = -1e-4;  // barrier duals are less precise
     auto result = mcfcg::solve_path_cg(inst, params);
     EXPECT_TRUE(result.optimal) << "Did not reach optimality with cuOpt solver";
     EXPECT_GE(result.objective, ref_obj * (1.0 - tol)) << "Objective below reference";
