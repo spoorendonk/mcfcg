@@ -65,7 +65,7 @@ static void print_usage(std::FILE* out) {
         "  --solver NAME            LP solver: highs (default), cuopt, copt\n"
         "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
         "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
-        "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-6)\n"
+        "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-3)\n"
         "  --strategy S             pricer-heavy (default) or pricer-light\n"
         "  -h, --help               Print this help message and exit.\n");
 }
@@ -85,7 +85,6 @@ int main(int argc, char* argv[]) {
     std::string trips_path;
     double coef = 0.0;
     mcfcg::CGParams params;
-    bool neg_rc_tol_overridden = false;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
@@ -120,7 +119,6 @@ int main(int argc, char* argv[]) {
             params.row_inactivity_threshold = static_cast<uint32_t>(std::atoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--neg-rc-tol") == 0) {
             params.neg_rc_tol = std::atof(argv[++i]);
-            neg_rc_tol_overridden = true;
         } else if (std::strcmp(argv[i], "--strategy") == 0) {
             std::string s = argv[++i];
             if (s == "pricer-heavy") {

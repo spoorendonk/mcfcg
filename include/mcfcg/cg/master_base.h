@@ -164,6 +164,13 @@ protected:
 
 public:
     MasterBase() = default;
+    // Non-copyable: LP ownership and per-thread workspaces do not copy
+    // meaningfully.  unique_ptr already blocks copy; the explicit
+    // declarations make the contract visible.
+    MasterBase(const MasterBase&) = delete;
+    MasterBase& operator=(const MasterBase&) = delete;
+    MasterBase(MasterBase&&) noexcept = default;
+    MasterBase& operator=(MasterBase&&) noexcept = default;
 
     void init(const Instance& inst, std::unique_ptr<LPSolver> lp = nullptr,
               thread_pool* pool = nullptr, bool warm_start = true) {
@@ -823,7 +830,7 @@ private:
             // and accumulate directly into the result.
             for (uint32_t c = 0; c < num_cols; ++c) {
                 double x = primals[_col_to_lp[c]];
-                if (x < 1e-10)
+                if (x < FLOW_NEGLIGIBLE_EPS)
                     continue;
                 self().accumulate_flow(_columns[c], x, flow);
             }
@@ -846,7 +853,7 @@ private:
             auto& bucket = _thread_flow[task];
             for (uint32_t c = start; c < end; ++c) {
                 double x = primals[_col_to_lp[c]];
-                if (x < 1e-10)
+                if (x < FLOW_NEGLIGIBLE_EPS)
                     continue;
                 self().accumulate_flow(_columns[c], x, bucket);
             }

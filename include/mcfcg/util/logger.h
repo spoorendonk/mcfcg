@@ -67,8 +67,6 @@ public:
                      "t_LP=%.3f  t_PR=%.3f  t_SP=%.3f  t_Tot=%.3f\n",
                      optimal ? "optimal" : "stopped", iters, obj, t_lp, t_pr, t_sp, t_tot);
     }
-
-    [[nodiscard]] Verbosity verbosity() const { return _verbosity; }
 };
 
 }  // namespace mcfcg

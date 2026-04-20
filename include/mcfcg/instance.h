@@ -1,11 +1,11 @@
 #pragma once
 
+#include "mcfcg/graph/static_digraph.h"
+#include "mcfcg/graph/static_map.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
-
-#include "mcfcg/graph/static_digraph.h"
-#include "mcfcg/graph/static_map.h"
 
 namespace mcfcg {
 
@@ -28,11 +28,19 @@ struct Instance {
     std::vector<Source> sources;
 };
 
-Instance read_commalab(const std::string & path);
-void write_commalab(const Instance & inst, const std::string & path);
-std::vector<Source> group_by_source(const std::vector<Commodity> & commodities);
+// Read an instance in CommaLab/UniPi plain-numeric format (1-indexed
+// vertices and arcs).  See `data/commalab/grid/format.doc` or
+// `data/commalab/planar/format.doc` for the schema.  Paths ending in
+// `.gz` are decompressed transparently via zlib.
+Instance read_commalab(const std::string& path);
+void write_commalab(const Instance& inst, const std::string& path);
+std::vector<Source> group_by_source(const std::vector<Commodity>& commodities);
 
-Instance read_tntp(const std::string & net_path, const std::string & trips_path,
-                   double demand_coef);
+// Read an instance in TNTP transportation-network format; see
+// https://github.com/bstabler/TransportationNetworks for the spec.
+// Arc cost is taken from `free_flow_time`; raw OD demands are divided
+// by `demand_coef` (city-specific, see TNTP_COEFS in src/main.cpp).
+// `.gz` paths are decompressed transparently via zlib.
+Instance read_tntp(const std::string& net_path, const std::string& trips_path, double demand_coef);
 
 }  // namespace mcfcg

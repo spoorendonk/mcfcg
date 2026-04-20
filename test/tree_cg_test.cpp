@@ -202,3 +202,22 @@ TEST_F(TreeCGEdgeRows, AggressiveAgingStaysFeasible) {
     ASSERT_TRUE(result.optimal);
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
 }
+
+// EdgeRows requires warm_start=true on the tree formulation too.  init()
+// throws when that contract is violated so release builds surface the
+// misconfiguration instead of silently producing an infeasible LP.
+TEST_F(TreeCGEdgeRows, InitThrowsWithoutWarmStart) {
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::TreeMaster master;
+    EXPECT_THROW(master.init(inst, nullptr, nullptr, /*warm_start=*/false), std::invalid_argument);
+}
+
+// The throw must also propagate through the full solve_tree_cg pipeline
+// so callers using CGParams see the contract violation rather than a
+// silently-infeasible solve result.
+TEST_F(TreeCGEdgeRows, SolveTreeCGThrowsWithoutWarmStart) {
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.warm_start = false;
+    EXPECT_THROW(mcfcg::solve_tree_cg(inst, params), std::invalid_argument);
+}

@@ -22,6 +22,14 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         col.cost = 0.0;
         double tree_rc = -pi_s[s_idx];
 
+        // Clear at entry (not inside the emit block) so that an early
+        // exit on an unreachable sink still leaves _source_arcs in a
+        // clean state — otherwise filter_for_new_caps would scan stale
+        // arcs from the previous pricing call.
+        if (_track_arcs) {
+            _source_arcs[s_idx].clear();
+        }
+
         std::unordered_map<uint32_t, double> arc_flow_map;
 
         for (uint32_t k : src.commodity_indices) {
@@ -48,7 +56,6 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
         // Record arcs used by this source for capacity filtering
         if (_track_arcs) {
-            _source_arcs[s_idx].clear();
             _source_arcs[s_idx].reserve(arc_flow_map.size());
             for (auto& [arc, flow] : arc_flow_map) {
                 _source_arcs[s_idx].push_back(arc);
@@ -56,11 +63,11 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         }
 
         if (!all_reachable || tree_rc >= _neg_rc_tol) {
-            _source_postponed[s_idx] = true;
+            _source_postponed[s_idx] = 1;
             return;
         }
 
-        _source_postponed[s_idx] = false;
+        _source_postponed[s_idx] = 0;
         col.reduced_cost = tree_rc;
 
         for (auto& [arc, flow] : arc_flow_map) {

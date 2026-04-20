@@ -133,6 +133,13 @@ protected:
 
 public:
     PricerBase() = default;
+    // Non-copyable: per-thread workspaces and Dijkstra state are not
+    // meaningful to clone.  A default copy would compile but silently
+    // share nothing useful.
+    PricerBase(const PricerBase&) = delete;
+    PricerBase& operator=(const PricerBase&) = delete;
+    PricerBase(PricerBase&&) noexcept = default;
+    PricerBase& operator=(PricerBase&&) noexcept = default;
 
     void init(const Instance& inst, PricingMode mode = PricingMode::AStar,
               thread_pool* pool = nullptr, uint32_t batch_size = 0,

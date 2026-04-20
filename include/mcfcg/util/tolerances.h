@@ -70,4 +70,12 @@ inline constexpr double CAP_VIOL_TOL = LP_FEAS_TOL;  // 1e-4
 // the LP's own precision is indistinguishable from zero.
 inline constexpr double DUAL_ACTIVE_EPS = LP_FEAS_TOL;  // 1e-4
 
+// ── Flow accumulation skip guard ───────────────────────────────────
+// Primals below this value contribute negligibly to arc-flow sums
+// and are skipped by compute_arc_flow.  This is *not* a feasibility
+// tolerance — it sits far below LP_FEAS_TOL and only exists to avoid
+// per-column work for residual LP noise.  Matches the LP solver's
+// numerical noise floor.
+inline constexpr double FLOW_NEGLIGIBLE_EPS = 1e-10;
+
 }  // namespace mcfcg
