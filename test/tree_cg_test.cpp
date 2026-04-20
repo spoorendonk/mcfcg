@@ -3,12 +3,15 @@
 #include "mcfcg/cg/master_base.h"
 #include "mcfcg/cg/path_cg.h"
 #include "mcfcg/cg/tree_master.h"
+#include "mcfcg/graph/static_digraph_builder.h"
 #include "mcfcg/instance.h"
+#include "mcfcg/util/limits.h"
 #include "test_paths.h"
 
 #include <cstdio>
 #include <gtest/gtest.h>
 #include <string>
+#include <vector>
 
 using mcfcg::test::writeInstance;
 
@@ -220,4 +223,48 @@ TEST_F(TreeCGEdgeRows, SolveTreeCGThrowsWithoutWarmStart) {
     mcfcg::CGParams params;
     params.warm_start = false;
     EXPECT_THROW(mcfcg::solve_tree_cg(inst, params), std::invalid_argument);
+}
+
+// --- SlackMode::EdgeRows on TreeMaster with actual capacity binding
+//
+// Same arc geometry as PathCGEdgeRows but with arc 1→3 left uncapacitated
+// (capacity = INF) so the master's selector sees only 2 capacitated arcs
+// against 2 sources and picks EdgeRows.  Caps on 1→2 and 2→3 both bind,
+// so add_violated_capacity_constraints fires during CG and must insert
+// lazy capacity rows paired with slack columns on the tree formulation.
+//
+//   arcs:     (1→2, c=1, u=3)  (1→3, c=5, u=INF)  (2→3, c=3, u=4)
+//   commods:  c1 (1→3, d=2),   c2 (1→3, d=3),     c3 (2→3, d=1)
+//
+// Optimal obj = 25.  For source 1 (two commodities into sink 3) the tree
+// formulation picks a convex combination of the 1→2→3 and 1→3 trees so
+// that aggregated arc flows honour the binding capacities; source 2's
+// tree is the single arc 2→3.
+TEST(TreeCGEdgeRowsBinding, EdgeRowsLazySlackInsertion) {
+    using namespace mcfcg;
+    // commalab's plain-numeric writer cannot round-trip std::numeric_limits
+    // infinity() through operator>>, so build the Instance directly.
+    static_digraph_builder<double, double> builder(3);
+    builder.add_arc(0, 1, 1.0, 3.0);  // 1→2 binding
+    builder.add_arc(0, 2, 5.0, INF);  // 1→3 uncapacitated
+    builder.add_arc(1, 2, 3.0, 4.0);  // 2→3 binding
+    auto [graph, cost_map, cap_map] = builder.build();
+
+    std::vector<Commodity> commodities = {
+        {0, 2, 2.0},  // source 1 → sink 3, demand 2
+        {0, 2, 3.0},  // source 1 → sink 3, demand 3
+        {1, 2, 1.0},  // source 2 → sink 3, demand 1
+    };
+    auto sources = group_by_source(commodities);
+
+    Instance inst{std::move(graph), std::move(cost_map), std::move(cap_map), std::move(commodities),
+                  std::move(sources)};
+
+    TreeMaster master;
+    master.init(inst);
+    ASSERT_EQ(master.slack_mode(), SlackMode::EdgeRows);
+
+    auto result = solve_tree_cg(inst);
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 25.0, 1e-4);
 }
