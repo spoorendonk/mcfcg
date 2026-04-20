@@ -29,22 +29,24 @@ $$
 
 ### Path formulation (Dantzig-Wolfe)
 
-Let $P_k$ be the set of $o_k \!\to\! t_k$ simple paths, with $\lambda^k_p$
-the fraction of commodity $k$'s demand routed on path $p\in P_k$ and
-$c_p = \sum_{a\in p} c_a$.
+Let $P_k$ be the set of $o_k \!\to\! t_k$ simple paths, with $\lambda^k_p \ge 0$
+the flow on path $p \in P_k$ and $c_p = \sum_{a\in p} c_a$.  (This is the
+flow convention the solver uses: the demand row bound is $d_k$ and the
+capacity row coefficient is $1$ per arc used; the pricer's reduced cost
+does not carry a $d_k$ factor.)
 
 $$
 \begin{aligned}
-\min\;& \sum_{k\in K}\sum_{p\in P_k} d_k c_p\, \lambda^k_p \\
-\text{s.t.}\;& \sum_{p\in P_k} \lambda^k_p = 1 \quad\forall k\in K \quad[\pi_k]\\
-& \sum_{k\in K}\sum_{p\in P_k} d_k\, \delta_{ap}\, \lambda^k_p \le u_a
+\min\;& \sum_{k\in K}\sum_{p\in P_k} c_p\, \lambda^k_p \\
+\text{s.t.}\;& \sum_{p\in P_k} \lambda^k_p \ge d_k \quad\forall k\in K \quad[\pi_k \ge 0]\\
+& \sum_{k\in K}\sum_{p\in P_k} \delta_{ap}\, \lambda^k_p \le u_a
   \quad\forall a\in A \quad[\mu_a \le 0]\\
 & \lambda^k_p \ge 0
 \end{aligned}
 $$
 
 Reduced cost of a path $p$ for commodity $k$:
-$\bar c^k_p = d_k\!\sum_{a\in p} (c_a - \mu_a) - \pi_k$.
+$\bar c^k_p = \sum_{a\in p} (c_a - \mu_a) - \pi_k$.
 Pricing reduces to a shortest path in $G$ with arc weights
 $c_a - \mu_a$ (one Dijkstra per source, targeting that source's sinks).
 
@@ -150,7 +152,6 @@ cmake --build build -j$(nproc)
 |------|---------|--------|
 | `-DMCFCG_USE_CUOPT=ON`   | OFF | Enable the NVIDIA cuOpt GPU LP backend (requires cuOpt SDK) |
 | `-DMCFCG_USE_COPT=ON`    | OFF | Enable the COPT LP backend (requires COPT installed) |
-| `-DMCFCG_USE_MOSEK=ON`   | OFF | Enable the MOSEK LP backend (requires MOSEK installed) |
 | `-DMCFCG_NATIVE_ARCH=OFF` | ON | Disable `-march=native` tuning; produces a portable binary |
 
 ## Test

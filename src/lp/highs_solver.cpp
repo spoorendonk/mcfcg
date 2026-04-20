@@ -1,6 +1,7 @@
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/util/tolerances.h"
 
+#include <cassert>
 #include <Highs.h>
 
 namespace mcfcg {
@@ -35,6 +36,8 @@ public:
                       const std::vector<double>& ub, const std::vector<uint32_t>& starts,
                       const std::vector<uint32_t>& row_indices,
                       const std::vector<double>& values) override {
+        assert(starts.size() == obj.size() + 1 && starts.back() == values.size() &&
+               "add_cols requires starts.size() == n+1 with starts.back() == values.size()");
         uint32_t first = _num_cols;
         HighsInt n = static_cast<HighsInt>(obj.size());
         HighsInt nnz = static_cast<HighsInt>(values.size());
@@ -58,6 +61,8 @@ public:
     uint32_t add_rows(const std::vector<double>& lb, const std::vector<double>& ub,
                       const std::vector<uint32_t>& starts, const std::vector<uint32_t>& indices,
                       const std::vector<double>& values) override {
+        assert(starts.size() == lb.size() + 1 && starts.back() == values.size() &&
+               "add_rows requires starts.size() == m+1 with starts.back() == values.size()");
         uint32_t first = _num_rows;
         HighsInt m = static_cast<HighsInt>(lb.size());
         HighsInt nnz = static_cast<HighsInt>(values.size());

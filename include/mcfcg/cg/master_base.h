@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>

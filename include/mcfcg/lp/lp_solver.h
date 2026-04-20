@@ -22,7 +22,7 @@ enum class LPStatus { Optimal, Infeasible, Unbounded, Error };
 //   * output: mask[i] = new index of item i in the compacted LP, or -1
 //             if the item was deleted.
 // The master relies on this to remap its column-index bookkeeping
-// (_col_to_lp, _slack_col_lp, _arc_to_slack_col, etc.) after a purge.
+// (_col_to_lp, _slack.col_lp, _slack.arc_to_col, etc.) after a purge.
 //
 // ## Cached-solution invalidation
 //

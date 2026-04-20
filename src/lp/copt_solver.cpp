@@ -3,6 +3,7 @@
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/util/tolerances.h"
 
+#include <cassert>
 #include <copt.h>
 #include <stdexcept>
 #include <string>
@@ -75,6 +76,8 @@ public:
                       const std::vector<double>& ub, const std::vector<uint32_t>& starts,
                       const std::vector<uint32_t>& row_indices,
                       const std::vector<double>& values) override {
+        assert(starts.size() == obj.size() + 1 && starts.back() == values.size() &&
+               "add_cols requires starts.size() == n+1 with starts.back() == values.size()");
         uint32_t first = num_cols();
         int n = static_cast<int>(obj.size());
 
@@ -102,6 +105,8 @@ public:
     uint32_t add_rows(const std::vector<double>& lb, const std::vector<double>& ub,
                       const std::vector<uint32_t>& starts, const std::vector<uint32_t>& indices,
                       const std::vector<double>& values) override {
+        assert(starts.size() == lb.size() + 1 && starts.back() == values.size() &&
+               "add_rows requires starts.size() == m+1 with starts.back() == values.size()");
         uint32_t first = num_rows();
         int m = static_cast<int>(lb.size());
 

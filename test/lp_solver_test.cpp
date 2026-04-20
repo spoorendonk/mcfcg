@@ -1,8 +1,7 @@
-#include <gtest/gtest.h>
+#include "mcfcg/lp/lp_solver.h"
 
 #include <cmath>
-
-#include "mcfcg/lp/lp_solver.h"
+#include <gtest/gtest.h>
 
 // Solve: min x + 2y  s.t. x + y >= 3, x >= 0, y >= 0
 TEST(LPSolver, SimpleLP) {
@@ -17,7 +16,7 @@ TEST(LPSolver, SimpleLP) {
     // Add row: x + y >= 3  =>  3 <= x + y <= inf
     lp->add_rows({3.0},      // lb
                  {1e20},     // ub
-                 {0},        // starts
+                 {0, 2},     // starts (sentinel = nnz)
                  {0, 1},     // indices
                  {1.0, 1.0}  // values
     );
@@ -42,7 +41,7 @@ TEST(LPSolver, TwoConstraints) {
 
     lp->add_rows({-1e20, -1e20},       // lb
                  {5.0, 8.0},           // ub
-                 {0, 2},               // starts
+                 {0, 2, 4},            // starts (sentinel = nnz)
                  {0, 1, 0, 1},         // indices
                  {1.0, 1.0, 2.0, 1.0}  // values
     );
@@ -63,7 +62,7 @@ TEST(LPSolver, Duals) {
 
     // min x  s.t. x >= 5
     lp->add_cols({1.0}, {0.0}, {1e20});
-    lp->add_rows({5.0}, {1e20}, {0}, {0}, {1.0});
+    lp->add_rows({5.0}, {1e20}, {0, 1}, {0}, {1.0});
 
     auto status = lp->solve();
     ASSERT_EQ(status, mcfcg::LPStatus::Optimal);
@@ -79,7 +78,7 @@ TEST(LPSolver, IncrementalColumns) {
 
     // Start with: min x  s.t. x >= 5
     lp->add_cols({1.0}, {0.0}, {1e20});
-    lp->add_rows({5.0}, {1e20}, {0}, {0}, {1.0});
+    lp->add_rows({5.0}, {1e20}, {0, 1}, {0}, {1.0});
 
     auto status = lp->solve();
     ASSERT_EQ(status, mcfcg::LPStatus::Optimal);
