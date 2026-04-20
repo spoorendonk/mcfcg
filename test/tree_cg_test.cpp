@@ -7,18 +7,10 @@
 #include "test_paths.h"
 
 #include <cstdio>
-#include <fstream>
 #include <gtest/gtest.h>
 #include <string>
 
-// Helper to write plain-numeric instance file
-static void writeInstance(const std::string& path, uint32_t vertices, uint32_t arcs,
-                          uint32_t commodities, const std::string& arc_lines,
-                          const std::string& commodity_lines) {
-    std::ofstream out(path);
-    out << vertices << '\n' << arcs << '\n' << commodities << '\n';
-    out << arc_lines << commodity_lines;
-}
+using mcfcg::test::writeInstance;
 
 // Helper: solve with both formulations, verify agreement
 static void verifyPathTreeAgreement(const std::string& path, double expected_obj) {
@@ -156,9 +148,16 @@ TEST(TreeCGColPurge, PurgeWithCapacity) {
 // a smoke test for the "no init slacks" code path plus warm-start
 // feasibility.  Optimal: c1 on 1→3 = 3*2 = 6; c2 on 2→3 = 5*3 = 15;
 // total 21.
-TEST(TreeCGEdgeRows, SelectorAndSolve) {
-    std::string path = mcfcg::test::unique_test_path("tree_edge_rows.txt");
-    writeInstance(path, 3, 2, 2, "1 3 3 10\n2 3 5 10\n", "1 3 2\n2 3 3\n");
+class TreeCGEdgeRows : public ::testing::Test {
+protected:
+    std::string path = mcfcg::test::unique_test_path("tree_cg_edge_rows.txt");
+    void SetUp() override {
+        writeInstance(path, 3, 2, 2, "1 3 3 10\n2 3 5 10\n", "1 3 2\n2 3 3\n");
+    }
+    void TearDown() override { std::remove(path.c_str()); }
+};
+
+TEST_F(TreeCGEdgeRows, SelectorAndSolve) {
     auto inst = mcfcg::read_commalab(path);
 
     mcfcg::TreeMaster master;
@@ -168,7 +167,6 @@ TEST(TreeCGEdgeRows, SelectorAndSolve) {
     auto result = mcfcg::solve_tree_cg(inst);
     ASSERT_TRUE(result.optimal);
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
-    std::remove(path.c_str());
 }
 
 // Tree EdgeRows with column-purge and row-purge exercises the slack
@@ -177,33 +175,25 @@ TEST(TreeCGEdgeRows, SelectorAndSolve) {
 // instance, but the purge calls still run and must not disturb the
 // empty _slack_col_lp / _arc_to_slack_col state.  Mirrors the path
 // ColPurge/RowPurge/AggressiveAging tests.
-TEST(TreeCGEdgeRows, ColPurgeStaysFeasible) {
-    std::string path = mcfcg::test::unique_test_path("tree_edge_rows_colpurge.txt");
-    writeInstance(path, 3, 2, 2, "1 3 3 10\n2 3 5 10\n", "1 3 2\n2 3 3\n");
+TEST_F(TreeCGEdgeRows, ColPurgeStaysFeasible) {
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
     params.col_age_limit = 1;
     auto result = mcfcg::solve_tree_cg(inst, params);
     ASSERT_TRUE(result.optimal);
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
-    std::remove(path.c_str());
 }
 
-TEST(TreeCGEdgeRows, RowPurgeStaysFeasible) {
-    std::string path = mcfcg::test::unique_test_path("tree_edge_rows_rowpurge.txt");
-    writeInstance(path, 3, 2, 2, "1 3 3 10\n2 3 5 10\n", "1 3 2\n2 3 3\n");
+TEST_F(TreeCGEdgeRows, RowPurgeStaysFeasible) {
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
     params.row_inactivity_threshold = 1;
     auto result = mcfcg::solve_tree_cg(inst, params);
     ASSERT_TRUE(result.optimal);
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
-    std::remove(path.c_str());
 }
 
-TEST(TreeCGEdgeRows, AggressiveAgingStaysFeasible) {
-    std::string path = mcfcg::test::unique_test_path("tree_edge_rows_aggressive.txt");
-    writeInstance(path, 3, 2, 2, "1 3 3 10\n2 3 5 10\n", "1 3 2\n2 3 3\n");
+TEST_F(TreeCGEdgeRows, AggressiveAgingStaysFeasible) {
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
     params.col_age_limit = 1;
@@ -211,5 +201,4 @@ TEST(TreeCGEdgeRows, AggressiveAgingStaysFeasible) {
     auto result = mcfcg::solve_tree_cg(inst, params);
     ASSERT_TRUE(result.optimal);
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
-    std::remove(path.c_str());
 }

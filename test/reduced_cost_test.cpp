@@ -3,20 +3,10 @@
 #include "test_paths.h"
 
 #include <cstdio>
-#include <fstream>
 #include <gtest/gtest.h>
 #include <string>
 
-namespace {
-
-void writeInstance(const std::string& path, uint32_t vertices, uint32_t arcs, uint32_t commodities,
-                   const std::string& arc_lines, const std::string& commodity_lines) {
-    std::ofstream out(path);
-    out << vertices << '\n' << arcs << '\n' << commodities << '\n';
-    out << arc_lines << commodity_lines;
-}
-
-}  // namespace
+using mcfcg::test::writeInstance;
 
 // --- Capacity binding (single commodity) ---
 

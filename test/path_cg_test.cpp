@@ -6,17 +6,9 @@
 #include "test_paths.h"
 
 #include <cstdio>
-#include <fstream>
 #include <gtest/gtest.h>
 
-// Helper to write plain-numeric instance file
-static void writeInstance(const std::string& path, uint32_t vertices, uint32_t arcs,
-                          uint32_t commodities, const std::string& arc_lines,
-                          const std::string& commodity_lines) {
-    std::ofstream out(path);
-    out << vertices << '\n' << arcs << '\n' << commodities << '\n';
-    out << arc_lines << commodity_lines;
-}
+using mcfcg::test::writeInstance;
 
 // --- Instance 1: Single source, no capacity binding ---
 // Graph: 0→1(c=1,u=10), 0→2(c=4,u=10), 1→2(c=2,u=10),
