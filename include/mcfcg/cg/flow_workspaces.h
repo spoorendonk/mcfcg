@@ -29,7 +29,7 @@ namespace mcfcg {
 // one place makes it explicit that flow accumulation and violation
 // scanning share a lifetime and the same per-thread indexing scheme.
 // The logic itself stays on MasterBase because it is CRTP-templated on
-// the Derived's accumulate_flow hook.
+// the Derived's for_each_arc_coeff hook.
 struct FlowWorkspaces {
     std::vector<static_map<uint32_t, double>> flow;
     std::vector<std::vector<uint32_t>> violated_arcs;

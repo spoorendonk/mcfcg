@@ -28,13 +28,6 @@ class TreeMaster : public MasterBase<TreeMaster, TreeColumn> {
         }
     }
 
-    void accumulate_flow(const TreeColumn& col, double x,
-                         static_map<uint32_t, double>& flow) const {
-        for (const auto& af : col.arc_flows) {
-            flow[af.arc] += x * af.flow;
-        }
-    }
-
     // Tree column cost for source s = sum_{k in s} d_k × path_k_cost,
     // bounded above by (sum_{k in s} d_k) × (|V|-1) × max_arc_cost.
     // Use the max over sources so the slack ceiling is tight enough to

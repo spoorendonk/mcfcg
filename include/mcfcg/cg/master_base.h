@@ -31,8 +31,6 @@ namespace mcfcg {
 //   std::pair<double, double> structural_row_bounds(uint32_t k) const;
 //   uint32_t structural_row_index(const ColumnT& col) const;
 //   void for_each_arc_coeff(const ColumnT& col, auto&& callback) const;
-//   void accumulate_flow(const ColumnT& col, double x,
-//                        static_map<uint32_t, double>& flow) const;
 //   double slack_cost_upper_bound() const;  // upper bound on real column
 //                                           // cost; drives slack_cost_ceiling
 //
@@ -742,7 +740,8 @@ private:
                 double x = primals[_col_to_lp[c]];
                 if (x < FLOW_NEGLIGIBLE_EPS)
                     continue;
-                self().accumulate_flow(_columns[c], x, flow);
+                self().for_each_arc_coeff(
+                    _columns[c], [&](uint32_t arc, double coeff) { flow[arc] += x * coeff; });
             }
             return flow;
         }
@@ -765,7 +764,8 @@ private:
                 double x = primals[_col_to_lp[c]];
                 if (x < FLOW_NEGLIGIBLE_EPS)
                     continue;
-                self().accumulate_flow(_columns[c], x, bucket);
+                self().for_each_arc_coeff(
+                    _columns[c], [&](uint32_t arc, double coeff) { bucket[arc] += x * coeff; });
             }
         });
 

@@ -28,12 +28,6 @@ class PathMaster : public MasterBase<PathMaster, Column> {
         }
     }
 
-    void accumulate_flow(const Column& col, double x, static_map<uint32_t, double>& flow) const {
-        for (uint32_t arc : col.arcs) {
-            flow[arc] += x;
-        }
-    }
-
     // Path column cost = sum over arcs of inst.cost[a], bounded above by
     // (|V|-1) × max_arc_cost (simple path).  Returned per column; the
     // ceiling is 10× this so a slack can always out-price any path.
