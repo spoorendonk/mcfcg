@@ -8,6 +8,36 @@ namespace mcfcg {
 
 enum class LPStatus { Optimal, Infeasible, Unbounded, Error };
 
+// Backend-agnostic LP solver interface used by the CG master.
+//
+// Callers own the solver (via unique_ptr).  One solver handles one LP
+// across its lifetime: the master incrementally adds columns and rows
+// and triggers solve(), re-reading primals / duals / reduced costs
+// between mutations.
+//
+// ## Delete-mask semantics
+//
+// delete_cols / delete_rows take an in-out mask:
+//   * input:  mask[i] = 1 to delete item i, 0 to keep.
+//   * output: mask[i] = new index of item i in the compacted LP, or -1
+//             if the item was deleted.
+// The master relies on this to remap its column-index bookkeeping
+// (_col_to_lp, _slack_col_lp, _arc_to_slack_col, etc.) after a purge.
+//
+// ## Cached-solution invalidation
+//
+// HiGHS and COPT invalidate their cached primal/dual/reduced-cost
+// vectors on delete_cols or delete_rows.  Callers that need to read
+// those vectors after a purge MUST either capture them before the
+// delete or re-solve first.  cg_loop.h orders activity updates and
+// slack bumps BEFORE the purge for exactly this reason.
+//
+// ## `starts` convention (uniform across add_cols and add_rows)
+//
+// CSC for columns, CSR for rows.  In both calls, starts is sized
+// n+1 where n is the number of new items, and starts[n] == values.size()
+// is a mandatory sentinel.  The backend reads the i-th item's range as
+// [starts[i], starts[i+1]).
 class LPSolver {
 public:
     virtual ~LPSolver() = default;
