@@ -1,7 +1,5 @@
 #pragma once
 
-#include "mcfcg/cg/flow_workspaces.h"
-#include "mcfcg/cg/slack_state.h"
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/util/limits.h"
@@ -14,6 +12,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <ostream>
 #include <span>
 #include <stdexcept>
 #include <unordered_map>
@@ -21,6 +20,33 @@
 #include <vector>
 
 namespace mcfcg {
+
+// Where slack columns live.  The master places slacks on whichever row
+// set is smaller so the slack column count is min(num_structural_rows,
+// num_capacitated_arcs) — the selector runs in MasterBase::init once the
+// instance is known.
+//   CommodityRows: one slack per structural row (commodity demand in
+//                  path, source convexity in tree), added at init.
+//                  Structural rows carry the slack with coeff +1.
+//   EdgeRows:      one slack per capacity row, added lazily in
+//                  add_violated_capacity_constraints.  Slack coeff is -1
+//                  in its capacity row (flow_a - s_a ≤ cap_a).
+//                  Structural rows have NO slack entry, so the LP is
+//                  feasible only if the master is seeded with at least
+//                  one column per structural row — EdgeRows requires
+//                  warm_start=true; init throws when that contract is
+//                  violated.  After warm-start, demand rows stay served
+//                  because update_column_ages never ages out a basis
+//                  candidate (reduced cost within LP_FEAS_TOL of zero),
+//                  so purging aged columns cannot take the last basic
+//                  column serving a row.
+enum class SlackMode : uint8_t { CommodityRows, EdgeRows };
+
+// gtest pretty-printer so EXPECT_EQ on SlackMode prints the enum name
+// on failure instead of a raw byte.  Header-only; no link-time impact.
+inline std::ostream& operator<<(std::ostream& out, SlackMode mode) {
+    return out << (mode == SlackMode::EdgeRows ? "EdgeRows" : "CommodityRows");
+}
 
 // CRTP base class for path and tree master problems.  Shared logic:
 // LP init, column management, solve/duals, lazy capacity constraints,
@@ -73,10 +99,14 @@ protected:
     thread_pool* _pool = nullptr;
 
     // Per-thread workspaces for the parallel passes in compute_arc_flow
-    // / find_violated_arcs.  See FlowWorkspaces in flow_workspaces.h.
-    // Empty when the master has no pool; the serial paths use stack
-    // locals.
-    FlowWorkspaces _flow_ws;
+    // / find_violated_arcs.  Both vectors are sized [num_threads] when
+    // a pool is present and empty otherwise — the serial paths use
+    // stack locals.  _thread_flow holds partial flow accumulators;
+    // _thread_violated_arcs holds per-thread violated-arc collections.
+    // Reused across CG iterations so the inner vectors keep their
+    // amortized capacity.
+    std::vector<static_map<uint32_t, double>> _thread_flow;
+    std::vector<std::vector<uint32_t>> _thread_violated_arcs;
 
     // Persistent dense cache for capacity duals returned from
     // get_capacity_duals.  Sized to num_arcs at init() so the pricer's
@@ -94,12 +124,73 @@ protected:
     // Floors to 1.0 when every arc has cost 0.
     double _max_cost = 1.0;
 
-    // Slack bookkeeping (mode, per-slack LP column indices, per-slack
-    // costs, arc→slack-col map, bump ceiling).  Owns the per-iteration
-    // logic — see SlackState in slack_state.h.  Mutation that creates
-    // or deletes slacks still happens here in MasterBase because it
-    // interleaves with structural / capacity rows and the column
-    // delete mask.
+    // Slack bookkeeping grouped into a nested struct purely for
+    // readability — MasterBase directly mutates all fields from
+    // install/remap/delete call sites that interleave with structural
+    // and capacity rows.  The pure per-iteration operations
+    // (has_active, bump_active) are methods.
+    struct SlackState {
+        SlackMode mode = SlackMode::CommodityRows;
+
+        // col_lp[k] is the LP column index of slack k; cost[k] is its
+        // current objective coefficient.  In CommodityRows mode slacks
+        // are columns 0..num_structural-1 and never shift.  In EdgeRows
+        // mode slacks interleave with user columns in LP index space,
+        // so purge_aged_columns and delete_edge_row_slacks remap these
+        // indices through the delete mask.
+        std::vector<uint32_t> col_lp;
+        std::vector<double> cost;
+
+        // EdgeRows-only: arc → LP column index of that arc's paired
+        // slack.  Empty in CommodityRows mode.
+        std::unordered_map<uint32_t, uint32_t> arc_to_col;
+
+        // Absolute ceiling on the geometric slack-cost bump.  Set in
+        // MasterBase::init from the formulation-specific upper bound.
+        double cost_ceiling = 1e8;
+
+        bool empty() const noexcept { return col_lp.empty(); }
+
+        void clear() noexcept {
+            col_lp.clear();
+            cost.clear();
+            arc_to_col.clear();
+        }
+
+        // True iff any slack column is basic with positive primal.
+        bool has_active(std::span<const double> primals) const noexcept {
+            if (col_lp.empty()) {
+                return false;
+            }
+            constexpr double SLACK_ACTIVE_EPS = COL_ACTIVE_EPS;
+            return std::ranges::any_of(col_lp, [&](uint32_t lp_col) {
+                return lp_col < primals.size() && primals[lp_col] > SLACK_ACTIVE_EPS;
+            });
+        }
+
+        // Grow every active slack's cost by `factor`, clamped to
+        // cost_ceiling.  Pushes updates through the LP.  Returns count.
+        uint32_t bump_active(std::span<const double> primals, double factor, LPSolver& lpsolver) {
+            if (col_lp.empty()) {
+                return 0;
+            }
+            constexpr double SLACK_ACTIVE_EPS = COL_ACTIVE_EPS;
+            uint32_t bumped = 0;
+            for (uint32_t k = 0; k < col_lp.size(); ++k) {
+                uint32_t lp_col = col_lp[k];
+                if (lp_col >= primals.size() || primals[lp_col] <= SLACK_ACTIVE_EPS) {
+                    continue;
+                }
+                if (cost[k] >= cost_ceiling) {
+                    continue;
+                }
+                cost[k] = std::min(cost[k] * factor, cost_ceiling);
+                lpsolver.set_col_cost(lp_col, cost[k]);
+                ++bumped;
+            }
+            return bumped;
+        }
+    };
     SlackState _slack;
 
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
@@ -124,7 +215,16 @@ public:
         // compute_arc_flow / find_violated_arcs.  Skip allocation
         // entirely when there is no pool — the serial paths use stack
         // locals and don't need them.
-        _flow_ws.init(inst.graph, pool != nullptr ? pool->num_threads() : 0);
+        _thread_flow.clear();
+        _thread_violated_arcs.clear();
+        if (pool != nullptr) {
+            uint32_t num_threads = pool->num_threads();
+            _thread_flow.reserve(num_threads);
+            for (uint32_t tid = 0; tid < num_threads; ++tid) {
+                _thread_flow.push_back(inst.graph.create_arc_map<double>(0.0));
+            }
+            _thread_violated_arcs.resize(num_threads);
+        }
         _num_structural_rows = self().num_structural_entities();
         _columns.clear();
         _col_to_lp.clear();
@@ -750,16 +850,16 @@ private:
         uint32_t chunk = (num_cols + num_threads - 1) / num_threads;
 
         for (uint32_t tid = 0; tid < num_threads; ++tid) {
-            _flow_ws.flow[tid].fill(0.0);
+            _thread_flow[tid].fill(0.0);
         }
 
         // Each task owns chunk t = [t*chunk, (t+1)*chunk) and writes
-        // into _flow_ws.flow[t].  Note we index by the deterministic task
+        // into _thread_flow[t].  Note we index by the deterministic task
         // id, not the physical thread id.
         _pool->parallel_for(num_threads, [&](uint32_t task, uint32_t /*tid*/) {
             uint32_t start = task * chunk;
             uint32_t end = std::min(start + chunk, num_cols);
-            auto& bucket = _flow_ws.flow[task];
+            auto& bucket = _thread_flow[task];
             for (uint32_t c = start; c < end; ++c) {
                 double x = primals[_col_to_lp[c]];
                 if (x < FLOW_NEGLIGIBLE_EPS)
@@ -776,7 +876,7 @@ private:
             _pool->parallel_for(num_arcs, [&](uint32_t a, uint32_t /*tid*/) {
                 double sum = 0.0;
                 for (uint32_t bucket = 0; bucket < num_threads; ++bucket) {
-                    sum += _flow_ws.flow[bucket][a];
+                    sum += _thread_flow[bucket][a];
                 }
                 flow[a] = sum;
             });
@@ -784,7 +884,7 @@ private:
             for (uint32_t a = 0; a < num_arcs; ++a) {
                 double sum = 0.0;
                 for (uint32_t bucket = 0; bucket < num_threads; ++bucket) {
-                    sum += _flow_ws.flow[bucket][a];
+                    sum += _thread_flow[bucket][a];
                 }
                 flow[a] = sum;
             }
@@ -802,19 +902,19 @@ private:
         if (_pool != nullptr && num_arcs >= PAR_ARC_THRESHOLD) {
             uint32_t num_threads = _pool->num_threads();
             for (uint32_t tid = 0; tid < num_threads; ++tid) {
-                _flow_ws.violated_arcs[tid].clear();
+                _thread_violated_arcs[tid].clear();
             }
             _pool->parallel_for(num_arcs, [&](uint32_t a, uint32_t tid) {
                 if (flow[a] > _inst->capacity[a] + CAP_VIOL_TOL &&
                     _arc_to_cap_row.find(a) == _arc_to_cap_row.end()) {
-                    _flow_ws.violated_arcs[tid].push_back(a);
+                    _thread_violated_arcs[tid].push_back(a);
                 }
             });
             size_t total = 0;
-            for (auto& v : _flow_ws.violated_arcs)
+            for (auto& v : _thread_violated_arcs)
                 total += v.size();
             new_arcs.reserve(total);
-            for (auto& v : _flow_ws.violated_arcs) {
+            for (auto& v : _thread_violated_arcs) {
                 new_arcs.insert(new_arcs.end(), v.begin(), v.end());
             }
             std::sort(new_arcs.begin(), new_arcs.end());
