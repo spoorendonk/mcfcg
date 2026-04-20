@@ -1,6 +1,9 @@
 #include "cg_test_util.h"
+#include "mcfcg/cg/master.h"
+#include "mcfcg/cg/master_base.h"
 #include "mcfcg/cg/path_cg.h"
 #include "mcfcg/cg/tree_cg.h"
+#include "mcfcg/cg/tree_master.h"
 #include "mcfcg/instance.h"
 
 #include <filesystem>
@@ -84,6 +87,26 @@ TEST(TransportationCorrectness, Winnipeg) {
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     solve_and_check(inst, opt.at("Winnipeg"));
+}
+
+// Winnipeg is the one shipped instance that triggers EdgeRows on path
+// (2836 arcs < 4345 commodities).  Lock that in so a future TNTP
+// reader change that flips the selector shows up as a test failure
+// rather than silently demoting Winnipeg back to CommodityRows and
+// leaving EdgeRows untested end-to-end.
+TEST(TransportationCorrectness, WinnipegPathPicksEdgeRows) {
+    auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
+    auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
+    if (!fs::exists(net))
+        GTEST_SKIP() << "data/transportation not found";
+    auto inst = mcfcg::read_tntp(net, trips, 2000.0);
+    mcfcg::PathMaster master;
+    master.init(inst);
+    EXPECT_EQ(master.slack_mode(), mcfcg::SlackMode::EdgeRows);
+
+    mcfcg::TreeMaster tree_master;
+    tree_master.init(inst);
+    EXPECT_EQ(tree_master.slack_mode(), mcfcg::SlackMode::CommodityRows);
 }
 
 TEST(TransportationCorrectness, Barcelona) {

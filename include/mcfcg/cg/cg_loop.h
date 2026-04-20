@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mcfcg/cg/master_base.h"
 #include "mcfcg/cg/path_cg.h"
 #include "mcfcg/cg/pricer_base.h"
 #include "mcfcg/util/limits.h"
@@ -7,6 +8,7 @@
 #include "mcfcg/util/timer.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <limits>
 #include <vector>
 
@@ -38,7 +40,12 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     const bool effective_pricing_filter = pricer_light || params.pricing_filter;
 
     Master master;
-    master.init(inst, params.solver_factory ? params.solver_factory() : nullptr, pool.get());
+    master.init(inst, params.solver_factory ? params.solver_factory() : nullptr, pool.get(),
+                params.warm_start);
+    if (params.verbosity >= Verbosity::Iteration) {
+        std::fprintf(stderr, "CG slack mode: %s\n",
+                     master.slack_mode() == SlackMode::EdgeRows ? "EdgeRows" : "CommodityRows");
+    }
 
     Pricer pricer;
     pricer.init(inst, PricingMode::AStar, pool.get(), params.pricing_batch_size, params.neg_rc_tol);

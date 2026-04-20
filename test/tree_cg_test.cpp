@@ -1,6 +1,8 @@
 #include "mcfcg/cg/tree_cg.h"
 
+#include "mcfcg/cg/master_base.h"
 #include "mcfcg/cg/path_cg.h"
+#include "mcfcg/cg/tree_master.h"
 #include "mcfcg/instance.h"
 #include "test_paths.h"
 
@@ -143,5 +145,71 @@ TEST(TreeCGColPurge, PurgeWithCapacity) {
     ASSERT_TRUE(tree_result.optimal);
     EXPECT_NEAR(path_result.objective, 21.0, 1e-4);
     EXPECT_NEAR(tree_result.objective, 21.0, 1e-4);
+    std::remove(path.c_str());
+}
+
+// --- SlackMode::EdgeRows on TreeMaster
+//
+// Two arcs each from its own origin into a common sink.  Two sources
+// (1, 2), two capacitated arcs — the tree selector picks EdgeRows
+// (2 > 2 is false).  No capacity binding (caps are loose), so this is
+// a smoke test for the "no init slacks" code path plus warm-start
+// feasibility.  Optimal: c1 on 1→3 = 3*2 = 6; c2 on 2→3 = 5*3 = 15;
+// total 21.
+TEST(TreeCGEdgeRows, SelectorAndSolve) {
+    std::string path = mcfcg::test::unique_test_path("tree_edge_rows.txt");
+    writeInstance(path, 3, 2, 2, "1 3 3 10\n2 3 5 10\n", "1 3 2\n2 3 3\n");
+    auto inst = mcfcg::read_commalab(path);
+
+    mcfcg::TreeMaster master;
+    master.init(inst);
+    EXPECT_EQ(master.slack_mode(), mcfcg::SlackMode::EdgeRows);
+
+    auto result = mcfcg::solve_tree_cg(inst);
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 21.0, 1e-4);
+    std::remove(path.c_str());
+}
+
+// Tree EdgeRows with column-purge and row-purge exercises the slack
+// index remap in purge_aged_columns and delete_edge_row_slacks on the
+// tree-column path.  Caps are loose so no cuts actually fire on this
+// instance, but the purge calls still run and must not disturb the
+// empty _slack_col_lp / _arc_to_slack_col state.  Mirrors the path
+// ColPurge/RowPurge/AggressiveAging tests.
+TEST(TreeCGEdgeRows, ColPurgeStaysFeasible) {
+    std::string path = mcfcg::test::unique_test_path("tree_edge_rows_colpurge.txt");
+    writeInstance(path, 3, 2, 2, "1 3 3 10\n2 3 5 10\n", "1 3 2\n2 3 3\n");
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.col_age_limit = 1;
+    auto result = mcfcg::solve_tree_cg(inst, params);
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 21.0, 1e-4);
+    std::remove(path.c_str());
+}
+
+TEST(TreeCGEdgeRows, RowPurgeStaysFeasible) {
+    std::string path = mcfcg::test::unique_test_path("tree_edge_rows_rowpurge.txt");
+    writeInstance(path, 3, 2, 2, "1 3 3 10\n2 3 5 10\n", "1 3 2\n2 3 3\n");
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.row_inactivity_threshold = 1;
+    auto result = mcfcg::solve_tree_cg(inst, params);
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 21.0, 1e-4);
+    std::remove(path.c_str());
+}
+
+TEST(TreeCGEdgeRows, AggressiveAgingStaysFeasible) {
+    std::string path = mcfcg::test::unique_test_path("tree_edge_rows_aggressive.txt");
+    writeInstance(path, 3, 2, 2, "1 3 3 10\n2 3 5 10\n", "1 3 2\n2 3 3\n");
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.col_age_limit = 1;
+    params.row_inactivity_threshold = 1;
+    auto result = mcfcg::solve_tree_cg(inst, params);
+    ASSERT_TRUE(result.optimal);
+    EXPECT_NEAR(result.objective, 21.0, 1e-4);
     std::remove(path.c_str());
 }

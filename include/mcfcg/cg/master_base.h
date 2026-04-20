@@ -7,15 +7,45 @@
 #include "mcfcg/util/tolerances.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <ostream>
+#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace mcfcg {
+
+// Where slack columns live.  The master places slacks on whichever row
+// set is smaller so the slack column count is min(num_structural_rows,
+// num_capacitated_arcs) — the selector runs in MasterBase::init once the
+// instance is known.
+//   CommodityRows: one slack per structural row (commodity demand in
+//                  path, source convexity in tree), added at init.
+//                  Structural rows carry the slack with coeff +1.
+//   EdgeRows:      one slack per capacity row, added lazily in
+//                  add_violated_capacity_constraints.  Slack coeff is -1
+//                  in its capacity row (flow_a - s_a ≤ cap_a).
+//                  Structural rows have NO slack entry, so the LP is
+//                  feasible only if the master is seeded with at least
+//                  one column per structural row — EdgeRows requires
+//                  warm_start=true; init throws when that contract is
+//                  violated.  After warm-start, demand rows stay served
+//                  because update_column_ages never ages out a basis
+//                  candidate (reduced cost within LP_FEAS_TOL of zero),
+//                  so purging aged columns cannot take the last basic
+//                  column serving a row.
+enum class SlackMode : uint8_t { CommodityRows, EdgeRows };
+
+// gtest pretty-printer so EXPECT_EQ on SlackMode prints the enum name
+// on failure instead of a raw byte.  Header-only; no link-time impact.
+inline std::ostream& operator<<(std::ostream& os, SlackMode mode) {
+    return os << (mode == SlackMode::EdgeRows ? "EdgeRows" : "CommodityRows");
+}
 
 // CRTP base class for path and tree master problems.  Shared logic:
 // LP init, column management, solve/duals, lazy capacity constraints,
@@ -85,20 +115,47 @@ protected:
     mutable static_map<uint32_t, double> _mu_cache;
     mutable std::vector<uint32_t> _mu_cache_dirty;
 
-    // Slack-cost bookkeeping.  Each structural row has one slack column
-    // added at init() with cost = max arc cost (good LP conditioning on
-    // small instances).  bump_active_slacks grows the cost geometrically
-    // each CG iteration while the slack remains basic; see cg_loop.h for
-    // the call site and the termination contract.
+    // Slack placement.  Selected in init() from a count of capacitated
+    // arcs vs structural rows; see SlackMode above for semantics.
+    SlackMode _slack_mode = SlackMode::CommodityRows;
+
+    // Max arc cost in the instance, computed once at init().  Used as
+    // the initial objective coefficient for every slack column — the
+    // init-time slacks in CommodityRows mode and the lazy slacks that
+    // add_violated_capacity_constraints creates in EdgeRows mode.
+    // Floors to 1.0 when every arc has cost 0.
+    double _max_cost = 1.0;
+
+    // EdgeRows-only: arc → LP column index of that arc's paired slack.
+    // Empty in CommodityRows mode.  Populated in
+    // add_violated_capacity_constraints, erased in
+    // purge_nonbinding_capacity_rows, and its values are remapped
+    // through the delete mask in purge_aged_columns and
+    // delete_edge_row_slacks (slacks and user columns interleave in LP
+    // index space as they are added across iterations, so deletes on
+    // either side can shift the other).
+    std::unordered_map<uint32_t, uint32_t> _arc_to_slack_col;
+
+    // Slack-cost bookkeeping.  bump_active_slacks grows the cost
+    // geometrically each CG iteration while a slack remains basic; see
+    // cg_loop.h for the call site and the termination contract.
     //
-    // INVARIANT: _slack_col_lp[k] is the LP column index of slack k.
-    // Slacks are the very first columns added to the LP (_col_to_lp for
-    // user columns only starts after the slack block), so these indices
-    // are just 0..num_structural-1 at init.  They never shift afterwards
-    // because purge_aged_columns only marks user columns for delete and
-    // HiGHS/COPT/cuOpt all preserve relative column order on delete.  Do
-    // not insert any column type ahead of the slacks without updating
-    // this vector.
+    // _slack_col_lp[k] is the LP column index of slack k; _slack_cost[k]
+    // is its current objective coefficient.
+    //
+    // Populated differently per mode:
+    //   CommodityRows: sized num_structural_rows at init().  Slacks are
+    //       columns 0..num_structural-1; they never shift because
+    //       purge_aged_columns only marks user columns (at higher LP
+    //       indices) for delete, and HiGHS/COPT/cuOpt preserve relative
+    //       column order on delete.
+    //   EdgeRows:      starts empty.  One entry is appended per slack
+    //       added in add_violated_capacity_constraints, and entries are
+    //       removed in purge_nonbinding_capacity_rows when a capacity
+    //       row is purged.  Slacks and user columns interleave in LP
+    //       index space as they are added across iterations, so
+    //       purge_aged_columns and delete_edge_row_slacks both remap
+    //       these indices through the delete_cols mask.
     std::vector<uint32_t> _slack_col_lp;
     std::vector<double> _slack_cost;  // current obj coeff of each slack
 
@@ -109,7 +166,7 @@ public:
     MasterBase() = default;
 
     void init(const Instance& inst, std::unique_ptr<LPSolver> lp = nullptr,
-              thread_pool* pool = nullptr) {
+              thread_pool* pool = nullptr, bool warm_start = true) {
         _inst = &inst;
         _pool = pool;
         _arc_to_col_entries = inst.graph.create_arc_map<std::vector<ArcColEntry>>();
@@ -134,6 +191,9 @@ public:
         _arc_to_cap_row.clear();
         _cap_row_to_arc.clear();
         _cap_row_last_active.clear();
+        _arc_to_slack_col.clear();
+        _slack_col_lp.clear();
+        _slack_cost.clear();
         _mu_cache = inst.graph.create_arc_map<double>(0.0);
         _mu_cache_dirty.clear();
 
@@ -143,47 +203,98 @@ public:
         // well-conditioned on small instances and the legacy fixed
         // BIG_M = 1e8 is reached only when the instance actually needs
         // it.  Zero-cost graphs get 1.0 as a degenerate floor.
-        double max_cost = 0.0;
+        _max_cost = 0.0;
         for (uint32_t a : inst.graph.arcs()) {
-            max_cost = std::max(max_cost, inst.cost[a]);
+            _max_cost = std::max(_max_cost, inst.cost[a]);
         }
-        if (max_cost <= 0.0) {
-            max_cost = 1.0;
+        if (_max_cost <= 0.0) {
+            _max_cost = 1.0;
+        }
+
+        // Slack-placement selector.  Put slacks on whichever row set is
+        // smaller.  An arc with capacity = INF (never finitely
+        // capacitated — e.g., a TNTP pseudo-arc) does not get a
+        // capacity row and would not carry a slack, so count only
+        // arcs that could ever receive a capacity row.
+        uint32_t num_capacitated_arcs = 0;
+        for (uint32_t a : inst.graph.arcs()) {
+            if (inst.capacity[a] < INF) {
+                ++num_capacitated_arcs;
+            }
+        }
+        _slack_mode = (num_capacitated_arcs > _num_structural_rows) ? SlackMode::CommodityRows
+                                                                    : SlackMode::EdgeRows;
+        // EdgeRows has no init-time slacks, so the LP is infeasible
+        // unless warm-start seeds at least one column per structural
+        // row.  cg_loop.h's warm-start pass does exactly that.
+        // Throwing (not asserting) ensures release builds surface the
+        // contract violation — otherwise the first solve() returns
+        // Infeasible and the CG loop silently reports optimal=false
+        // with no indication of the real cause.
+        if (_slack_mode == SlackMode::EdgeRows && !warm_start) {
+            throw std::invalid_argument(
+                "EdgeRows slack mode requires CGParams::warm_start=true "
+                "(no init-time slacks means the LP is only feasible once "
+                "warm-start seeds one column per structural row).");
         }
 
         // Create LP once
         _lp = lp ? std::move(lp) : create_lp_solver();
 
-        // Add slack columns (one per structural row, no row coefficients yet)
-        std::vector<double> slack_obj(_num_structural_rows, max_cost);
-        std::vector<double> slack_lb(_num_structural_rows, 0.0);
-        std::vector<double> slack_ub(_num_structural_rows, INF);
-        uint32_t first_slack = _lp->add_cols(slack_obj, slack_lb, slack_ub);
+        if (_slack_mode == SlackMode::CommodityRows) {
+            // Slack columns (one per structural row, no row coefficients yet)
+            std::vector<double> slack_obj(_num_structural_rows, _max_cost);
+            std::vector<double> slack_lb(_num_structural_rows, 0.0);
+            std::vector<double> slack_ub(_num_structural_rows, INF);
+            uint32_t first_slack = _lp->add_cols(slack_obj, slack_lb, slack_ub);
 
-        _slack_col_lp.resize(_num_structural_rows);
-        _slack_cost.assign(_num_structural_rows, max_cost);
-        for (uint32_t k = 0; k < _num_structural_rows; ++k) {
-            _slack_col_lp[k] = first_slack + k;
+            _slack_col_lp.resize(_num_structural_rows);
+            _slack_cost.assign(_num_structural_rows, _max_cost);
+            for (uint32_t k = 0; k < _num_structural_rows; ++k) {
+                _slack_col_lp[k] = first_slack + k;
+            }
+
+            // Structural rows with slack column coefficients (coeff +1)
+            std::vector<double> row_lb;
+            std::vector<double> row_ub;
+            std::vector<uint32_t> starts;
+            std::vector<uint32_t> indices;
+            std::vector<double> values;
+
+            for (uint32_t k = 0; k < _num_structural_rows; ++k) {
+                auto [lb, ub] = self().structural_row_bounds(k);
+                row_lb.push_back(lb);
+                row_ub.push_back(ub);
+                starts.push_back(static_cast<uint32_t>(indices.size()));
+                indices.push_back(k);  // slack column k
+                values.push_back(1.0);
+            }
+
+            _lp->add_rows(row_lb, row_ub, starts, indices, values);
+        } else {
+            // EdgeRows: no slack columns, structural rows have no
+            // initial entries.  Warm-start seeds at least one column per
+            // row so the LP is feasible on first solve.  Lazy capacity
+            // rows added later will each get their own paired slack.
+            std::vector<double> row_lb;
+            std::vector<double> row_ub;
+            std::vector<uint32_t> starts(_num_structural_rows, 0);
+            std::vector<uint32_t> indices;
+            std::vector<double> values;
+
+            for (uint32_t k = 0; k < _num_structural_rows; ++k) {
+                auto [lb, ub] = self().structural_row_bounds(k);
+                row_lb.push_back(lb);
+                row_ub.push_back(ub);
+            }
+
+            _lp->add_rows(row_lb, row_ub, starts, indices, values);
         }
-
-        // Add structural rows with slack column coefficients
-        std::vector<double> row_lb;
-        std::vector<double> row_ub;
-        std::vector<uint32_t> starts;
-        std::vector<uint32_t> indices;
-        std::vector<double> values;
-
-        for (uint32_t k = 0; k < _num_structural_rows; ++k) {
-            auto [lb, ub] = self().structural_row_bounds(k);
-            row_lb.push_back(lb);
-            row_ub.push_back(ub);
-            starts.push_back(static_cast<uint32_t>(indices.size()));
-            indices.push_back(k);  // slack column k
-            values.push_back(1.0);
-        }
-
-        _lp->add_rows(row_lb, row_ub, starts, indices, values);
     }
+
+    // Which slack placement init() picked.  Used by cg_loop.h for the
+    // selection log and by tests.
+    SlackMode slack_mode() const noexcept { return _slack_mode; }
 
     uint32_t add_columns(std::vector<ColumnT> cols) {
         if (cols.empty())
@@ -407,6 +518,36 @@ public:
             _cap_row_last_active.push_back(current_iter);
         }
 
+        // EdgeRows: add one slack column per new capacity row with coeff
+        // -1 in its row (flow_a - s_a ≤ cap_a, s_a ≥ 0).  Initial cost
+        // matches the init-time slack cost in CommodityRows mode; the
+        // bump loop in cg_loop.h grows it like any other slack.  These
+        // slacks live in _slack_col_lp / _slack_cost alongside the
+        // CommodityRows slacks (one of the two vectors is empty per
+        // mode — we never mix).
+        if (_slack_mode == SlackMode::EdgeRows) {
+            uint32_t n = static_cast<uint32_t>(new_arcs.size());
+            std::vector<double> slack_obj(n, _max_cost);
+            std::vector<double> slack_lb(n, 0.0);
+            std::vector<double> slack_ub(n, INF);
+            std::vector<uint32_t> slack_starts(n + 1);
+            std::vector<uint32_t> slack_row_idx(n);
+            std::vector<double> slack_values(n, -1.0);
+            for (uint32_t i = 0; i < n; ++i) {
+                slack_starts[i] = i;
+                slack_row_idx[i] = first_row + i;
+            }
+            slack_starts[n] = n;
+            uint32_t first_slack = _lp->add_cols(slack_obj, slack_lb, slack_ub, slack_starts,
+                                                 slack_row_idx, slack_values);
+            for (uint32_t i = 0; i < n; ++i) {
+                uint32_t lp_col = first_slack + i;
+                _arc_to_slack_col[new_arcs[i]] = lp_col;
+                _slack_col_lp.push_back(lp_col);
+                _slack_cost.push_back(_max_cost);
+            }
+        }
+
         return new_arcs;
     }
 
@@ -432,14 +573,26 @@ public:
                 }
             }
         } else {
-            // Barrier solver fallback: a column is active if primal > eps
-            // or reduced cost < -eps (matches Flowty MCF model).
-            constexpr double EPS = COL_ACTIVE_EPS;
+            // Barrier solver fallback: a column is "active" if it is a
+            // basis candidate.  At an LP optimum, a column is in the
+            // basis iff its reduced cost is zero — so any column with
+            // rc ≤ LP_FEAS_TOL could legitimately be in the basis and
+            // must not be aged out.  The stricter earlier criterion
+            // (rc < -COL_ACTIVE_EPS, matching the pricer's "strictly
+            // attractive" threshold) only catches columns the pricer
+            // *would add*, not columns the LP is already keeping alive
+            // at degeneracy; that let barrier backends like COPT age
+            // out every column of a demand row when primals spread thin
+            // across many near-optimal paths, and the next solve()
+            // returned Infeasible.  We also treat any column with
+            // primal > LP_FEAS_TOL as active — measurable primal flow
+            // comes from somewhere.
             auto reduced_costs = _lp->get_reduced_costs();
             bool have_rc = !reduced_costs.empty();
             for (uint32_t c = 0; c < _columns.size(); ++c) {
                 uint32_t lp_col = _col_to_lp[c];
-                bool active = primals[lp_col] > EPS || (have_rc && reduced_costs[lp_col] < -EPS);
+                bool active = primals[lp_col] > LP_FEAS_TOL ||
+                              (have_rc && reduced_costs[lp_col] <= LP_FEAS_TOL);
                 if (active) {
                     _col_age[c] = 0;
                 } else {
@@ -455,10 +608,13 @@ public:
         if (_cap_row_to_arc.empty())
             return 0;
 
-        // Build delete mask for LP (size = total LP rows)
+        // Build delete mask for LP (size = total LP rows).  Also remember
+        // the arcs whose rows are being purged so the EdgeRows branch
+        // below can delete each row's paired slack.
         uint32_t total_rows = _lp->num_rows();
         std::vector<int32_t> mask(total_rows, 0);
         uint32_t purge_count = 0;
+        std::vector<uint32_t> purged_arcs;
 
         for (uint32_t i = 0; i < _cap_row_to_arc.size(); ++i) {
             uint32_t row = _num_structural_rows + i;
@@ -466,6 +622,9 @@ public:
                 current_iter - _cap_row_last_active[i] > inactivity_threshold) {
                 mask[row] = 1;
                 ++purge_count;
+                if (_slack_mode == SlackMode::EdgeRows) {
+                    purged_arcs.push_back(_cap_row_to_arc[i]);
+                }
             }
         }
 
@@ -492,6 +651,10 @@ public:
         _cap_row_to_arc = std::move(new_cap_row_to_arc);
         _cap_row_last_active = std::move(new_cap_row_last_active);
 
+        if (_slack_mode == SlackMode::EdgeRows && !purged_arcs.empty()) {
+            delete_edge_row_slacks(purged_arcs);
+        }
+
         return purge_count;
     }
 
@@ -499,7 +662,11 @@ public:
         if (age_limit == 0)
             return 0;
 
-        // Build LP-level deletion mask
+        // Build LP-level deletion mask.  Aged columns carry zero primal
+        // and non-negative reduced cost to within LP tolerance
+        // (see update_column_ages), so they are neither in the basis
+        // nor basis candidates — the LP cannot become infeasible by
+        // removing them.
         uint32_t num_lp = _lp->num_cols();
         std::vector<int32_t> mask(num_lp, 0);
 
@@ -552,6 +719,21 @@ public:
             vec.resize(out);
         }
 
+        // Remap slack LP indices — only in EdgeRows mode.  CommodityRows
+        // slacks sit at indices 0..N-1 and cannot shift: every deleted
+        // user column has a strictly larger LP index, so mask[k] == k
+        // for all k < N.  Slacks are never in the delete set
+        // (mask[lp_col] == 1 only for user columns), so
+        // mask[_slack_col_lp[k]] is always ≥ 0 in EdgeRows mode.
+        if (_slack_mode == SlackMode::EdgeRows) {
+            for (uint32_t k = 0; k < _slack_col_lp.size(); ++k) {
+                _slack_col_lp[k] = static_cast<uint32_t>(mask[_slack_col_lp[k]]);
+            }
+            for (auto& [arc, lp_col] : _arc_to_slack_col) {
+                lp_col = static_cast<uint32_t>(mask[lp_col]);
+            }
+        }
+
         return purge_count;
     }
 
@@ -562,6 +744,62 @@ public:
     uint32_t num_lp_rows() const { return _lp->num_rows(); }
 
 private:
+    // EdgeRows helper.  Delete the paired slack column for every arc in
+    // `purged_arcs`, then remap every surviving LP column index (user
+    // columns, other slacks, _arc_to_slack_col values) through the
+    // delete mask.  Keeps the purge_nonbinding_capacity_rows body short
+    // and isolates the EdgeRows bookkeeping from the row-delete logic.
+    //
+    // Called between delete_rows and the next solve(), so it also lives
+    // in the "no get_primals/get_duals" window — HiGHS/COPT both
+    // invalidate those caches on delete.
+    void delete_edge_row_slacks(const std::vector<uint32_t>& purged_arcs) {
+        uint32_t total_cols = _lp->num_cols();
+        std::vector<int32_t> col_mask(total_cols, 0);
+        for (uint32_t arc : purged_arcs) {
+            auto it = _arc_to_slack_col.find(arc);
+            assert(it != _arc_to_slack_col.end() &&
+                   "EdgeRows invariant: every capacity row has a paired slack");
+            col_mask[it->second] = 1;
+        }
+        _lp->delete_cols(col_mask);
+
+        // Remap every user column's LP index.  Slacks and user columns
+        // interleave over successive iterations — a slack added in iter
+        // N sits between user columns added in iter N-1 and those added
+        // in iter N+1 — so deleting a slack at LP index S shifts every
+        // user column with index > S down by one.
+        for (uint32_t c = 0; c < _col_to_lp.size(); ++c) {
+            _col_to_lp[c] = static_cast<uint32_t>(col_mask[_col_to_lp[c]]);
+        }
+
+        // Compact _slack_col_lp / _slack_cost, drop the deleted slacks,
+        // and rewrite surviving entries with their new LP index.
+        uint32_t write = 0;
+        for (uint32_t k = 0; k < _slack_col_lp.size(); ++k) {
+            int32_t new_lp = col_mask[_slack_col_lp[k]];
+            if (new_lp >= 0) {
+                _slack_col_lp[write] = static_cast<uint32_t>(new_lp);
+                _slack_cost[write] = _slack_cost[k];
+                ++write;
+            }
+        }
+        _slack_col_lp.resize(write);
+        _slack_cost.resize(write);
+
+        // Single-pass erase-or-remap: a purged slack's col_mask entry is
+        // -1, a surviving slack's entry is its new LP index.
+        for (auto it = _arc_to_slack_col.begin(); it != _arc_to_slack_col.end();) {
+            int32_t new_lp = col_mask[it->second];
+            if (new_lp < 0) {
+                it = _arc_to_slack_col.erase(it);
+            } else {
+                it->second = static_cast<uint32_t>(new_lp);
+                ++it;
+            }
+        }
+    }
+
     // Sum the flow contribution of every column on every arc.
     //
     // For determinism the parallel path uses a *static* block partition:
