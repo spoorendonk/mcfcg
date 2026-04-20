@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mcfcg/cg/flow_workspaces.h"
 #include "mcfcg/cg/slack_state.h"
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
@@ -72,14 +73,11 @@ protected:
     // build).  Owned by the caller; nullptr means run sequentially.
     thread_pool* _pool = nullptr;
 
-    // Per-thread workspaces reused across iterations, both sized
-    // [num_threads] when a pool is present and empty otherwise.
-    // _thread_flow holds partial flow accumulators for compute_arc_flow;
-    // _thread_violated_arcs holds per-thread violated-arc collections
-    // for find_violated_arcs.  Reused across calls so the inner vectors
-    // keep their amortized capacity.
-    std::vector<static_map<uint32_t, double>> _thread_flow;
-    std::vector<std::vector<uint32_t>> _thread_violated_arcs;
+    // Per-thread workspaces for the parallel passes in compute_arc_flow
+    // / find_violated_arcs.  See FlowWorkspaces in flow_workspaces.h.
+    // Empty when the master has no pool; the serial paths use stack
+    // locals.
+    FlowWorkspaces _flow_ws;
 
     // Persistent dense cache for capacity duals returned from
     // get_capacity_duals.  Sized to num_arcs at init() so the pricer's
@@ -127,16 +125,7 @@ public:
         // compute_arc_flow / find_violated_arcs.  Skip allocation
         // entirely when there is no pool — the serial paths use stack
         // locals and don't need them.
-        _thread_flow.clear();
-        _thread_violated_arcs.clear();
-        if (pool != nullptr) {
-            uint32_t num_threads = pool->num_threads();
-            _thread_flow.reserve(num_threads);
-            for (uint32_t tid = 0; tid < num_threads; ++tid) {
-                _thread_flow.push_back(inst.graph.create_arc_map<double>(0.0));
-            }
-            _thread_violated_arcs.resize(num_threads);
-        }
+        _flow_ws.init(inst.graph, pool != nullptr ? pool->num_threads() : 0);
         _num_structural_rows = self().num_structural_entities();
         _columns.clear();
         _col_to_lp.clear();
@@ -761,16 +750,16 @@ private:
         uint32_t chunk = (num_cols + num_threads - 1) / num_threads;
 
         for (uint32_t tid = 0; tid < num_threads; ++tid) {
-            _thread_flow[tid].fill(0.0);
+            _flow_ws.flow[tid].fill(0.0);
         }
 
         // Each task owns chunk t = [t*chunk, (t+1)*chunk) and writes
-        // into _thread_flow[t].  Note we index by the deterministic task
+        // into _flow_ws.flow[t].  Note we index by the deterministic task
         // id, not the physical thread id.
         _pool->parallel_for(num_threads, [&](uint32_t task, uint32_t /*tid*/) {
             uint32_t start = task * chunk;
             uint32_t end = std::min(start + chunk, num_cols);
-            auto& bucket = _thread_flow[task];
+            auto& bucket = _flow_ws.flow[task];
             for (uint32_t c = start; c < end; ++c) {
                 double x = primals[_col_to_lp[c]];
                 if (x < FLOW_NEGLIGIBLE_EPS)
@@ -786,7 +775,7 @@ private:
             _pool->parallel_for(num_arcs, [&](uint32_t a, uint32_t /*tid*/) {
                 double sum = 0.0;
                 for (uint32_t bucket = 0; bucket < num_threads; ++bucket) {
-                    sum += _thread_flow[bucket][a];
+                    sum += _flow_ws.flow[bucket][a];
                 }
                 flow[a] = sum;
             });
@@ -794,7 +783,7 @@ private:
             for (uint32_t a = 0; a < num_arcs; ++a) {
                 double sum = 0.0;
                 for (uint32_t bucket = 0; bucket < num_threads; ++bucket) {
-                    sum += _thread_flow[bucket][a];
+                    sum += _flow_ws.flow[bucket][a];
                 }
                 flow[a] = sum;
             }
@@ -812,19 +801,19 @@ private:
         if (_pool != nullptr && num_arcs >= PAR_ARC_THRESHOLD) {
             uint32_t num_threads = _pool->num_threads();
             for (uint32_t tid = 0; tid < num_threads; ++tid) {
-                _thread_violated_arcs[tid].clear();
+                _flow_ws.violated_arcs[tid].clear();
             }
             _pool->parallel_for(num_arcs, [&](uint32_t a, uint32_t tid) {
                 if (flow[a] > _inst->capacity[a] + CAP_VIOL_TOL &&
                     _arc_to_cap_row.find(a) == _arc_to_cap_row.end()) {
-                    _thread_violated_arcs[tid].push_back(a);
+                    _flow_ws.violated_arcs[tid].push_back(a);
                 }
             });
             size_t total = 0;
-            for (auto& v : _thread_violated_arcs)
+            for (auto& v : _flow_ws.violated_arcs)
                 total += v.size();
             new_arcs.reserve(total);
-            for (auto& v : _thread_violated_arcs) {
+            for (auto& v : _flow_ws.violated_arcs) {
                 new_arcs.insert(new_arcs.end(), v.begin(), v.end());
             }
             std::sort(new_arcs.begin(), new_arcs.end());
