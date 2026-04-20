@@ -521,10 +521,11 @@ public:
         // EdgeRows: add one slack column per new capacity row with coeff
         // -1 in its row (flow_a - s_a ≤ cap_a, s_a ≥ 0).  Initial cost
         // matches the init-time slack cost in CommodityRows mode; the
-        // bump loop in cg_loop.h grows it like any other slack.  These
-        // slacks live in _slack_col_lp / _slack_cost alongside the
-        // CommodityRows slacks (one of the two vectors is empty per
-        // mode — we never mix).
+        // bump loop in cg_loop.h grows it like any other slack.  New
+        // entries are appended to the shared _slack_col_lp / _slack_cost
+        // vectors — those are empty in EdgeRows init() and grow only
+        // here; in CommodityRows mode they are populated at init() and
+        // this branch is never reached.
         if (_slack_mode == SlackMode::EdgeRows) {
             uint32_t n = static_cast<uint32_t>(new_arcs.size());
             std::vector<double> slack_obj(n, _max_cost);
