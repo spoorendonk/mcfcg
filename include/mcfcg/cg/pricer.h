@@ -3,7 +3,6 @@
 #include "mcfcg/cg/column.h"
 #include "mcfcg/cg/pricer_base.h"
 
-#include <cassert>
 #include <cstdint>
 #include <vector>
 
@@ -21,10 +20,11 @@ class PathPricer : public PricerBase<PathPricer, Column> {
 
         for (uint32_t k : src.commodity_indices) {
             vertex_t sink = _inst->commodities[k].sink;
-            // A* runs until every target sink is settled; an unvisited
-            // sink would mean the instance graph is disconnected between
-            // source and sink, which is a caller-level error.
-            assert(dijk.visited(sink));
+            // A* exhausts its heap when no path to sink exists (disconnected
+            // source→sink).  Skip that commodity and keep pricing the others;
+            // the master's demand-row slack absorbs the unmet demand.
+            if (!dijk.visited(sink))
+                continue;
 
             // Extract path and compute true reduced cost
             Column col;

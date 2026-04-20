@@ -3,7 +3,6 @@
 #include "mcfcg/cg/pricer_base.h"
 #include "mcfcg/cg/tree_column.h"
 
-#include <cassert>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -29,10 +28,13 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
         for (uint32_t k : src.commodity_indices) {
             uint32_t sink = _inst->commodities[k].sink;
-            // A* runs until every target sink is settled; an unvisited
-            // sink would mean the instance graph is disconnected between
-            // source and sink, which is a caller-level error.
-            assert(dijk.visited(sink));
+            // A* exhausts its heap when no path to sink exists (disconnected
+            // source→sink).  Skip the unreachable commodity and keep
+            // building a partial tree over the remaining reachable sinks;
+            // the reduced-cost check below still decides whether to emit
+            // this source's column.
+            if (!dijk.visited(sink))
+                continue;
             double d = _inst->commodities[k].demand;
 
             double path_orig_cost = 0.0;
