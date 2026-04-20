@@ -296,6 +296,7 @@ public:
                 indices.push_back(k);  // slack column k
                 values.push_back(1.0);
             }
+            starts.push_back(static_cast<uint32_t>(indices.size()));
 
             _lp->add_rows(row_lb, row_ub, starts, indices, values);
         } else {
@@ -305,7 +306,7 @@ public:
             // rows added later will each get their own paired slack.
             std::vector<double> row_lb;
             std::vector<double> row_ub;
-            std::vector<uint32_t> starts(_num_structural_rows, 0);
+            std::vector<uint32_t> starts(_num_structural_rows + 1, 0);
             std::vector<uint32_t> indices;
             std::vector<double> values;
 
@@ -527,6 +528,7 @@ public:
                 values.push_back(entry.coeff);
             }
         }
+        starts.push_back(static_cast<uint32_t>(indices.size()));
 
         uint32_t first_row = _lp->add_rows(row_lb, row_ub, starts, indices, values);
 

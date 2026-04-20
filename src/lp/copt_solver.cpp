@@ -105,15 +105,12 @@ public:
         uint32_t first = num_rows();
         int m = static_cast<int>(lb.size());
 
-        // Convert starts to rowMatBeg + rowMatCnt
+        // Convert starts (size m+1 with sentinel) to rowMatBeg + rowMatCnt
         std::vector<int> row_beg(m);
         std::vector<int> row_cnt(m);
         for (int i = 0; i < m; ++i) {
             row_beg[i] = static_cast<int>(starts[i]);
-            uint32_t end = (static_cast<size_t>(i + 1) < starts.size())
-                               ? starts[i + 1]
-                               : static_cast<uint32_t>(values.size());
-            row_cnt[i] = static_cast<int>(end - starts[i]);
+            row_cnt[i] = static_cast<int>(starts[i + 1] - starts[i]);
         }
 
         std::vector<int> col_indices(indices.size());

@@ -18,13 +18,16 @@ public:
 
     // Add columns with row coefficients (CSC format).
     // Returns index of first new column.
-    // starts: CSC column starts into row_indices/values (size = obj.size()+1)
+    // starts: CSC column starts into row_indices/values, size = obj.size() + 1
+    //         (the final sentinel must equal values.size()).
     virtual uint32_t add_cols(const std::vector<double>& obj, const std::vector<double>& lb,
                               const std::vector<double>& ub, const std::vector<uint32_t>& starts,
                               const std::vector<uint32_t>& row_indices,
                               const std::vector<double>& values) = 0;
 
     // Add rows (constraints) in CSR format. Returns index of first new row.
+    // starts: CSR row starts into indices/values, size = lb.size() + 1
+    //         (the final sentinel must equal values.size()).
     virtual uint32_t add_rows(const std::vector<double>& lb, const std::vector<double>& ub,
                               const std::vector<uint32_t>& starts,
                               const std::vector<uint32_t>& indices,

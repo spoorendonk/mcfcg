@@ -104,8 +104,7 @@ public:
             _row_ub.push_back(ub[i]);
 
             uint32_t begin = starts[i];
-            // Callers don't include sentinel; derive end from next start or nnz
-            uint32_t end = (i + 1 < m) ? starts[i + 1] : static_cast<uint32_t>(values.size());
+            uint32_t end = starts[i + 1];  // caller includes sentinel
 
             uint32_t row = first + i;
             for (uint32_t j = begin; j < end; ++j) {

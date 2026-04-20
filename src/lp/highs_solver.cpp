@@ -62,15 +62,9 @@ public:
         HighsInt m = static_cast<HighsInt>(lb.size());
         HighsInt nnz = static_cast<HighsInt>(values.size());
 
-        // Convert to HighsInt
         std::vector<HighsInt> h_starts(starts.size());
         for (size_t i = 0; i < starts.size(); ++i) {
             h_starts[i] = static_cast<HighsInt>(starts[i]);
-        }
-        // add_rows needs starts of size m+1 for bulk call
-        // If starts.size() == m, append nnz as sentinel
-        if (h_starts.size() == static_cast<size_t>(m)) {
-            h_starts.push_back(nnz);
         }
 
         std::vector<HighsInt> h_indices(indices.size());
