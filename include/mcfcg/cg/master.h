@@ -33,9 +33,6 @@ class PathMaster : public MasterBase<PathMaster, Column> {
             flow[arc] += x;
         }
     }
-
-public:
-    std::vector<double> get_demand_duals() const { return get_structural_duals(); }
 };
 
 }  // namespace mcfcg

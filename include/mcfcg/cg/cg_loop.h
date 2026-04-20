@@ -48,7 +48,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     }
 
     Pricer pricer;
-    pricer.init(inst, PricingMode::AStar, pool.get(), params.pricing_batch_size, params.neg_rc_tol);
+    pricer.init(inst, pool.get(), params.pricing_batch_size, params.neg_rc_tol);
     pricer.set_track_arcs(effective_pricing_filter);
 
     Timer timer;

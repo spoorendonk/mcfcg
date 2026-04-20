@@ -8,7 +8,7 @@ namespace mcfcg {
 
 CGResult solve_tree_cg(const Instance& inst, const CGParams& params) {
     return solve_cg<TreeMaster, TreePricer>(
-        inst, params, [](const TreeMaster& m) { return m.get_source_duals(); },
+        inst, params, [](const TreeMaster& m) { return m.get_structural_duals(); },
         static_cast<uint32_t>(inst.sources.size()));
 }
 

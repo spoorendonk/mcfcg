@@ -34,9 +34,6 @@ class TreeMaster : public MasterBase<TreeMaster, TreeColumn> {
             flow[af.arc] += x * af.flow;
         }
     }
-
-public:
-    std::vector<double> get_source_duals() const { return get_structural_duals(); }
 };
 
 }  // namespace mcfcg

@@ -8,7 +8,7 @@ namespace mcfcg {
 
 CGResult solve_path_cg(const Instance& inst, const CGParams& params) {
     return solve_cg<PathMaster, PathPricer>(
-        inst, params, [](const PathMaster& m) { return m.get_demand_duals(); },
+        inst, params, [](const PathMaster& m) { return m.get_structural_duals(); },
         static_cast<uint32_t>(inst.commodities.size()));
 }
 

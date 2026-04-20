@@ -75,7 +75,7 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
             continue;
         }
 
-        auto pi = master.get_demand_duals();
+        auto pi = master.get_structural_duals();
         const auto& mu = master.get_capacity_duals();
 
         for (const auto& col : master.columns()) {
@@ -161,7 +161,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj,
             continue;
         }
 
-        auto pi_s = master.get_source_duals();
+        auto pi_s = master.get_structural_duals();
         const auto& mu = master.get_capacity_duals();
 
         for (const auto& col : master.columns()) {

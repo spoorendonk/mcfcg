@@ -17,8 +17,6 @@
 
 namespace mcfcg {
 
-enum class PricingMode { Dijkstra, AStar };
-
 // Compute lower bounds from every vertex to the nearest sink using original
 // (unscaled) arc costs on the reverse graph.  All unique sink vertices across
 // all commodities are seeded with distance 0 and a single multi-source reverse
@@ -100,7 +98,6 @@ inline static_map<uint32_t, int64_t> compute_lower_bounds_to_targets(const Insta
 // setup/cleanup, and utility methods.
 //
 // Derived must implement:
-//   void price_source_dijkstra(s_idx, src, source_v, duals, mu, out, thread_id)
 //   void process_source(s_idx, src, duals, mu, dijk, out)  [auto& dijk]
 template <typename Derived, typename ColumnT>
 class PricerBase {
@@ -114,15 +111,14 @@ protected:
     std::vector<uint8_t> _source_postponed;
     std::vector<std::vector<uint32_t>> _source_arcs;
     bool _track_arcs = false;
-    PricingMode _mode = PricingMode::AStar;
     double _neg_rc_tol = NEG_RC_TOL;
     static_map<vertex_t, int64_t> _lower_bounds;
     static_map<uint32_t, int64_t> _rc;
 
     // Per-thread state for parallel pricing
     std::vector<dijkstra_workspace> _workspaces;
-    std::vector<static_map<uint32_t, bool>> _is_targets;  // A* mode only
-    std::vector<std::vector<ColumnT>> _thread_columns;    // reused across batches
+    std::vector<static_map<uint32_t, bool>> _is_targets;
+    std::vector<std::vector<ColumnT>> _thread_columns;  // reused across batches
     thread_pool* _pool = nullptr;
 
     // Round-robin cursor: where to start pricing next iteration
@@ -141,18 +137,16 @@ public:
     PricerBase(PricerBase&&) noexcept = default;
     PricerBase& operator=(PricerBase&&) noexcept = default;
 
-    void init(const Instance& inst, PricingMode mode = PricingMode::AStar,
-              thread_pool* pool = nullptr, uint32_t batch_size = 0,
+    void init(const Instance& inst, thread_pool* pool = nullptr, uint32_t batch_size = 0,
               double neg_rc_tol = NEG_RC_TOL) {
         _inst = &inst;
         _source_postponed.assign(inst.sources.size(), 0);
-        _mode = mode;
         _neg_rc_tol = neg_rc_tol;
         _pool = pool;
         _batch_size = batch_size;
         _last_source_idx = 0;
 
-        uint32_t num_ws = pool ? pool->num_threads() : 1;
+        uint32_t num_ws = pool != nullptr ? pool->num_threads() : 1;
         _workspaces.clear();
         _workspaces.reserve(num_ws);
         for (uint32_t wi = 0; wi < num_ws; ++wi)
@@ -160,13 +154,11 @@ public:
         _thread_columns.resize(num_ws);
 
         _rc = inst.graph.create_arc_map<int64_t>();
-        if (_mode == PricingMode::AStar) {
-            _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
-            _is_targets.clear();
-            _is_targets.reserve(num_ws);
-            for (uint32_t wi = 0; wi < num_ws; ++wi)
-                _is_targets.push_back(inst.graph.create_vertex_map<bool>(false));
-        }
+        _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
+        _is_targets.clear();
+        _is_targets.reserve(num_ws);
+        for (uint32_t wi = 0; wi < num_ws; ++wi)
+            _is_targets.push_back(inst.graph.create_vertex_map<bool>(false));
     }
 
     void set_track_arcs(bool enabled) {
@@ -179,15 +171,7 @@ public:
     std::vector<ColumnT> price(const std::vector<double>& duals,
                                const static_map<uint32_t, double>& mu, bool final_round = false,
                                uint32_t max_cols = 0) {
-        static const std::unordered_set<uint32_t> no_forbidden;
-        return price(duals, mu, no_forbidden, final_round, max_cols);
-    }
-
-    std::vector<ColumnT> price(const std::vector<double>& duals,
-                               const static_map<uint32_t, double>& mu,
-                               const std::unordered_set<uint32_t>& forbidden_arcs, bool final_round,
-                               uint32_t max_cols = 0) {
-        compute_rc(mu, forbidden_arcs);
+        compute_rc(mu);
 
         uint32_t n_sources = static_cast<uint32_t>(_inst->sources.size());
         if (n_sources == 0)
@@ -251,33 +235,11 @@ public:
     }
 
 protected:
-    void compute_rc(const static_map<uint32_t, double>& mu,
-                    const std::unordered_set<uint32_t>& forbidden_arcs) {
-        constexpr int64_t BIG = shortest_path_semiring<int64_t>::infty / 2;
+    // Branch-free body so the compiler can auto-vectorize the dense
+    // cost/mu/_rc loop under -march=native.
+    void compute_rc(const static_map<uint32_t, double>& mu) {
         uint32_t n_arcs = _inst->graph.num_arcs();
-
-        // Fast path: no forbidden arcs, branch-free body so the compiler
-        // can auto-vectorize the dense cost/mu/_rc loop under -march=native.
-        // Hit by every live caller (pricing without diversification cuts).
-        if (forbidden_arcs.empty()) {
-            auto body = [&](uint32_t a) {
-                double val = _inst->cost[a] - mu[a];
-                _rc[a] = (val <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(val * SCALE));
-            };
-            if (_pool != nullptr && n_arcs >= PAR_ARC_THRESHOLD) {
-                _pool->parallel_for(n_arcs, [&](uint32_t a, uint32_t /*tid*/) { body(a); });
-            } else {
-                for (uint32_t a = 0; a < n_arcs; ++a)
-                    body(a);
-            }
-            return;
-        }
-
         auto body = [&](uint32_t a) {
-            if (forbidden_arcs.count(a) > 0) {
-                _rc[a] = BIG;
-                return;
-            }
             double val = _inst->cost[a] - mu[a];
             _rc[a] = (val <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(val * SCALE));
         };
@@ -327,12 +289,7 @@ protected:
                           uint32_t thread_id) {
         const auto& src = _inst->sources[s_idx];
         vertex_t source_v = src.vertex;
-
-        if (_mode == PricingMode::AStar) {
-            price_source_astar(s_idx, src, source_v, duals, mu, out, thread_id);
-        } else {
-            self().price_source_dijkstra(s_idx, src, source_v, duals, mu, out, thread_id);
-        }
+        price_source_astar(s_idx, src, source_v, duals, mu, out, thread_id);
     }
 
     void price_source_astar(uint32_t s_idx, const Source& src, vertex_t source_v,
