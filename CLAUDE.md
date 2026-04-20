@@ -1,10 +1,8 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 @.devkit/standards/cpp.md
 
-## Project: mcfcg
+Navigation: LSP → narrow Grep → sliced Read. See `.devkit/standards/common.md` "Code Navigation".
+
+# Project: mcfcg
 
 ## Build & Test
 
@@ -13,11 +11,11 @@ rm -rf build
 ```
 
 ```build
-cmake -B build && cmake --build build -j$(nproc)
+cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY && cmake --build build -j$(nproc)
 ```
 
 ```test
-ctest --test-dir build --output-on-failure -j$(nproc)
+GTEST_BRIEF=1 ctest --test-dir build --output-on-failure --progress -j$(nproc)
 ```
 
 Run a single test by name:
