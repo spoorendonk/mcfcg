@@ -58,6 +58,8 @@ inline std::ostream& operator<<(std::ostream& os, SlackMode mode) {
 //   void for_each_arc_coeff(const ColumnT& col, auto&& callback) const;
 //   void accumulate_flow(const ColumnT& col, double x,
 //                        static_map<uint32_t, double>& flow) const;
+//   double slack_cost_upper_bound() const;  // upper bound on real column
+//                                           // cost; drives slack_cost_ceiling
 //
 // Invariant: for_each_arc_coeff must not yield the same arc twice for a
 // given column.  Path columns are simple paths; tree columns aggregate
@@ -159,6 +161,15 @@ protected:
     std::vector<uint32_t> _slack_col_lp;
     std::vector<double> _slack_cost;  // current obj coeff of each slack
 
+    // Absolute ceiling on the geometric slack-cost bump.  Set in init()
+    // from a Derived-supplied upper bound on real column cost (10× so a
+    // slack can always out-price any real column if genuinely infeasible)
+    // and clamped to 1e8 to keep the LP basis numerically stable
+    // (HiGHS's dual simplex ratio test starts failing above ~1e9,
+    // especially on tree formulations where LP obj is already in the
+    // 1e9 range after many repeated changeColCost+solve cycles).
+    double _slack_cost_ceiling = 1e8;
+
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
     const Derived& self() const noexcept { return static_cast<const Derived&>(*this); }
 
@@ -217,6 +228,15 @@ public:
         if (_max_cost <= 0.0) {
             _max_cost = 1.0;
         }
+
+        // Slack-cost ceiling: 10× a Derived-supplied upper bound on real
+        // column cost.  Lower-bounded by 1e8 (historical BIG_M — always
+        // sufficient on small instances) and upper-bounded by 1e9 (above
+        // which HiGHS's dual-simplex ratio test starts to fail).  The
+        // 10× factor leaves the slack enough headroom to out-price the
+        // costliest real column; on large-demand tree instances this
+        // lifts the ceiling above 1e8.
+        _slack_cost_ceiling = std::clamp(10.0 * self().slack_cost_upper_bound(), 1e8, 1e9);
 
         // Slack-placement selector.  Put slacks on whichever row set is
         // smaller.  An arc with capacity = INF (never finitely
@@ -441,24 +461,16 @@ public:
             return 0;
         }
         constexpr double SLACK_ACTIVE_EPS = COL_ACTIVE_EPS;
-        // Absolute cap. HiGHS's dual simplex ratio test starts failing
-        // above ~1e9 on tree formulations where the LP obj is already
-        // in the 1e9 range, especially after many repeated
-        // changeColCost+solve cycles accumulate numerical error in the
-        // basis.  1e8 matches the legacy BIG_M and is the largest
-        // ceiling verified across path and tree on the shipped
-        // instances.
-        constexpr double SLACK_COST_CEILING = 1e8;
         uint32_t bumped = 0;
         for (uint32_t k = 0; k < _slack_col_lp.size(); ++k) {
             uint32_t lp_col = _slack_col_lp[k];
             if (lp_col >= primals.size() || primals[lp_col] <= SLACK_ACTIVE_EPS) {
                 continue;
             }
-            if (_slack_cost[k] >= SLACK_COST_CEILING) {
+            if (_slack_cost[k] >= _slack_cost_ceiling) {
                 continue;  // already at LP-backend numerical ceiling
             }
-            _slack_cost[k] = std::min(_slack_cost[k] * factor, SLACK_COST_CEILING);
+            _slack_cost[k] = std::min(_slack_cost[k] * factor, _slack_cost_ceiling);
             _lp->set_col_cost(lp_col, _slack_cost[k]);
             ++bumped;
         }

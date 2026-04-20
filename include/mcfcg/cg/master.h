@@ -33,6 +33,13 @@ class PathMaster : public MasterBase<PathMaster, Column> {
             flow[arc] += x;
         }
     }
+
+    // Path column cost = sum over arcs of inst.cost[a], bounded above by
+    // (|V|-1) × max_arc_cost (simple path).  Returned per column; the
+    // ceiling is 10× this so a slack can always out-price any path.
+    double slack_cost_upper_bound() const {
+        return _max_cost * static_cast<double>(_inst->graph.num_vertices());
+    }
 };
 
 }  // namespace mcfcg

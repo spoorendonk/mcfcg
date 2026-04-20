@@ -34,6 +34,25 @@ class TreeMaster : public MasterBase<TreeMaster, TreeColumn> {
             flow[af.arc] += x * af.flow;
         }
     }
+
+    // Tree column cost for source s = sum_{k in s} d_k × path_k_cost,
+    // bounded above by (sum_{k in s} d_k) × (|V|-1) × max_arc_cost.
+    // Use the max over sources so the slack ceiling is tight enough to
+    // out-price the costliest real column but not needlessly large.
+    double slack_cost_upper_bound() const {
+        double max_src_demand_sum = 0.0;
+        for (const auto& src : _inst->sources) {
+            double sum = 0.0;
+            for (uint32_t k : src.commodity_indices) {
+                sum += _inst->commodities[k].demand;
+            }
+            max_src_demand_sum = std::max(max_src_demand_sum, sum);
+        }
+        if (max_src_demand_sum <= 0.0) {
+            max_src_demand_sum = 1.0;
+        }
+        return _max_cost * static_cast<double>(_inst->graph.num_vertices()) * max_src_demand_sum;
+    }
 };
 
 }  // namespace mcfcg
