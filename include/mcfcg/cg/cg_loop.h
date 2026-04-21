@@ -127,13 +127,15 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // inf.  LP_obj is always the LP's own objective so convergence
         // is visible regardless of feasibility.
         auto finish_iter = [&](double obj, uint32_t num_new_caps, uint32_t num_active_slacks,
-                               uint32_t added, uint32_t purged, uint32_t num_purged_cuts) {
+                               uint32_t added, bool added_not_committed, uint32_t purged,
+                               uint32_t num_purged_cuts) {
             iter_timer.stop(TimerCat::Total);
             logger.print_iteration(
                 iter + 1, best_ub, best_lb, obj, master.num_lp_cols(), master.num_lp_rows(),
-                num_active_slacks, added, purged, num_new_caps, num_purged_cuts,
-                iter_timer.elapsed(TimerCat::LP), iter_timer.elapsed(TimerCat::Pricing),
-                iter_timer.elapsed(TimerCat::Separation), iter_timer.elapsed(TimerCat::Total));
+                num_active_slacks, added, added_not_committed, purged, num_new_caps,
+                num_purged_cuts, iter_timer.elapsed(TimerCat::LP),
+                iter_timer.elapsed(TimerCat::Pricing), iter_timer.elapsed(TimerCat::Separation),
+                iter_timer.elapsed(TimerCat::Total));
             result.iterations = iter + 1;
         };
 
@@ -189,7 +191,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // them with fresh duals.  No bump, no purge — nothing got
         // priced that could have aged out.
         if (pricer_heavy && num_new_caps > 0) {
-            finish_iter(obj, num_new_caps, num_active_slacks, 0, 0, 0);
+            finish_iter(obj, num_new_caps, num_active_slacks, 0, false, 0, 0);
             continue;
         }
 
@@ -246,8 +248,10 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                 iter_timer.stop(TimerCat::Pricing);
                 timer.stop(TimerCat::Pricing);
                 timer.stop(TimerCat::Total);
+                // Flag the "+col" count as uncommitted (prefixed '*')
+                // since we're returning without calling add_columns.
                 finish_iter(obj, num_new_caps, num_active_slacks,
-                            static_cast<uint32_t>(new_cols.size()), 0, 0);
+                            static_cast<uint32_t>(new_cols.size()), true, 0, 0);
                 set_optimal(best_ub, iter);
                 return result;
             }
@@ -272,7 +276,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         if (new_cols.empty()) {
             if (num_new_caps == 0 && num_active_slacks == 0) {
                 timer.stop(TimerCat::Total);
-                finish_iter(obj, num_new_caps, 0, 0, 0, 0);
+                finish_iter(obj, num_new_caps, 0, 0, false, 0, 0);
                 set_optimal(obj, iter);
                 return result;
             }
@@ -280,7 +284,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                 (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
             }
             pricer.reset_postponed();
-            finish_iter(obj, num_new_caps, num_active_slacks, 0, 0, 0);
+            finish_iter(obj, num_new_caps, num_active_slacks, 0, false, 0, 0);
             continue;
         }
 
@@ -293,7 +297,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         uint32_t added = master.add_columns(std::move(new_cols));
 
         result.total_columns = master.num_columns();
-        finish_iter(obj, num_new_caps, num_active_slacks, added, purged, num_purged);
+        finish_iter(obj, num_new_caps, num_active_slacks, added, false, purged, num_purged);
     }
 
     timer.stop(TimerCat::Total);

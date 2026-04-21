@@ -114,7 +114,7 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
         }
 
         if (new_cols.empty()) {
-            const bool slacks_active = master.has_active_slacks(primals);
+            const bool slacks_active = master.count_active_slacks(primals) > 0;
             if (num_new_caps == 0 && !slacks_active) {
                 optimal = true;
                 break;
@@ -204,7 +204,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj,
         }
 
         if (new_cols.empty()) {
-            const bool slacks_active = master.has_active_slacks(primals);
+            const bool slacks_active = master.count_active_slacks(primals) > 0;
             if (num_new_caps == 0 && !slacks_active) {
                 optimal = true;
                 break;

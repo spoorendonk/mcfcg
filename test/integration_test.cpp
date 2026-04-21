@@ -380,6 +380,55 @@ TEST(FeatureTests, PricerHeavyTree) {
     EXPECT_LE(result.objective, opt.at("grid1") * (1.0 + 0.0001));
 }
 
+// Solve planar150 under both formulations and check the reported
+// objective is within RELATIVE_FEAS_TOL of the reference.  planar150
+// is small enough to run fast but big enough that LB tracking and
+// gap-based early termination both get exercised; reducing the LB
+// (e.g. forgetting demand weighting or dropping the dual obj) will
+// surface here as either a wrong objective or a non-optimal exit.
+TEST(FeatureTests, LagrangianBoundPath) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar150");
+    mcfcg::CGParams params;
+    auto result = mcfcg::solve_path_cg(inst, params);
+    EXPECT_TRUE(result.optimal);
+    double ref = opt.at("planar150");
+    double rel = std::abs(result.objective - ref) / std::max(1.0, std::abs(ref));
+    EXPECT_LT(rel, mcfcg::RELATIVE_FEAS_TOL) << "obj=" << result.objective << " ref=" << ref;
+}
+
+TEST(FeatureTests, LagrangianBoundTree) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar150");
+    mcfcg::CGParams params;
+    auto result = mcfcg::solve_tree_cg(inst, params);
+    EXPECT_TRUE(result.optimal);
+    double ref = opt.at("planar150");
+    double rel = std::abs(result.objective - ref) / std::max(1.0, std::abs(ref));
+    EXPECT_LT(rel, mcfcg::RELATIVE_FEAS_TOL) << "obj=" << result.objective << " ref=" << ref;
+}
+
+// Repeated parallel runs must land within the design feasibility
+// tolerance of the same value (the LP solver's basis choice still
+// depends on the column arrival order across threads, so exact bitwise
+// equality is not guaranteed — but the reported objective must be a
+// valid UB within tolerance either way).
+TEST(FeatureTests, ParallelReproducibility) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar80");
+    mcfcg::CGParams params;
+    params.num_threads = 4;
+    auto r1 = mcfcg::solve_path_cg(inst, params);
+    auto r2 = mcfcg::solve_path_cg(inst, params);
+    EXPECT_TRUE(r1.optimal);
+    EXPECT_TRUE(r2.optimal);
+    double ref = opt.at("planar80");
+    EXPECT_LT(std::abs(r1.objective - ref) / std::max(1.0, std::abs(ref)),
+              mcfcg::RELATIVE_FEAS_TOL);
+    EXPECT_LT(std::abs(r2.objective - ref) / std::max(1.0, std::abs(ref)),
+              mcfcg::RELATIVE_FEAS_TOL);
+}
+
 // --- cuOpt GPU solver tests ---
 
 #ifdef MCFCG_USE_CUOPT

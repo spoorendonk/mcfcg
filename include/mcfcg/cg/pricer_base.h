@@ -120,13 +120,13 @@ protected:
     std::vector<dijkstra_workspace> _workspaces;
     std::vector<static_map<uint32_t, bool>> _is_targets;
     std::vector<std::vector<ColumnT>> _thread_columns;  // reused across batches
-    std::vector<double> _thread_min_rc_sum;             // per-thread Lagrangian bound accumulator
-    // Per-thread accumulator for the LB rounding-error margin.  Each
-    // priced path contributes `L / SCALE` (path) or `d * L / SCALE`
-    // (tree, demand-weighted) to account for the gap between Dijkstra's
-    // scaled-integer shortest path and the true-reduced-cost shortest
-    // path — see `lb_error_bound()` below.
-    std::vector<double> _thread_rc_error_bound;
+    // Per-source LB accumulators.  Writing to a per-source slot (instead
+    // of a per-thread slot) keeps the final sum order-independent of the
+    // thread pool's task→thread dispatch, so `_last_min_rc_sum` and
+    // `_last_rc_error_bound` are deterministic run-to-run.  Each source
+    // is processed by exactly one thread in a given batch, so no race.
+    std::vector<double> _source_min_rc;
+    std::vector<double> _source_rc_error;
     thread_pool* _pool = nullptr;
 
     // Round-robin cursor: where to start pricing next iteration
@@ -171,8 +171,8 @@ public:
         for (uint32_t wi = 0; wi < num_ws; ++wi)
             _workspaces.emplace_back(inst.graph.num_vertices());
         _thread_columns.resize(num_ws);
-        _thread_min_rc_sum.assign(num_ws, 0.0);
-        _thread_rc_error_bound.assign(num_ws, 0.0);
+        _source_min_rc.assign(inst.sources.size(), 0.0);
+        _source_rc_error.assign(inst.sources.size(), 0.0);
 
         _rc = inst.graph.create_arc_map<int64_t>();
         _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
@@ -207,9 +207,12 @@ public:
             return {};
         }
 
-        // Reset per-thread accumulators for this price() call.
-        std::fill(_thread_min_rc_sum.begin(), _thread_min_rc_sum.end(), 0.0);
-        std::fill(_thread_rc_error_bound.begin(), _thread_rc_error_bound.end(), 0.0);
+        // Reset per-source accumulators for this price() call.  Sources
+        // not revisited this call (postponed under non-final_round) keep
+        // their zero and contribute nothing — correct since priced_all
+        // will be false in that case and the LB gate skips reading.
+        std::fill(_source_min_rc.begin(), _source_min_rc.end(), 0.0);
+        std::fill(_source_rc_error.begin(), _source_rc_error.end(), 0.0);
 
         uint32_t effective_batch = (_batch_size > 0) ? _batch_size : n_sources;
         uint32_t start = final_round ? 0 : _last_source_idx;
@@ -248,10 +251,11 @@ public:
         }
 
         _last_source_idx = (start + sources_scanned) % n_sources;
-        _last_min_rc_sum =
-            std::accumulate(_thread_min_rc_sum.begin(), _thread_min_rc_sum.end(), 0.0);
+        // Deterministic summation in source-index order — independent
+        // of thread dispatch.
+        _last_min_rc_sum = std::accumulate(_source_min_rc.begin(), _source_min_rc.end(), 0.0);
         _last_rc_error_bound =
-            std::accumulate(_thread_rc_error_bound.begin(), _thread_rc_error_bound.end(), 0.0);
+            std::accumulate(_source_rc_error.begin(), _source_rc_error.end(), 0.0);
         _last_priced_all = !early_break && priced_count == n_sources;
         return all_columns;
     }

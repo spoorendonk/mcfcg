@@ -108,7 +108,7 @@ solve_cg(Instance, params):
     if new_cols is empty:
       new_cols = pricer.price(pi, mu, final_round=True)  # retry postponed sources
       if new_cols is empty:
-        if master.has_active_slacks():
+        if master.count_active_slacks() > 0:
           master.bump_active_slacks()     # grow slack cost, continue
         else:
           return optimal(master.get_obj())

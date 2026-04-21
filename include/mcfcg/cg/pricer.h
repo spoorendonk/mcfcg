@@ -13,10 +13,17 @@ class PathPricer : public PricerBase<PathPricer, Column> {
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi,
                         const static_map<uint32_t, double>& mu, auto& dijk,
-                        std::vector<Column>& new_columns, uint32_t thread_id) {
+                        std::vector<Column>& new_columns, uint32_t /*thread_id*/) {
         bool found_any = false;
         if (_track_arcs)
             _source_arcs[s_idx].clear();
+
+        // Per-source LB accumulators.  All commodities rooted at this
+        // source are processed sequentially in this call, so local
+        // accumulation is race-free.  Written to the pricer's
+        // per-source slot at the end for deterministic final sum.
+        double source_min_rc = 0.0;
+        double source_rc_error = 0.0;
 
         for (uint32_t k : src.commodity_indices) {
             vertex_t sink = _inst->commodities[k].sink;
@@ -53,13 +60,16 @@ class PathPricer : public PricerBase<PathPricer, Column> {
             // 0) (shifting π_k down by |rc*_k| to regain dual
             // feasibility costs d_k per unit in the dual obj).  The
             // rounding-error budget is scaled by d_k too so it matches
-            // the correction's units.
+            // the correction's units.  LP_FEAS_TOL per arc bounds both
+            // integer-scale rounding and the val<=0 clamp in
+            // compute_rc (|val| is bounded by LP_FEAS_TOL at numerical
+            // noise, which is the only regime where the clamp fires
+            // under correct mu<=0 sign convention).
             double demand = _inst->commodities[k].demand;
             if (true_rc < 0.0) {
-                _thread_min_rc_sum[thread_id] += demand * true_rc;
+                source_min_rc += demand * true_rc;
             }
-            _thread_rc_error_bound[thread_id] +=
-                demand * static_cast<double>(col.arcs.size()) / SCALE;
+            source_rc_error += demand * static_cast<double>(col.arcs.size()) * LP_FEAS_TOL;
 
             if (true_rc >= _neg_rc_tol)
                 continue;
@@ -71,6 +81,8 @@ class PathPricer : public PricerBase<PathPricer, Column> {
         }
 
         _source_postponed[s_idx] = found_any ? 0 : 1;
+        _source_min_rc[s_idx] = source_min_rc;
+        _source_rc_error[s_idx] = source_rc_error;
     }
 };
 

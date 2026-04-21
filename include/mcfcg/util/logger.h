@@ -28,9 +28,9 @@ public:
     // NOLINTBEGIN(bugprone-easily-swappable-parameters)
     void print_iteration(uint32_t iter, double upper_bound, double lower_bound, double lp_obj,
                          uint32_t num_col, uint32_t num_row, uint32_t num_active_slacks,
-                         uint32_t added_col, uint32_t removed_col, uint32_t added_cut,
-                         uint32_t removed_cut, double t_lp, double t_pr, double t_sp,
-                         double t_tot) const {
+                         uint32_t added_col, bool added_not_committed, uint32_t removed_col,
+                         uint32_t added_cut, uint32_t removed_cut, double t_lp, double t_pr,
+                         double t_sp, double t_tot) const {
         // NOLINTEND(bugprone-easily-swappable-parameters)
         if (_verbosity < Verbosity::Iteration) {
             return;
@@ -53,9 +53,18 @@ public:
         char obj_buf[16];
         std::snprintf(obj_buf, sizeof(obj_buf), "%.4e", lp_obj);
 
+        // Prefix "+col" with '*' when the pricer produced columns that
+        // were NOT actually added to the master (gap-based early
+        // termination prints the pricer's output for diagnostic value).
+        char added_buf[16];
+        if (added_not_committed) {
+            std::snprintf(added_buf, sizeof(added_buf), "*%u", added_col);
+        } else {
+            std::snprintf(added_buf, sizeof(added_buf), "%u", added_col);
+        }
         std::fprintf(stderr,
-                     "%5u %12s %12s %12s %6u %6u %5u %6u %6u %6u %6u %7.3f %7.3f %7.3f %7.3f\n",
-                     iter, ub_buf, lb_buf, obj_buf, num_col, num_row, num_active_slacks, added_col,
+                     "%5u %12s %12s %12s %6u %6u %5u %6s %6u %6u %6u %7.3f %7.3f %7.3f %7.3f\n",
+                     iter, ub_buf, lb_buf, obj_buf, num_col, num_row, num_active_slacks, added_buf,
                      removed_col, added_cut, removed_cut, t_lp, t_pr, t_sp, t_tot);
     }
 

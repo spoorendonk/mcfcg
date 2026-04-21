@@ -148,7 +148,7 @@ protected:
     // readability — MasterBase directly mutates all fields from
     // install/remap/delete call sites that interleave with structural
     // and capacity rows.  The pure per-iteration operations
-    // (has_active, bump_active) are methods.
+    // (count_active, bump_active) are methods.
     struct SlackState {
         SlackMode mode = SlackMode::CommodityRows;
 
@@ -175,17 +175,6 @@ protected:
             col_lp.clear();
             cost.clear();
             arc_to_col.clear();
-        }
-
-        // True iff any slack column is basic with positive primal.
-        bool has_active(std::span<const double> primals) const noexcept {
-            if (col_lp.empty()) {
-                return false;
-            }
-            constexpr double SLACK_ACTIVE_EPS = COL_ACTIVE_EPS;
-            return std::ranges::any_of(col_lp, [&](uint32_t lp_col) {
-                return lp_col < primals.size() && primals[lp_col] > SLACK_ACTIVE_EPS;
-            });
         }
 
         // Count slack columns that are basic with positive primal.
@@ -475,10 +464,6 @@ public:
     // solved LP's primals in scope pass them here to avoid re-copying.
     uint32_t count_active_slacks(const std::vector<double>& primals) const {
         return _slack.count_active(std::span<const double>{primals});
-    }
-
-    bool has_active_slacks(const std::vector<double>& primals) const {
-        return _slack.has_active(std::span<const double>{primals});
     }
 
     // Grow the cost of every slack column currently basic with positive

@@ -45,7 +45,7 @@ inline constexpr double LP_FEAS_TOL = RELATIVE_FEAS_TOL;  // 1e-4
 // A column (or slack) is considered genuinely basic / active when its
 // LP primal exceeds this threshold.  Must be > LP_FEAS_TOL so that
 // residual numerical noise from the LP solver does not register as
-// "active".  Used by bump_active_slacks, has_active_slacks, and the
+// "active".  Used by bump_active_slacks, count_active_slacks, and the
 // barrier-solver fallback in update_column_ages.
 inline constexpr double COL_ACTIVE_EPS = LP_FEAS_TOL * 10;  // 1e-3
 

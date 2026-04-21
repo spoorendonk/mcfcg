@@ -14,11 +14,12 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
                         const static_map<uint32_t, double>& mu, auto& dijk,
-                        std::vector<TreeColumn>& new_columns, uint32_t thread_id) {
+                        std::vector<TreeColumn>& new_columns, uint32_t /*thread_id*/) {
         TreeColumn col;
         col.source_idx = s_idx;
         col.cost = 0.0;
         double tree_rc = -pi_s[s_idx];
+        double source_rc_error = 0.0;
 
         if (_track_arcs) {
             _source_arcs[s_idx].clear();
@@ -64,8 +65,10 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             col.cost += d * path_orig_cost;
             // Tree column's rc is the demand-weighted sum of its per-
             // commodity path rcs, so the rounding-error budget is
-            // demand-weighted too: d * L / SCALE.
-            _thread_rc_error_bound[thread_id] += d * static_cast<double>(path_arcs) / SCALE;
+            // demand-weighted too.  LP_FEAS_TOL per arc bounds both
+            // integer-scale rounding and the val<=0 clamp in
+            // compute_rc (see pricer.h for the rationale).
+            source_rc_error += d * static_cast<double>(path_arcs) * LP_FEAS_TOL;
         }
 
         if (_track_arcs) {
@@ -77,10 +80,10 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
         // Lagrangian LB accumulator: this source's best tree RC,
         // regardless of whether the col gets emitted.  Zero for
-        // non-attractive sources.
-        if (tree_rc < 0.0) {
-            _thread_min_rc_sum[thread_id] += tree_rc;
-        }
+        // non-attractive sources.  Written to a per-source slot for
+        // deterministic final summation.
+        _source_min_rc[s_idx] = tree_rc < 0.0 ? tree_rc : 0.0;
+        _source_rc_error[s_idx] = source_rc_error;
 
         if (tree_rc >= _neg_rc_tol) {
             _source_postponed[s_idx] = 1;
