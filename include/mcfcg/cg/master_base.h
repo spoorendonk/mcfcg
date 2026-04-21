@@ -48,6 +48,26 @@ inline std::ostream& operator<<(std::ostream& out, SlackMode mode) {
     return out << (mode == SlackMode::EdgeRows ? "EdgeRows" : "CommodityRows");
 }
 
+// Count arcs with a finite capacity.  Arcs at INF (uncapacitated, e.g.
+// TNTP pseudo-arcs) never receive a capacity row and are excluded.
+inline uint32_t count_capacitated_arcs(const Instance& inst) {
+    uint32_t num_capped = 0;
+    for (uint32_t arc : inst.graph.arcs()) {
+        if (inst.capacity[arc] < INF) {
+            ++num_capped;
+        }
+    }
+    return num_capped;
+}
+
+// Slack-placement selector.  Put slacks on whichever row set is smaller
+// so the slack column count is min(num_structural_rows, capped_arcs).
+// Single source of truth: called from MasterBase::init and from
+// `mcfcg_cli` to print the choice in the preamble.
+inline SlackMode select_slack_mode(uint32_t num_capped_arcs, uint32_t num_structural_rows) {
+    return num_capped_arcs > num_structural_rows ? SlackMode::CommodityRows : SlackMode::EdgeRows;
+}
+
 // CRTP base class for path and tree master problems.  Shared logic:
 // LP init, column management, solve/duals, lazy capacity constraints,
 // column aging, and row/column purging.
@@ -261,19 +281,7 @@ public:
         // lifts the ceiling above 1e8.
         _slack.cost_ceiling = std::clamp(10.0 * self().slack_cost_upper_bound(), 1e8, 1e9);
 
-        // Slack-placement selector.  Put slacks on whichever row set is
-        // smaller.  An arc with capacity = INF (never finitely
-        // capacitated — e.g., a TNTP pseudo-arc) does not get a
-        // capacity row and would not carry a slack, so count only
-        // arcs that could ever receive a capacity row.
-        uint32_t num_capacitated_arcs = 0;
-        for (uint32_t a : inst.graph.arcs()) {
-            if (inst.capacity[a] < INF) {
-                ++num_capacitated_arcs;
-            }
-        }
-        _slack.mode = (num_capacitated_arcs > _num_structural_rows) ? SlackMode::CommodityRows
-                                                                    : SlackMode::EdgeRows;
+        _slack.mode = select_slack_mode(count_capacitated_arcs(inst), _num_structural_rows);
         // EdgeRows has no init-time slacks, so the LP is infeasible
         // unless warm-start seeds at least one column per structural
         // row.  cg_loop.h's warm-start pass does exactly that.
@@ -568,11 +576,15 @@ public:
     }
 
     // Mark capacity rows as active when their dual is non-zero.
+    // Must be called AFTER get_capacity_duals() in the same iter —
+    // reads from the `_mu_cache` that get_capacity_duals populates
+    // rather than hitting the LP backend a second time (the backend
+    // call is an API roundtrip on COPT/GPU and the values are
+    // identical).
     void update_capacity_row_activity(uint32_t current_iter) {
-        auto duals = _lp->get_duals();
         for (uint32_t i = 0; i < _cap_row_to_arc.size(); ++i) {
-            uint32_t row = _num_structural_rows + i;
-            if (row < duals.size() && std::abs(duals[row]) > DUAL_ACTIVE_EPS) {
+            uint32_t arc = _cap_row_to_arc[i];
+            if (std::abs(_mu_cache[arc]) > DUAL_ACTIVE_EPS) {
                 _cap_row_last_active[i] = current_iter;
             }
         }
@@ -675,7 +687,9 @@ public:
     }
 
     uint32_t purge_aged_columns(uint32_t age_limit) {
-        if (age_limit == 0)
+        // age_limit == 0 disables aging; INF_U32 is cg_loop's "aging off"
+        // signal under PricerHeavy — either way, no column can exceed it.
+        if (age_limit == 0 || age_limit == INF_U32)
             return 0;
 
         // Build LP-level deletion mask.  Aged columns carry zero primal

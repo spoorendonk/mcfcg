@@ -14,9 +14,9 @@ struct CGResult {
     double objective;
     // CG-loop master iterations.  Counts every pass through the loop body,
     // including iterations where pricing was deferred under
-    // CGStrategy::PricerHeavy (i.e. iterations that only added lazy capacity
-    // rows and re-solved the master).  Under CGStrategy::PricerLight every
-    // counted iteration also priced.
+    // CGStrategy::PricerHeavy (iterations that only added lazy capacity
+    // rows; the next iteration's single solve picks them up).  Under
+    // CGStrategy::PricerLight every counted iteration also priced.
     uint32_t iterations;
     uint32_t total_columns;
     bool optimal;

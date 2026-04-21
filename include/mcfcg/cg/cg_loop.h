@@ -8,7 +8,6 @@
 #include "mcfcg/util/timer.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <limits>
 #include <vector>
 
@@ -100,8 +99,10 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         iter_timer.start(TimerCat::Total);
 
         // Log the iteration and record the iter number on
-        // result.iterations.  All exit points in this loop share this
-        // printout — only added / purged / num_purged_cuts differ.
+        // result.iterations.  All four exit points share this printout
+        // (PricerHeavy cuts-only continue, pricing-exhausted optimal,
+        // pricing-exhausted non-optimal continue, end-of-iter with new
+        // columns) — only added / purged / num_purged_cuts differ.
         auto finish_iter = [&](double obj, uint32_t num_new_caps, uint32_t added, uint32_t purged,
                                uint32_t num_purged_cuts) {
             iter_timer.stop(TimerCat::Total);
@@ -190,13 +191,14 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // and no slack is basic.  Otherwise the next iter's LP solve
         // (with new caps and/or bumped slack costs) will make progress.
         if (new_cols.empty()) {
-            if (num_new_caps == 0 && !master.has_active_slacks(primals)) {
+            const bool slacks_active = master.has_active_slacks(primals);
+            if (num_new_caps == 0 && !slacks_active) {
                 timer.stop(TimerCat::Total);
-                finish_iter(obj, 0, 0, 0, 0);
+                finish_iter(obj, num_new_caps, 0, 0, 0);
                 set_optimal(obj, iter);
                 return result;
             }
-            if (master.has_active_slacks(primals)) {
+            if (slacks_active) {
                 (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
             }
             pricer.reset_postponed();

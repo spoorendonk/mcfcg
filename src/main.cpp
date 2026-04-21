@@ -1,3 +1,4 @@
+#include "mcfcg/cg/master_base.h"
 #include "mcfcg/cg/path_cg.h"
 #include "mcfcg/cg/tree_cg.h"
 #include "mcfcg/instance.h"
@@ -178,22 +179,16 @@ int main(int argc, char* argv[]) {
     std::fprintf(stderr, "Pricing threads: %u%s\n", effective_threads,
                  num_threads == 0 ? " (auto)" : "");
 
-    // Mirror the slack-placement selector from MasterBase::init so the
-    // chosen mode shows up in the preamble instead of buried after the LP
-    // backend's init chatter.  Structural rows: num_commodities for path,
-    // num_sources for tree.  Formula is min(structural, capacitated_arcs).
-    uint32_t num_capacitated_arcs = 0;
-    for (uint32_t a : inst.graph.arcs()) {
-        if (inst.capacity[a] < mcfcg::INF) {
-            ++num_capacitated_arcs;
-        }
-    }
+    // Print the slack-placement selection in the preamble (before LP
+    // backend init chatter).  Single source of truth is select_slack_mode
+    // in master_base.h — MasterBase::init calls the same helper.
+    uint32_t num_capped_arcs = mcfcg::count_capacitated_arcs(inst);
     uint32_t num_structural_rows = static_cast<uint32_t>(
         formulation == "tree" ? inst.sources.size() : inst.commodities.size());
-    const char* slack_mode =
-        num_capacitated_arcs > num_structural_rows ? "CommodityRows" : "EdgeRows";
-    std::fprintf(stderr, "Slack mode: %s (struct=%u, capped_arcs=%u)\n", slack_mode,
-                 num_structural_rows, num_capacitated_arcs);
+    mcfcg::SlackMode chosen_mode = mcfcg::select_slack_mode(num_capped_arcs, num_structural_rows);
+    std::fprintf(stderr, "Slack mode: %s (struct=%u, capped_arcs=%u)\n",
+                 chosen_mode == mcfcg::SlackMode::EdgeRows ? "EdgeRows" : "CommodityRows",
+                 num_structural_rows, num_capped_arcs);
 
     params.max_iterations = max_iters;
     params.num_threads = num_threads;
@@ -220,8 +215,13 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "COPT not available. Rebuild with -DMCFCG_USE_COPT=ON.\n");
         return EXIT_FAILURE;
 #endif
-    } else if (verbose_solver) {
-        params.solver_factory = [] { return mcfcg::create_lp_solver(true); };
+    } else if (solver == "highs") {
+        params.solver_factory = [verbose_solver] {
+            return mcfcg::create_lp_solver(verbose_solver);
+        };
+    } else {
+        std::fprintf(stderr, "Unknown solver '%s'. Valid: highs, cuopt, copt\n", solver.c_str());
+        return EXIT_FAILURE;
     }
 
     auto start = std::chrono::steady_clock::now();
