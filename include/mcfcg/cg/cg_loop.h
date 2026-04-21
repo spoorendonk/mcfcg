@@ -31,13 +31,13 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     auto pool = make_thread_pool(params.num_threads);
 
     // Strategy bundle: resolve effective params from params.strategy.
-    // `PricerLight` caps columns per iter, disables column aging, enables the
+    // `PricerHeavy` caps columns per iter, disables column aging, enables the
     // source pricing filter, and defers pricing in iterations that added
     // lazy capacity rows.
-    const bool pricer_light = (params.strategy == CGStrategy::PricerLight);
-    const uint32_t effective_col_limit = pricer_light ? num_entities : params.max_cols_per_iter;
-    const uint32_t effective_col_age_limit = pricer_light ? INF_U32 : params.col_age_limit;
-    const bool effective_pricing_filter = pricer_light || params.pricing_filter;
+    const bool pricer_heavy = (params.strategy == CGStrategy::PricerHeavy);
+    const uint32_t effective_col_limit = pricer_heavy ? num_entities : params.max_cols_per_iter;
+    const uint32_t effective_col_age_limit = pricer_heavy ? INF_U32 : params.col_age_limit;
+    const bool effective_pricing_filter = pricer_heavy || params.pricing_filter;
 
     Master master;
     master.init(inst, params.solver_factory ? params.solver_factory() : nullptr, pool.get(),
@@ -105,7 +105,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
         // Stop the per-iter timer, log the iteration, and record the iter
         // number on result.iterations.  All four exit points in this loop
-        // (normal end-of-iter, PricerLight cuts-only early continue,
+        // (normal end-of-iter, PricerHeavy cuts-only early continue,
         // slack-bump fallback, pricing-exhausted optimal) share this
         // printout — only added / purged / num_purged_cuts differ.
         auto finish_iter = [&](double obj, uint32_t num_new_caps, uint32_t added, uint32_t purged,
@@ -160,15 +160,15 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             obj = master.get_obj();
             primals = master.get_primals();
 
-            // PricerLight protocol — cuts before cols.  This is a mandatory
-            // part of the strategy bundle (see CGStrategy::PricerLight in
+            // PricerHeavy protocol — cuts before cols.  This is a mandatory
+            // part of the strategy bundle (see CGStrategy::PricerHeavy in
             // path_cg.h): when new lazy capacity rows were just added, defer
             // pricing entirely so the master reaches a cut-stable state.  The
             // next iteration re-separates with fresh duals; once no more rows
             // are violated, that iteration finally prices.  All post-pricing
             // housekeeping (column aging, purge, add_columns) is also skipped
             // for this deferred iteration since there is nothing to add.
-            if (pricer_light) {
+            if (pricer_heavy) {
                 finish_iter(obj, num_new_caps, 0, 0, 0);
                 continue;
             }

@@ -99,7 +99,7 @@ public:
     virtual std::vector<bool> get_basic_cols() const { return {}; }
 };
 
-std::unique_ptr<LPSolver> create_lp_solver();
+std::unique_ptr<LPSolver> create_lp_solver(bool verbose = false);
 
 #ifdef MCFCG_USE_CUOPT
 std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose = false);

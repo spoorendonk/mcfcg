@@ -358,22 +358,22 @@ TEST(FeatureTests, TreePricerEmitsPartialTreeOnUnreachableSink) {
     }
 }
 
-// Verify PricerLight strategy produces same optimal objective.
-TEST(FeatureTests, PricerLightPath) {
+// Verify PricerHeavy strategy produces same optimal objective.
+TEST(FeatureTests, PricerHeavyPath) {
     auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
     mcfcg::CGParams params;
-    params.strategy = mcfcg::CGStrategy::PricerLight;
+    params.strategy = mcfcg::CGStrategy::PricerHeavy;
     auto result = mcfcg::solve_path_cg(inst, params);
     EXPECT_TRUE(result.optimal);
     solve_and_check(inst, opt.at("grid1"));
 }
 
-TEST(FeatureTests, PricerLightTree) {
+TEST(FeatureTests, PricerHeavyTree) {
     auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
     mcfcg::CGParams params;
-    params.strategy = mcfcg::CGStrategy::PricerLight;
+    params.strategy = mcfcg::CGStrategy::PricerHeavy;
     auto result = mcfcg::solve_tree_cg(inst, params);
     EXPECT_TRUE(result.optimal);
     EXPECT_GE(result.objective, opt.at("grid1") * (1.0 - 0.0001));

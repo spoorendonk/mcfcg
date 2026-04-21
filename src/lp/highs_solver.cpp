@@ -13,8 +13,8 @@ private:
     uint32_t _num_rows = 0;
 
 public:
-    HiGHSSolver() {
-        _highs.setOptionValue("output_flag", false);
+    explicit HiGHSSolver(bool verbose = false) {
+        _highs.setOptionValue("output_flag", verbose);
         _highs.setOptionValue("primal_feasibility_tolerance", LP_FEAS_TOL);
         _highs.setOptionValue("dual_feasibility_tolerance", LP_FEAS_TOL);
         HighsModel model;
@@ -170,8 +170,8 @@ public:
     }
 };
 
-std::unique_ptr<LPSolver> create_lp_solver() {
-    return std::make_unique<HiGHSSolver>();
+std::unique_ptr<LPSolver> create_lp_solver(bool verbose) {
+    return std::make_unique<HiGHSSolver>(verbose);
 }
 
 }  // namespace mcfcg

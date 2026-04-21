@@ -63,10 +63,11 @@ static void print_usage(std::FILE* out) {
         "  --threads N              Number of pricing threads (0=auto)\n"
         "  --batch-size N           Pricing batch size (0=all)\n"
         "  --solver NAME            LP solver: highs (default), cuopt, copt\n"
+        "  --verbose-solver         Enable LP solver's own log output\n"
         "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
         "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
         "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-3)\n"
-        "  --strategy S             pricer-heavy (default) or pricer-light\n"
+        "  --strategy S             pricer-light (default) or pricer-heavy\n"
         "  -h, --help               Print this help message and exit.\n");
 }
 
@@ -84,12 +85,17 @@ int main(int argc, char* argv[]) {
     std::string solver = "highs";
     std::string trips_path;
     double coef = 0.0;
+    bool verbose_solver = false;
     mcfcg::CGParams params;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
             print_usage(stdout);
             return EXIT_SUCCESS;
+        }
+        if (std::strcmp(argv[i], "--verbose-solver") == 0) {
+            verbose_solver = true;
+            continue;
         }
         if (i == 1) {
             instance_path = argv[i];
@@ -126,7 +132,7 @@ int main(int argc, char* argv[]) {
             } else if (s == "pricer-light") {
                 params.strategy = mcfcg::CGStrategy::PricerLight;
             } else {
-                std::fprintf(stderr, "Unknown strategy '%s'. Valid: pricer-heavy, pricer-light\n",
+                std::fprintf(stderr, "Unknown strategy '%s'. Valid: pricer-light, pricer-heavy\n",
                              s.c_str());
                 return EXIT_FAILURE;
             }
@@ -173,20 +179,26 @@ int main(int argc, char* argv[]) {
 
     if (solver == "cuopt") {
 #ifdef MCFCG_USE_CUOPT
-        params.solver_factory = [] { return mcfcg::create_cuopt_solver(); };
+        params.solver_factory = [verbose_solver] {
+            return mcfcg::create_cuopt_solver(verbose_solver);
+        };
 #else
         std::fprintf(stderr, "cuOpt not available. Rebuild with -DMCFCG_USE_CUOPT=ON.\n");
         return EXIT_FAILURE;
 #endif
     } else if (solver == "copt") {
 #ifdef MCFCG_USE_COPT
-        params.solver_factory = [] { return mcfcg::create_copt_solver(); };
+        params.solver_factory = [verbose_solver] {
+            return mcfcg::create_copt_solver(verbose_solver);
+        };
         // COPT's barrier is precise enough to use the default simplex
         // tolerance; only cuOpt needs the loosened -1e-4.
 #else
         std::fprintf(stderr, "COPT not available. Rebuild with -DMCFCG_USE_COPT=ON.\n");
         return EXIT_FAILURE;
 #endif
+    } else if (verbose_solver) {
+        params.solver_factory = [] { return mcfcg::create_lp_solver(true); };
     }
 
     auto start = std::chrono::steady_clock::now();

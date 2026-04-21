@@ -184,10 +184,11 @@ A single test:
 | `--threads N`             | 1     | Pricing threads (`0` = hardware concurrency) |
 | `--batch-size N`          | 0     | Sources priced per batch (`0` = all) |
 | `--solver NAME`           | highs | LP backend: `highs`, `cuopt`, `copt` |
+| `--verbose-solver`        | off   | Enable the LP backend's own log output |
 | `--col-age-limit N`       | 5     | Purge columns after N idle iters (`0` disables) |
 | `--row-inactivity N`      | 5     | Purge cap rows after N idle iters (`0` disables) |
 | `--neg-rc-tol X`          | -1e-3 | Reduced-cost acceptance threshold |
-| `--strategy S`            | pricer-heavy | `pricer-heavy` or `pricer-light` preset |
+| `--strategy S`            | pricer-light | `pricer-light` or `pricer-heavy` preset |
 
 ```bash
 # CommaLab format
