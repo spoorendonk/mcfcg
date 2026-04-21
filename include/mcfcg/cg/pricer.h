@@ -37,7 +37,6 @@ class PathPricer : public PricerBase<PathPricer, Column> {
             col.cost = 0.0;
             col.commodity = k;
             double true_rc = -pi[k];
-            uint32_t path_arcs = 0;
             vertex_t v = sink;
             while (dijk.has_pred(v)) {
                 uint32_t a = dijk.pred_arc(v);
@@ -47,20 +46,20 @@ class PathPricer : public PricerBase<PathPricer, Column> {
                 col.cost += _inst->cost[a];
                 true_rc += _inst->cost[a] - mu[a];
                 v = _inst->graph.arc_source(a);
-                ++path_arcs;
             }
 
-            // Lagrangian LB accumulator: every commodity's best RC,
-            // regardless of whether the col gets emitted.  Clamped to
-            // zero so unreachable / non-attractive commodities
-            // contribute nothing.
+            // Lagrangian LB accumulator.  Path formulation demand row k
+            // has RHS d_k, so the Farley correction is d_k · min(rc*_k,
+            // 0) (shifting π_k down by |rc*_k| to regain dual
+            // feasibility costs d_k per unit in the dual obj).  The
+            // rounding-error budget is scaled by d_k too so it matches
+            // the correction's units.
+            double demand = _inst->commodities[k].demand;
             if (true_rc < 0.0) {
-                _thread_min_rc_sum[thread_id] += true_rc;
+                _thread_min_rc_sum[thread_id] += demand * true_rc;
             }
-            // Rounding-error budget: each arc can shift the scaled-int
-            // cost by 1/SCALE in true units; accumulate per edge for
-            // lb_error_bound().
-            _thread_rc_error_bound[thread_id] += static_cast<double>(path_arcs) / SCALE;
+            _thread_rc_error_bound[thread_id] +=
+                demand * static_cast<double>(col.arcs.size()) / SCALE;
 
             if (true_rc >= _neg_rc_tol)
                 continue;

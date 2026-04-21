@@ -194,14 +194,20 @@ public:
                                uint32_t max_cols = 0) {
         compute_rc(mu);
 
+        // Reset the per-call LB accumulators up front so every return
+        // path (including n_sources==0 and early breaks) leaves them
+        // in a defined state.
+        _last_priced_all = false;
+        _last_min_rc_sum = 0.0;
+        _last_rc_error_bound = 0.0;
+
         uint32_t n_sources = static_cast<uint32_t>(_inst->sources.size());
         if (n_sources == 0) {
-            _last_min_rc_sum = 0.0;
             _last_priced_all = true;
             return {};
         }
 
-        // Reset the Lagrangian bound accumulators for this price() call.
+        // Reset per-thread accumulators for this price() call.
         std::fill(_thread_min_rc_sum.begin(), _thread_min_rc_sum.end(), 0.0);
         std::fill(_thread_rc_error_bound.begin(), _thread_rc_error_bound.end(), 0.0);
 

@@ -64,6 +64,17 @@ public:
         if (_verbosity < Verbosity::Summary) {
             return;
         }
+        // When no MCF-feasible iter was ever reached, lb stays at -INF
+        // (never tightened).  Print that explicitly rather than
+        // letting the %.6f format produce "-inf" and gap=inf.
+        if (lb == -INF) {
+            std::fprintf(stderr,
+                         "CG %s after %u iterations. UB=%.6f LB=-inf gap=inf tol=%.3e  "
+                         "t_LP=%.3f  t_PR=%.3f  t_SP=%.3f  t_Tot=%.3f\n",
+                         optimal ? "optimal" : "stopped", iters, obj, gap_tol, t_lp, t_pr, t_sp,
+                         t_tot);
+            return;
+        }
         std::fprintf(stderr,
                      "CG %s after %u iterations. UB=%.6f LB=%.6f gap=%.3e tol=%.3e  "
                      "t_LP=%.3f  t_PR=%.3f  t_SP=%.3f  t_Tot=%.3f\n",

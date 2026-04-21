@@ -58,6 +58,11 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     // violation).  Never reset to INF once established — a later iter
     // can only tighten it.
     double best_ub = INF;
+    // Last successful LP obj — informative fallback for result.objective
+    // if the loop exits with no MCF-feasible iter (best_ub stays INF).
+    // NOT a valid MCF bound (carries slack penalty / infeasible flow),
+    // but keeps result.objective a real number for log / CSV parsers.
+    double last_lp_obj = 0.0;
     // Monotonically non-decreasing Lagrangian/Farley lower bound.
     // LB_iter = LP_obj + pricer.min_rc_sum() when pricer.priced_all()
     // (every source was visited in that iter's pricing).  Adding
@@ -144,6 +149,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         solved = true;
 
         double obj = master.get_obj();
+        last_lp_obj = obj;
 
         // --- All LP reads here, BEFORE any mutation.  Some backends
         // (COPT barrier) drop the ability to return duals once the LP
@@ -211,11 +217,11 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // The rounding-error budget accounts for Dijkstra minimizing
         // scaled-integer edge weights rather than true reduced cost.
         if (pricer.priced_all() && num_active_slacks == 0 && num_new_caps == 0) {
-            // Use the LP dual obj (Σ pi + Σ cap*mu) rather than the
+            // Use the LP dual obj (Σ pi·b + Σ cap*mu) rather than the
             // primal obj so the Lagrangian reconstruction is exact at
             // LP optimum even when the backend's primal and dual
             // differ at solver tolerance (barrier-without-crossover).
-            double dual_obj = master.compute_dual_obj(pi);
+            double dual_obj = master.compute_dual_obj(pi, mu);
             double lb_iter = dual_obj + pricer.min_rc_sum() - pricer.lb_error_bound();
             best_lb = std::max(best_lb, lb_iter);
         }
@@ -229,8 +235,14 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // bailing out) so the log line explains why the LB tightened
         // enough to close the gap.
         if (best_ub < INF) {
+            double gap = best_ub - best_lb;
             double gap_tol = RELATIVE_FEAS_TOL * std::max(1.0, std::abs(best_ub));
-            if (best_ub - best_lb < gap_tol) {
+            // Require gap >= 0 as well: a transient LB > UB would
+            // otherwise trip the check trivially.  In practice the
+            // MCF-feasibility gate on LB prevents this, but bounding
+            // below zero is cheap defense against LP backend numerical
+            // surprises.
+            if (gap >= 0.0 && gap < gap_tol) {
                 iter_timer.stop(TimerCat::Pricing);
                 timer.stop(TimerCat::Pricing);
                 timer.stop(TimerCat::Total);
@@ -288,9 +300,12 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
     // Report the best UB captured inside the loop.  If the loop exited
     // (e.g. max_iterations) with no MCF-feasible iteration ever seen,
-    // best_ub stays INF — a truthful "no valid bound found".
+    // best_ub stays INF — fall back to the last LP obj so
+    // result.objective is a real number for log / CSV parsers.  Callers
+    // should consult result.optimal to know whether the objective is a
+    // certified UB or just an informative LP value.
     if (solved) {
-        result.objective = best_ub;
+        result.objective = best_ub < INF ? best_ub : last_lp_obj;
     }
     populate_timing();
     double gap_tol = RELATIVE_FEAS_TOL * std::max(1.0, std::abs(result.objective));
