@@ -98,7 +98,7 @@ inline static_map<uint32_t, int64_t> compute_lower_bounds_to_targets(const Insta
 // setup/cleanup, and utility methods.
 //
 // Derived must implement:
-//   void process_source(s_idx, src, duals, mu, dijk, out, thread_id)  [auto& dijk]
+//   void process_source(s_idx, src, duals, mu, dijk, out)  [auto& dijk]
 template <typename Derived, typename ColumnT>
 class PricerBase {
 public:
@@ -119,13 +119,6 @@ protected:
     std::vector<dijkstra_workspace> _workspaces;
     std::vector<static_map<uint32_t, bool>> _is_targets;
     std::vector<std::vector<ColumnT>> _thread_columns;  // reused across batches
-    // Scratch arc→flow map used only by TreePricer::process_source.
-    // Declared on the base so thread_id indexing is shared with the
-    // other per-thread workspaces; PathPricer ignores it.  Reusing the
-    // map across calls keeps bucket storage allocated — the iteration
-    // order drifts with bucket-count history, but that drift is absorbed
-    // by the loosened EXISTING_COL_RC_TOL in cg_test_util.h.
-    std::vector<std::unordered_map<uint32_t, double>> _thread_arc_flow;
     thread_pool* _pool = nullptr;
 
     // Round-robin cursor: where to start pricing next iteration
@@ -159,8 +152,6 @@ public:
         for (uint32_t wi = 0; wi < num_ws; ++wi)
             _workspaces.emplace_back(inst.graph.num_vertices());
         _thread_columns.resize(num_ws);
-        _thread_arc_flow.clear();
-        _thread_arc_flow.resize(num_ws);
 
         _rc = inst.graph.create_arc_map<int64_t>();
         _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
@@ -323,7 +314,7 @@ protected:
         dijk.add_source(source_v);
         dijk.run_until_targets(is_target, num_targets);
 
-        self().process_source(s_idx, src, duals, mu, dijk, new_columns, thread_id);
+        self().process_source(s_idx, src, duals, mu, dijk, new_columns);
 
         // Clear only the sinks we set (O(commodities-per-source), not O(V)).
         for (uint32_t k : src.commodity_indices)

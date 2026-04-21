@@ -14,7 +14,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
                         const static_map<uint32_t, double>& mu, auto& dijk,
-                        std::vector<TreeColumn>& new_columns, uint32_t thread_id) {
+                        std::vector<TreeColumn>& new_columns) {
         TreeColumn col;
         col.source_idx = s_idx;
         col.cost = 0.0;
@@ -24,14 +24,14 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             _source_arcs[s_idx].clear();
         }
 
-        // Reuse the per-thread scratch map: clear() retains the bucket
-        // storage, so the second process_source call on this thread
-        // skips the initial hash-table allocation.  Iteration order
-        // drifts with bucket-count history across calls — that drift
-        // shows up as small LP-backend dual noise in downstream RC
-        // recomputation, and is absorbed by EXISTING_COL_RC_TOL.
-        auto& arc_flow_map = _thread_arc_flow[thread_id];
-        arc_flow_map.clear();
+        // Fresh scratch map per call — a per-thread reused map keeps the
+        // bucket array allocated but its iteration order drifts with
+        // bucket-count history, which perturbs downstream LP numerics
+        // enough to trip the tight EXISTING_COL_RC_TOL invariant (the
+        // test's acceptance bound must match the pricer's NEG_RC_TOL to
+        // avoid a duplicate-column window).  Per-call allocation is
+        // cheap compared to the Dijkstra that precedes it.
+        std::unordered_map<uint32_t, double> arc_flow_map;
 
         for (uint32_t k : src.commodity_indices) {
             uint32_t sink = _inst->commodities[k].sink;

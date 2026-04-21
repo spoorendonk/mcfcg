@@ -13,7 +13,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi,
                         const static_map<uint32_t, double>& mu, auto& dijk,
-                        std::vector<Column>& new_columns, uint32_t /*thread_id*/) {
+                        std::vector<Column>& new_columns) {
         bool found_any = false;
         if (_track_arcs)
             _source_arcs[s_idx].clear();

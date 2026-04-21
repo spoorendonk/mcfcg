@@ -20,6 +20,15 @@ struct Source {
     std::vector<uint32_t> commodity_indices;
 };
 
+// Connectivity contract: every commodity's source→sink pair should be
+// reachable in `graph`.  The pricer handles a disconnected commodity
+// gracefully in `CommodityRows` slack mode (the demand-row slack
+// absorbs the unmet demand; the CG loop terminates with
+// `optimal=false` once slacks saturate at the ceiling), but in
+// `EdgeRows` mode the first LP solve returns infeasible because no
+// demand-row slack exists.  Callers should preprocess disconnected
+// instances via `mcfcg_clean` (drops commodities whose sink is
+// unreachable from their source) before handing them to the solver.
 struct Instance {
     static_digraph graph;
     static_map<uint32_t, double> cost;
