@@ -48,8 +48,13 @@ inline double recompute_tree_rc(const TreeColumn& col, const std::vector<double>
 }
 
 // Run path CG manually, validating RC at each iteration.
-// Checks: new columns have negative RC, existing columns have non-negative RC.
-// If check_duplicates is true, also asserts no duplicate columns.
+// Mirrors the production single-solve-per-iter flow in cg_loop.h:
+// capture primals/duals once, then separate and price with those same
+// duals (stale wrt any cap rows separation just added — the next iter
+// picks them up).  Existing cols must have RC ≥ -EXISTING_COL_RC_TOL
+// at the captured duals (LP optimality of the previous solve).  New
+// cols must have RC < NEW_COL_RC_TOL at the captured duals (pricer's
+// own decision, so this is the self-consistency check).
 inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
                                        double tol = RELATIVE_FEAS_TOL * 10,
                                        bool check_duplicates = false) {
@@ -73,36 +78,52 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
         ASSERT_EQ(status, LPStatus::Optimal) << "LP not optimal at iter " << iter;
 
         obj = master.get_obj();
+        // Capture primals/duals BEFORE any mutation (add_rows /
+        // set_col_cost / delete_*).  Some backends invalidate cached
+        // solution state on mutation — see cg_loop.h.
         auto primals = master.get_primals();
-        if (!master.add_violated_capacity_constraints(primals).empty()) {
-            continue;
-        }
-
         auto pi = master.get_structural_duals();
         const auto& mu = master.get_capacity_duals();
 
-        for (const auto& col : master.columns()) {
-            double rc = recompute_path_rc(col, pi, mu);
-            EXPECT_GE(rc, -EXISTING_COL_RC_TOL)
-                << "Existing column k=" << col.commodity << " RC=" << rc;
+        auto new_cap_arcs = master.add_violated_capacity_constraints(primals);
+        uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
+
+        // Existing-column RC invariant holds only against the current
+        // LP's row set.  When separation found new violations this iter,
+        // the LP just solved did NOT contain those rows — any col whose
+        // flow traverses a newly-violated arc can legitimately have
+        // negative RC against the pre-sep duals (the missing cap dual
+        // would have pushed RC up).  Gate the invariant on cut-stable
+        // iters to avoid false positives.  The new-column RC check
+        // below still runs every iter — the pricer must be internally
+        // consistent with its own duals regardless.
+        if (num_new_caps == 0) {
+            for (const auto& col : master.columns()) {
+                double rc = recompute_path_rc(col, pi, mu);
+                EXPECT_GE(rc, -EXISTING_COL_RC_TOL)
+                    << "Existing column k=" << col.commodity << " RC=" << rc;
+            }
         }
 
         auto new_cols = pricer.price(pi, mu, false);
         if (new_cols.empty()) {
             new_cols = pricer.price(pi, mu, true);
-            if (new_cols.empty()) {
-                // Pricing exhausted.  Only optimal if no slack is still
-                // carrying demand — otherwise bump and try again so the
-                // LP can pivot the slacks out in the next iteration.
-                if (!master.has_active_slacks(primals)) {
-                    optimal = true;
-                    break;
-                }
+        }
+        if (!new_cols.empty()) {
+            pricer.reset_postponed();
+        }
+
+        if (new_cols.empty()) {
+            const bool slacks_active = master.has_active_slacks(primals);
+            if (num_new_caps == 0 && !slacks_active) {
+                optimal = true;
+                break;
+            }
+            if (slacks_active) {
                 (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
-                pricer.reset_postponed();
-                continue;
             }
             pricer.reset_postponed();
+            continue;
         }
 
         for (const auto& col : new_cols) {
@@ -124,9 +145,6 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
         if (new_cols.size() > 1000) {
             new_cols.resize(1000);
         }
-        // Bump before add_columns, same reason as cg_loop.h: the primals
-        // captured above reflect the solved LP; any purge would
-        // invalidate get_primals().
         (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
         master.add_columns(std::move(new_cols));
     }
@@ -136,6 +154,8 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
 }
 
 // Run tree CG manually, validating RC at each iteration.
+// Mirrors the production single-solve-per-iter flow in cg_loop.h; see
+// solve_and_validate_path_rc for the full rationale.
 inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj,
                                        double tol = RELATIVE_FEAS_TOL * 10,
                                        bool check_duplicates = false) {
@@ -160,32 +180,40 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj,
 
         obj = master.get_obj();
         auto primals = master.get_primals();
-        if (!master.add_violated_capacity_constraints(primals).empty()) {
-            continue;
-        }
-
         auto pi_s = master.get_structural_duals();
         const auto& mu = master.get_capacity_duals();
 
-        for (const auto& col : master.columns()) {
-            double rc = recompute_tree_rc(col, pi_s, mu);
-            EXPECT_GE(rc, -EXISTING_COL_RC_TOL)
-                << "Existing tree col s=" << col.source_idx << " RC=" << rc;
+        auto new_cap_arcs = master.add_violated_capacity_constraints(primals);
+        uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
+
+        // See solve_and_validate_path_rc for the gating rationale.
+        if (num_new_caps == 0) {
+            for (const auto& col : master.columns()) {
+                double rc = recompute_tree_rc(col, pi_s, mu);
+                EXPECT_GE(rc, -EXISTING_COL_RC_TOL)
+                    << "Existing tree col s=" << col.source_idx << " RC=" << rc;
+            }
         }
 
         auto new_cols = pricer.price(pi_s, mu, false);
         if (new_cols.empty()) {
             new_cols = pricer.price(pi_s, mu, true);
-            if (new_cols.empty()) {
-                if (!master.has_active_slacks(primals)) {
-                    optimal = true;
-                    break;
-                }
+        }
+        if (!new_cols.empty()) {
+            pricer.reset_postponed();
+        }
+
+        if (new_cols.empty()) {
+            const bool slacks_active = master.has_active_slacks(primals);
+            if (num_new_caps == 0 && !slacks_active) {
+                optimal = true;
+                break;
+            }
+            if (slacks_active) {
                 (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
-                pricer.reset_postponed();
-                continue;
             }
             pricer.reset_postponed();
+            continue;
         }
 
         for (const auto& col : new_cols) {

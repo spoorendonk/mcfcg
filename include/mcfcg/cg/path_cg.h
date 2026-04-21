@@ -60,7 +60,7 @@ struct CGParams {
     // Strategy preset; see CGStrategy enum above for the bundled behaviors.
     CGStrategy strategy = CGStrategy::PricerLight;
     bool pricing_filter = false;
-    uint32_t num_threads = 1;         // 0 = auto-detect via hardware_concurrency
+    uint32_t num_threads = 0;         // 0 = auto-detect via hardware_concurrency
     uint32_t pricing_batch_size = 0;  // 0 = all sources in one batch
     double neg_rc_tol = NEG_RC_TOL;   // see tolerances.h
     uint32_t row_inactivity_threshold =
