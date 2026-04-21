@@ -20,7 +20,7 @@ public:
         if (_verbosity < Verbosity::Iteration) {
             return;
         }
-        std::fprintf(stderr, "%5s %10s %10s %10s %6s %6s %6s %6s %6s %6s %7s %7s %7s %7s\n", "It",
+        std::fprintf(stderr, "%5s %12s %12s %12s %6s %6s %6s %6s %6s %6s %7s %7s %7s %7s\n", "It",
                      "UB", "LB", "LP_obj", "#col", "#row", "+col", "-col", "+cut", "-cut", "t_LP",
                      "t_PR", "t_SP", "t_Tot");
     }
@@ -39,20 +39,20 @@ public:
         if (std::isinf(upper_bound)) {
             std::snprintf(ub_buf, sizeof(ub_buf), "inf");
         } else {
-            std::snprintf(ub_buf, sizeof(ub_buf), "%.2e", upper_bound);
+            std::snprintf(ub_buf, sizeof(ub_buf), "%.4e", upper_bound);
         }
 
         char lb_buf[16];
         if (lower_bound == -INF) {
             std::snprintf(lb_buf, sizeof(lb_buf), "-inf");
         } else {
-            std::snprintf(lb_buf, sizeof(lb_buf), "%.2e", lower_bound);
+            std::snprintf(lb_buf, sizeof(lb_buf), "%.4e", lower_bound);
         }
 
         char obj_buf[16];
-        std::snprintf(obj_buf, sizeof(obj_buf), "%.2e", lp_obj);
+        std::snprintf(obj_buf, sizeof(obj_buf), "%.4e", lp_obj);
 
-        std::fprintf(stderr, "%5u %10s %10s %10s %6u %6u %6u %6u %6u %6u %7.3f %7.3f %7.3f %7.3f\n",
+        std::fprintf(stderr, "%5u %12s %12s %12s %6u %6u %6u %6u %6u %6u %7.3f %7.3f %7.3f %7.3f\n",
                      iter, ub_buf, lb_buf, obj_buf, num_col, num_row, added_col, removed_col,
                      added_cut, removed_cut, t_lp, t_pr, t_sp, t_tot);
     }

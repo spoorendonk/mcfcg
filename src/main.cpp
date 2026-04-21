@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <unordered_map>
 
 // Demand coefficients for TNTP instances (from paper's coefs.csv)
@@ -60,7 +61,7 @@ static void print_usage(std::FILE* out) {
         "  --max-iters N            (default: 10000)\n"
         "  --trips PATH             TNTP trips file\n"
         "  --coef N                 TNTP demand coefficient\n"
-        "  --threads N              Number of pricing threads (0=auto)\n"
+        "  --threads N              Number of pricing threads (default: 0=auto, 1=serial)\n"
         "  --batch-size N           Pricing batch size (0=all)\n"
         "  --solver NAME            LP solver: highs (default), cuopt, copt\n"
         "  --verbose-solver         Enable LP solver's own log output\n"
@@ -80,7 +81,7 @@ int main(int argc, char* argv[]) {
     std::string instance_path;
     std::string formulation = "path";
     uint32_t max_iters = 10000;
-    uint32_t num_threads = 1;
+    uint32_t num_threads = 0;
     uint32_t batch_size = 0;
     std::string solver = "highs";
     std::string trips_path;
@@ -171,6 +172,28 @@ int main(int argc, char* argv[]) {
                  "%zu sources\n",
                  inst.graph.num_vertices(), inst.graph.num_arcs(), inst.commodities.size(),
                  inst.sources.size());
+
+    uint32_t effective_threads =
+        num_threads == 0 ? std::max(1U, std::thread::hardware_concurrency()) : num_threads;
+    std::fprintf(stderr, "Pricing threads: %u%s\n", effective_threads,
+                 num_threads == 0 ? " (auto)" : "");
+
+    // Mirror the slack-placement selector from MasterBase::init so the
+    // chosen mode shows up in the preamble instead of buried after the LP
+    // backend's init chatter.  Structural rows: num_commodities for path,
+    // num_sources for tree.  Formula is min(structural, capacitated_arcs).
+    uint32_t num_capacitated_arcs = 0;
+    for (uint32_t a : inst.graph.arcs()) {
+        if (inst.capacity[a] < mcfcg::INF) {
+            ++num_capacitated_arcs;
+        }
+    }
+    uint32_t num_structural_rows = static_cast<uint32_t>(
+        formulation == "tree" ? inst.sources.size() : inst.commodities.size());
+    const char* slack_mode =
+        num_capacitated_arcs > num_structural_rows ? "CommodityRows" : "EdgeRows";
+    std::fprintf(stderr, "Slack mode: %s (struct=%u, capped_arcs=%u)\n", slack_mode,
+                 num_structural_rows, num_capacitated_arcs);
 
     params.max_iterations = max_iters;
     params.num_threads = num_threads;

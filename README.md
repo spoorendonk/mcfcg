@@ -181,7 +181,7 @@ A single test:
 | `--max-iters N`           | 10000 | CG iteration cap |
 | `--trips PATH`            | auto  | TNTP trips file (auto-detected from net path) |
 | `--coef N`                | auto  | TNTP demand coefficient (auto per city) |
-| `--threads N`             | 1     | Pricing threads (`0` = hardware concurrency) |
+| `--threads N`             | 0     | Pricing threads (`0` = hardware concurrency, `1` = serial) |
 | `--batch-size N`          | 0     | Sources priced per batch (`0` = all) |
 | `--solver NAME`           | highs | LP backend: `highs`, `cuopt`, `copt` |
 | `--verbose-solver`        | off   | Enable the LP backend's own log output |

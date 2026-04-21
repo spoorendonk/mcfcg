@@ -42,10 +42,6 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     Master master;
     master.init(inst, params.solver_factory ? params.solver_factory() : nullptr, pool.get(),
                 params.warm_start);
-    if (params.verbosity >= Verbosity::Iteration) {
-        std::fprintf(stderr, "CG slack mode: %s\n",
-                     master.slack_mode() == SlackMode::EdgeRows ? "EdgeRows" : "CommodityRows");
-    }
 
     Pricer pricer;
     pricer.init(inst, pool.get(), params.pricing_batch_size, params.neg_rc_tol);
@@ -103,10 +99,8 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         Timer iter_timer;
         iter_timer.start(TimerCat::Total);
 
-        // Stop the per-iter timer, log the iteration, and record the iter
-        // number on result.iterations.  All four exit points in this loop
-        // (normal end-of-iter, PricerHeavy cuts-only early continue,
-        // slack-bump fallback, pricing-exhausted optimal) share this
+        // Log the iteration and record the iter number on
+        // result.iterations.  All exit points in this loop share this
         // printout — only added / purged / num_purged_cuts differ.
         auto finish_iter = [&](double obj, uint32_t num_new_caps, uint32_t added, uint32_t purged,
                                uint32_t num_purged_cuts) {
@@ -119,7 +113,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             result.iterations = iter + 1;
         };
 
-        // --- LP solve ---
+        // --- LP solve (exactly one per iter) ---
         timer.start(TimerCat::LP);
         iter_timer.start(TimerCat::LP);
         auto status = master.solve();
@@ -132,9 +126,19 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
         double obj = master.get_obj();
         last_obj = obj;
-        auto primals = master.get_primals();
 
-        // --- Separation ---
+        // --- All LP reads here, BEFORE any mutation.  Some backends
+        // (COPT barrier) drop the ability to return duals once the LP
+        // has been mutated (add_rows / set_col_cost / delete_*), even
+        // before the next solve.  Capture everything needed, then
+        // mutate.
+        auto primals = master.get_primals();
+        auto pi = get_pricing_duals(master);
+        const auto& mu = master.get_capacity_duals();
+        master.update_capacity_row_activity(iter);
+        master.update_column_ages(primals);
+
+        // --- Separation (first mutation — add_rows for violated caps) ---
         timer.start(TimerCat::Separation);
         iter_timer.start(TimerCat::Separation);
         auto new_cap_arcs = master.add_violated_capacity_constraints(primals, iter);
@@ -143,69 +147,29 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
         uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
 
-        // If cuts were added, re-solve to get correct duals before pricing
-        if (!new_cap_arcs.empty()) {
-            if (effective_pricing_filter) {
-                pricer.filter_for_new_caps(new_cap_arcs);
-            }
-
-            timer.start(TimerCat::LP);
-            iter_timer.start(TimerCat::LP);
-            status = master.solve();
-            iter_timer.stop(TimerCat::LP);
-            timer.stop(TimerCat::LP);
-
-            if (status != LPStatus::Optimal)
-                break;
-            obj = master.get_obj();
-            primals = master.get_primals();
-
-            // PricerHeavy protocol — cuts before cols.  This is a mandatory
-            // part of the strategy bundle (see CGStrategy::PricerHeavy in
-            // path_cg.h): when new lazy capacity rows were just added, defer
-            // pricing entirely so the master reaches a cut-stable state.  The
-            // next iteration re-separates with fresh duals; once no more rows
-            // are violated, that iteration finally prices.  All post-pricing
-            // housekeeping (column aging, purge, add_columns) is also skipped
-            // for this deferred iteration since there is nothing to add.
-            if (pricer_heavy) {
-                finish_iter(obj, num_new_caps, 0, 0, 0);
-                continue;
-            }
+        if (effective_pricing_filter && num_new_caps > 0) {
+            pricer.filter_for_new_caps(new_cap_arcs);
         }
 
-        // --- Pricing (duals are from the latest solve, not affected by purges) ---
+        // PricerHeavy: when cuts were added this iter, defer pricing.
+        // Just commit the cuts and let the next iter's LP solve digest
+        // them with fresh duals.  No bump, no purge — nothing got
+        // priced that could have aged out.
+        if (pricer_heavy && num_new_caps > 0) {
+            finish_iter(obj, num_new_caps, 0, 0, 0);
+            continue;
+        }
+
+        // --- Pricing (duals captured above; stale wrt any cap rows
+        // separation just added — the next iter picks them up).
         timer.start(TimerCat::Pricing);
         iter_timer.start(TimerCat::Pricing);
-        auto pi = get_pricing_duals(master);
-        const auto& mu = master.get_capacity_duals();
 
         auto new_cols = pricer.price(pi, mu, false, effective_col_limit);
-
         if (new_cols.empty()) {
             new_cols = pricer.price(pi, mu, true, effective_col_limit);
-            if (new_cols.empty()) {
-                iter_timer.stop(TimerCat::Pricing);
-                timer.stop(TimerCat::Pricing);
-                // Pricing exhausted.  Optimal iff no slack is still
-                // basic.  Otherwise bump and let the next iteration's
-                // solve pivot the slacks out — we do not terminate on
-                // saturated bumps here; the LP backend's numerical
-                // ceiling is enforced inside bump_active_slacks, and
-                // the outer max_iterations guard is the only escape
-                // hatch for pathologically slack-dominated instances.
-                if (master.has_active_slacks(primals)) {
-                    (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
-                    pricer.reset_postponed();
-                    finish_iter(obj, num_new_caps, 0, 0, 0);
-                    continue;
-                }
-
-                timer.stop(TimerCat::Total);
-                finish_iter(obj, num_new_caps, 0, 0, 0);
-                set_optimal(obj, iter);
-                return result;
-            }
+        }
+        if (!new_cols.empty()) {
             pricer.reset_postponed();
         }
 
@@ -222,19 +186,25 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         iter_timer.stop(TimerCat::Pricing);
         timer.stop(TimerCat::Pricing);
 
-        // --- Purge (after pricing consumed duals, before add_columns so
-        // primals and LP column indices stay consistent) ---
-        // Activity updates AND the slack-cost bump must happen BEFORE
-        // any delete_*, because some backends (COPT, HiGHS) invalidate
-        // the cached primal/dual solution on delete and subsequent
-        // get_primals / get_duals / get_reduced_costs calls return
-        // stale or empty vectors.
-        master.update_capacity_row_activity(iter);
-        master.update_column_ages(primals);
-        // Bump any slacks that were basic in this iteration's LP.
-        // Return value intentionally ignored here: at end-of-iter we
-        // just want to grow the cost for next iter; whether the cap
-        // was hit doesn't change the loop structure.
+        // Pricing exhausted: optimal iff separation also found nothing
+        // and no slack is basic.  Otherwise the next iter's LP solve
+        // (with new caps and/or bumped slack costs) will make progress.
+        if (new_cols.empty()) {
+            if (num_new_caps == 0 && !master.has_active_slacks(primals)) {
+                timer.stop(TimerCat::Total);
+                finish_iter(obj, 0, 0, 0, 0);
+                set_optimal(obj, iter);
+                return result;
+            }
+            if (master.has_active_slacks(primals)) {
+                (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
+            }
+            pricer.reset_postponed();
+            finish_iter(obj, num_new_caps, 0, 0, 0);
+            continue;
+        }
+
+        // --- Mutations: bump + purge + add_columns ---
         (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
         uint32_t purged = master.purge_aged_columns(effective_col_age_limit);
         uint32_t num_purged =
