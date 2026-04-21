@@ -128,12 +128,14 @@ Pricing for a single source $s$:
 ```text
 pricer.price_one_source(s, duals, mu):
   rc_a = max(0, (c_a - mu_a)) scaled by 1e9    # integer reduced costs
-  run A* Dijkstra from s until every sink of S_s is settled
+  run A* Dijkstra from s until every reachable sink of S_s is settled
   for each sink t_k of s:
+    skip t_k if unreachable — A*'s heap exhausted without settling it
     extract the shortest path, compute the floating-point true RC
-    PATH:  emit one column per commodity with true_rc < -tol
-    TREE:  aggregate demand-weighted arc flow across all sinks of s,
-           emit one tree column if the aggregate RC is negative
+    PATH:  emit one column per reachable commodity with true_rc < -tol
+    TREE:  aggregate demand-weighted arc flow across reachable sinks of s,
+           emit one tree column (partial if some sinks were unreachable)
+           if the aggregate RC is negative
 ```
 
 ## Build

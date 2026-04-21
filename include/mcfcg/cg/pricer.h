@@ -21,8 +21,14 @@ class PathPricer : public PricerBase<PathPricer, Column> {
         for (uint32_t k : src.commodity_indices) {
             vertex_t sink = _inst->commodities[k].sink;
             // A* exhausts its heap when no path to sink exists (disconnected
-            // source→sink).  Skip that commodity and keep pricing the others;
-            // the master's demand-row slack absorbs the unmet demand.
+            // source→sink).  Skip that commodity and keep pricing the others.
+            // In CommodityRows slack mode the master's demand-row slack
+            // absorbs the unmet demand; in EdgeRows mode there is no demand
+            // slack so a disconnected commodity will surface as LP
+            // infeasibility on the first solve — the CG loop exits with
+            // optimal=false.  Callers with potentially disconnected
+            // commodities should preprocess the instance (e.g. via
+            // mcfcg_clean) before handing it to the solver.
             if (!dijk.visited(sink))
                 continue;
 

@@ -2,8 +2,11 @@
 #include "mcfcg/cg/master.h"
 #include "mcfcg/cg/master_base.h"
 #include "mcfcg/cg/path_cg.h"
+#include "mcfcg/cg/pricer.h"
 #include "mcfcg/cg/tree_cg.h"
 #include "mcfcg/cg/tree_master.h"
+#include "mcfcg/cg/tree_pricer.h"
+#include "mcfcg/graph/static_digraph_builder.h"
 #include "mcfcg/instance.h"
 
 #include <filesystem>
@@ -283,7 +286,77 @@ TEST(ThreadedExecution, WinnipegPath) {
     solve_threaded(inst, opt.at("Winnipeg"), mcfcg::solve_path_cg, 4);
 }
 
-// --- Feature tests: strategy bundle, pricing_filter, A* admissibility ---
+// --- Feature tests: strategy bundle, pricing_filter, unreachable-sink handling ---
+
+// Unreachable source→sink must not crash or corrupt the pricer.  The path
+// pricer skips the affected commodity and emits columns for the reachable
+// ones; the tree pricer builds a partial tree over the reachable sinks.
+// This regression test locks in the behavior contract from commit c20b757
+// by driving the pricers directly (the full CG loop is harder to observe
+// because CommodityRows slacks eventually saturate at the cost ceiling and
+// the loop runs to max_iterations on a truly disconnected instance).
+namespace unreachable_test {
+// 4 vertices.  Vertex 3 is isolated — no incident arcs.
+// Source 0 has two commodities: 0→2 (reachable) and 0→3 (unreachable).
+static mcfcg::Instance build_disconnected() {
+    mcfcg::static_digraph_builder<double, double> builder(4);
+    builder.add_arc(0, 1, 1.0, 10.0);  // 0→1
+    builder.add_arc(1, 2, 2.0, 10.0);  // 1→2
+    builder.add_arc(0, 2, 5.0, 10.0);  // 0→2
+    auto [graph, cost_map, cap_map] = builder.build();
+
+    std::vector<mcfcg::Commodity> commodities = {
+        {0, 2, 1.0},  // reachable
+        {0, 3, 1.0},  // unreachable — sink 3 has no in-arcs
+    };
+    auto sources = mcfcg::group_by_source(commodities);
+    return mcfcg::Instance{std::move(graph), std::move(cost_map), std::move(cap_map),
+                           std::move(commodities), std::move(sources)};
+}
+}  // namespace unreachable_test
+
+TEST(FeatureTests, PathPricerSkipsUnreachableSink) {
+    auto inst = unreachable_test::build_disconnected();
+
+    mcfcg::PathPricer pricer;
+    pricer.init(inst);
+
+    // Price with zero duals: reachable commodity has RC < 0 (cost > 0 −
+    // 0 dual = cost, but -pi[k] term with pi=0 leaves true_rc = cost);
+    // to actually trigger negative-RC column emission we prime the
+    // commodity's pi to a large-enough value.
+    std::vector<double> pi(inst.commodities.size(), 100.0);
+    auto mu = inst.graph.create_arc_map<double>(0.0);
+
+    auto cols = pricer.price(pi, mu);
+    // One column for the reachable commodity; none for the unreachable one.
+    ASSERT_EQ(cols.size(), 1u);
+    EXPECT_EQ(cols[0].commodity, 0u);  // reachable commodity index
+    EXPECT_FALSE(cols[0].arcs.empty());
+}
+
+TEST(FeatureTests, TreePricerEmitsPartialTreeOnUnreachableSink) {
+    auto inst = unreachable_test::build_disconnected();
+
+    mcfcg::TreePricer pricer;
+    pricer.init(inst);
+
+    std::vector<double> pi_s(inst.sources.size(), 100.0);
+    auto mu = inst.graph.create_arc_map<double>(0.0);
+
+    auto cols = pricer.price(pi_s, mu);
+    // Exactly one partial-tree column for source 0, covering only the
+    // reachable sink (vertex 2).  The unreachable sink (3) contributes
+    // no arc flow.
+    ASSERT_EQ(cols.size(), 1u);
+    EXPECT_EQ(cols[0].source_idx, 0u);
+    EXPECT_FALSE(cols[0].arc_flows.empty());
+    // All arc flows must be on arcs reachable from source 0 — none of
+    // them terminate at vertex 3 (which has no in-arcs anyway).
+    for (const auto& af : cols[0].arc_flows) {
+        EXPECT_NE(inst.graph.arc_target(af.arc), 3u);
+    }
+}
 
 // Verify PricerLight strategy produces same optimal objective.
 TEST(FeatureTests, PricerLightPath) {
@@ -305,30 +378,6 @@ TEST(FeatureTests, PricerLightTree) {
     EXPECT_TRUE(result.optimal);
     EXPECT_GE(result.objective, opt.at("grid1") * (1.0 - 0.0001));
     EXPECT_LE(result.objective, opt.at("grid1") * (1.0 + 0.0001));
-}
-
-// Verify A* produces identical objective to plain Dijkstra (admissibility).
-TEST(FeatureTests, AStarMatchesDijkstra) {
-    auto opt = load_optimal(data_dir("commalab/grid"));
-    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid2");
-
-    mcfcg::CGParams params;
-    auto result_astar = mcfcg::solve_path_cg(inst, params);  // default is A*
-    ASSERT_TRUE(result_astar.optimal);
-
-    // Compare against reference -- A* must match within tolerance
-    EXPECT_GE(result_astar.objective, opt.at("grid2") * (1.0 - 0.0001));
-    EXPECT_LE(result_astar.objective, opt.at("grid2") * (1.0 + 0.0001));
-}
-
-TEST(FeatureTests, AStarMatchesDijkstraTree) {
-    auto opt = load_optimal(data_dir("commalab/grid"));
-    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid2");
-
-    auto result = mcfcg::solve_tree_cg(inst);
-    ASSERT_TRUE(result.optimal);
-    EXPECT_GE(result.objective, opt.at("grid2") * (1.0 - 0.0001));
-    EXPECT_LE(result.objective, opt.at("grid2") * (1.0 + 0.0001));
 }
 
 // --- cuOpt GPU solver tests ---

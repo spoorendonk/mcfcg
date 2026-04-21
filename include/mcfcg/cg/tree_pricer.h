@@ -37,9 +37,13 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             uint32_t sink = _inst->commodities[k].sink;
             // A* exhausts its heap when no path to sink exists (disconnected
             // source→sink).  Skip the unreachable commodity and keep
-            // building a partial tree over the remaining reachable sinks;
-            // the reduced-cost check below still decides whether to emit
-            // this source's column.
+            // building a partial tree over the remaining reachable sinks.
+            // The partial tree still contributes xi=1 to its source's
+            // convexity row, so the LP picks it as a valid candidate;
+            // unmet demand for the unreachable sink is absorbed by
+            // CommodityRows-mode demand slacks or causes LP infeasibility
+            // in EdgeRows mode (no demand slacks exist).  Preprocess
+            // disconnected instances via mcfcg_clean before solving.
             if (!dijk.visited(sink))
                 continue;
             double d = _inst->commodities[k].demand;
