@@ -216,10 +216,16 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // MCF LB (Lagrangian - scale margin).  When the relative gap
         // drops below the design feasibility tolerance, the current UB
         // is within tolerance of OPT and there is no point iterating.
+        // Report the cols the pricer *found* (not added, since we're
+        // bailing out) so the log line explains why the LB tightened
+        // enough to close the gap.
         if (best_ub < INF) {
             double gap_tol = RELATIVE_FEAS_TOL * std::max(1.0, std::abs(best_ub));
             if (best_ub - best_lb < gap_tol) {
-                finish_iter(obj, num_new_caps, num_active_slacks, 0, 0, 0);
+                iter_timer.stop(TimerCat::Pricing);
+                timer.stop(TimerCat::Pricing);
+                finish_iter(obj, num_new_caps, num_active_slacks,
+                            static_cast<uint32_t>(new_cols.size()), 0, 0);
                 set_optimal(best_ub, iter);
                 return result;
             }
