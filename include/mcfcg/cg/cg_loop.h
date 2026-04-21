@@ -53,7 +53,11 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     CGResult result{};
     result.optimal = false;
     bool solved = false;
-    double last_obj = 0.0;  // last successful LP obj; survives a hit on max_iterations
+    // Monotonically non-increasing upper bound.  Set only on iterations
+    // whose LP primal is MCF-feasible (no slack basic, no fresh capacity
+    // violation).  Never reset to INF once established — a later iter
+    // can only tighten it.
+    double best_ub = INF;
 
     auto populate_timing = [&] {
         result.time_lp = timer.elapsed(TimerCat::LP);
@@ -103,14 +107,19 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // (PricerHeavy cuts-only continue, pricing-exhausted optimal,
         // pricing-exhausted non-optimal continue, end-of-iter with new
         // columns) — only added / purged / num_purged_cuts differ.
-        auto finish_iter = [&](double obj, uint32_t num_new_caps, uint32_t added, uint32_t purged,
-                               uint32_t num_purged_cuts) {
+        // UB is the running minimum over all MCF-feasible iterations
+        // (no slack basic, no new cap row added this iter).  Once set,
+        // it stays set — a later infeasible iter can't push it back to
+        // inf.  LP_obj is always the LP's own objective so convergence
+        // is visible regardless of feasibility.
+        auto finish_iter = [&](double obj, uint32_t num_new_caps, uint32_t num_active_slacks,
+                               uint32_t added, uint32_t purged, uint32_t num_purged_cuts) {
             iter_timer.stop(TimerCat::Total);
             logger.print_iteration(
-                iter + 1, obj, -INF, obj, master.num_lp_cols(), master.num_lp_rows(), added, purged,
-                num_new_caps, num_purged_cuts, iter_timer.elapsed(TimerCat::LP),
-                iter_timer.elapsed(TimerCat::Pricing), iter_timer.elapsed(TimerCat::Separation),
-                iter_timer.elapsed(TimerCat::Total));
+                iter + 1, best_ub, -INF, obj, master.num_lp_cols(), master.num_lp_rows(),
+                num_active_slacks, added, purged, num_new_caps, num_purged_cuts,
+                iter_timer.elapsed(TimerCat::LP), iter_timer.elapsed(TimerCat::Pricing),
+                iter_timer.elapsed(TimerCat::Separation), iter_timer.elapsed(TimerCat::Total));
             result.iterations = iter + 1;
         };
 
@@ -126,7 +135,6 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         solved = true;
 
         double obj = master.get_obj();
-        last_obj = obj;
 
         // --- All LP reads here, BEFORE any mutation.  Some backends
         // (COPT barrier) drop the ability to return duals once the LP
@@ -138,6 +146,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         const auto& mu = master.get_capacity_duals();
         master.update_capacity_row_activity(iter);
         master.update_column_ages(primals);
+        uint32_t num_active_slacks = master.count_active_slacks(primals);
 
         // --- Separation (first mutation — add_rows for violated caps) ---
         timer.start(TimerCat::Separation);
@@ -148,6 +157,14 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
         uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
 
+        // Tighten the running UB only when the LP primal is
+        // MCF-feasible: no slack basic AND separation found no new
+        // violations.  Otherwise obj carries a feasibility penalty
+        // and/or reflects flow that exceeds capacity.
+        if (num_active_slacks == 0 && num_new_caps == 0) {
+            best_ub = std::min(best_ub, obj);
+        }
+
         if (effective_pricing_filter && num_new_caps > 0) {
             pricer.filter_for_new_caps(new_cap_arcs);
         }
@@ -157,7 +174,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // them with fresh duals.  No bump, no purge — nothing got
         // priced that could have aged out.
         if (pricer_heavy && num_new_caps > 0) {
-            finish_iter(obj, num_new_caps, 0, 0, 0);
+            finish_iter(obj, num_new_caps, num_active_slacks, 0, 0, 0);
             continue;
         }
 
@@ -191,18 +208,17 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // and no slack is basic.  Otherwise the next iter's LP solve
         // (with new caps and/or bumped slack costs) will make progress.
         if (new_cols.empty()) {
-            const bool slacks_active = master.has_active_slacks(primals);
-            if (num_new_caps == 0 && !slacks_active) {
+            if (num_new_caps == 0 && num_active_slacks == 0) {
                 timer.stop(TimerCat::Total);
-                finish_iter(obj, num_new_caps, 0, 0, 0);
+                finish_iter(obj, num_new_caps, 0, 0, 0, 0);
                 set_optimal(obj, iter);
                 return result;
             }
-            if (slacks_active) {
+            if (num_active_slacks > 0) {
                 (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
             }
             pricer.reset_postponed();
-            finish_iter(obj, num_new_caps, 0, 0, 0);
+            finish_iter(obj, num_new_caps, num_active_slacks, 0, 0, 0);
             continue;
         }
 
@@ -215,17 +231,17 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         uint32_t added = master.add_columns(std::move(new_cols));
 
         result.total_columns = master.num_columns();
-        finish_iter(obj, num_new_caps, added, purged, num_purged);
+        finish_iter(obj, num_new_caps, num_active_slacks, added, purged, num_purged);
     }
 
     timer.stop(TimerCat::Total);
 
-    // Use the last successful obj captured inside the loop, not
-    // master.get_obj() — by the time we reach here, the LP state has
-    // been mutated by add_columns/purge/bump without a re-solve, so
-    // get_obj() returns 0 / stale on HiGHS and COPT.
-    if (solved)
-        result.objective = last_obj;
+    // Report the best UB captured inside the loop.  If the loop exited
+    // (e.g. max_iterations) with no MCF-feasible iteration ever seen,
+    // best_ub stays INF — a truthful "no valid bound found".
+    if (solved) {
+        result.objective = best_ub;
+    }
     populate_timing();
     logger.print_summary(result.iterations, result.objective, result.optimal, result.time_lp,
                          result.time_pricing, result.time_separation, result.time_total);

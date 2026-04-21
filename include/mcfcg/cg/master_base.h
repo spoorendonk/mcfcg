@@ -188,6 +188,24 @@ protected:
             });
         }
 
+        // Count slack columns that are basic with positive primal.
+        // Used by the CG loop log to flag LP-obj as "partly slack" —
+        // when this is > 0 the printed objective is feasibility-driven
+        // rather than an MCF bound the user can trust.
+        uint32_t count_active(std::span<const double> primals) const noexcept {
+            if (col_lp.empty()) {
+                return 0;
+            }
+            constexpr double SLACK_ACTIVE_EPS = COL_ACTIVE_EPS;
+            uint32_t count = 0;
+            for (uint32_t lp_col : col_lp) {
+                if (lp_col < primals.size() && primals[lp_col] > SLACK_ACTIVE_EPS) {
+                    ++count;
+                }
+            }
+            return count;
+        }
+
         // Grow every active slack's cost by `factor`, clamped to
         // cost_ceiling.  Pushes updates through the LP.  Returns count.
         uint32_t bump_active(std::span<const double> primals, double factor, LPSolver& lpsolver) {
@@ -455,6 +473,10 @@ public:
     // when no slack is still carrying demand — otherwise the reported
     // objective is slack-dominated.  Callers that already have the
     // solved LP's primals in scope pass them here to avoid re-copying.
+    uint32_t count_active_slacks(const std::vector<double>& primals) const {
+        return _slack.count_active(std::span<const double>{primals});
+    }
+
     bool has_active_slacks(const std::vector<double>& primals) const {
         return _slack.has_active(std::span<const double>{primals});
     }
