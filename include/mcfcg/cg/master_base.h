@@ -507,6 +507,28 @@ public:
         return std::vector<double>(all.begin(), all.begin() + _num_structural_rows);
     }
 
+    // LP dual objective at the current solved duals: Σ π_k * b_k + Σ
+    // cap_a * μ_a.  Every structural row has RHS=1 (demand=1 per
+    // commodity for path, convexity=1 per source for tree) — hence
+    // the literal sum of pi.  For computing the Lagrangian LB this is
+    // preferred over get_obj() (primal): at LP optimum they match by
+    // strong duality, but barrier-without-crossover returns an
+    // interior solution where primal and dual differ by a few units,
+    // and using the primal inflates the reconstructed Lagrangian
+    // above OPT on pathological instances (seen on grid1 path).
+    // Requires get_capacity_duals() to have been called first in the
+    // same iter so _mu_cache is populated.
+    double compute_dual_obj(const std::vector<double>& pi_structural) const {
+        double dual_obj = 0.0;
+        for (double pi : pi_structural) {
+            dual_obj += pi;
+        }
+        for (uint32_t arc : _cap_row_to_arc) {
+            dual_obj += _inst->capacity[arc] * _mu_cache[arc];
+        }
+        return dual_obj;
+    }
+
     const static_map<uint32_t, double>& get_capacity_duals() const {
         // Reset only the arcs we wrote last time, then scatter the new
         // duals into the persistent cache.  Avoids the per-iteration

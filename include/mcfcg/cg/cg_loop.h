@@ -211,7 +211,12 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // The rounding-error budget accounts for Dijkstra minimizing
         // scaled-integer edge weights rather than true reduced cost.
         if (pricer.priced_all() && num_active_slacks == 0 && num_new_caps == 0) {
-            double lb_iter = obj + pricer.min_rc_sum() - pricer.lb_error_bound();
+            // Use the LP dual obj (Σ pi + Σ cap*mu) rather than the
+            // primal obj so the Lagrangian reconstruction is exact at
+            // LP optimum even when the backend's primal and dual
+            // differ at solver tolerance (barrier-without-crossover).
+            double dual_obj = master.compute_dual_obj(pi);
+            double lb_iter = dual_obj + pricer.min_rc_sum() - pricer.lb_error_bound();
             best_lb = std::max(best_lb, lb_iter);
         }
 
