@@ -80,8 +80,9 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         result.total_columns = master.num_columns();
         result.optimal = true;
         populate_timing();
-        logger.print_summary(result.iterations, obj, true, result.time_lp, result.time_pricing,
-                             result.time_separation, result.time_total);
+        double gap_tol = RELATIVE_FEAS_TOL * std::max(1.0, std::abs(obj));
+        logger.print_summary(result.iterations, obj, true, best_lb, gap_tol, result.time_lp,
+                             result.time_pricing, result.time_separation, result.time_total);
     };
 
     timer.start(TimerCat::Total);
@@ -199,14 +200,17 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             pricer.reset_postponed();
         }
 
-        // Lagrangian/Farley LB.  Only valid when the pricer visited
-        // every source (no source postponement skipped anyone, no
-        // max_cols early break).  Monotonically tighten best_lb.
-        // Subtract the pricer's rounding-error budget to guarantee
-        // LB <= OPT: Dijkstra minimizes scaled-integer edge weights,
-        // so its chosen path's true rc may exceed the true-minimum by
-        // up to L/SCALE per entity.
-        if (pricer.priced_all()) {
+        // Lagrangian/Farley LB.  Valid only when the LP is MCF-
+        // feasible (same gate as UB: no slack basic, no fresh capacity
+        // violation) AND the pricer visited every source (no
+        // postponement skipped anyone, no max_cols early break).
+        // A slack-basic LP has duals polluted by the slack penalty
+        // and a cut-pending LP has mu missing entries; either gives
+        // a nonsensical Lagrangian reconstruction (observed LB orders
+        // of magnitude above OPT on EdgeRows path).
+        // The rounding-error budget accounts for Dijkstra minimizing
+        // scaled-integer edge weights rather than true reduced cost.
+        if (pricer.priced_all() && num_active_slacks == 0 && num_new_caps == 0) {
             double lb_iter = obj + pricer.min_rc_sum() - pricer.lb_error_bound();
             best_lb = std::max(best_lb, lb_iter);
         }
@@ -224,6 +228,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             if (best_ub - best_lb < gap_tol) {
                 iter_timer.stop(TimerCat::Pricing);
                 timer.stop(TimerCat::Pricing);
+                timer.stop(TimerCat::Total);
                 finish_iter(obj, num_new_caps, num_active_slacks,
                             static_cast<uint32_t>(new_cols.size()), 0, 0);
                 set_optimal(best_ub, iter);
@@ -283,8 +288,10 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         result.objective = best_ub;
     }
     populate_timing();
-    logger.print_summary(result.iterations, result.objective, result.optimal, result.time_lp,
-                         result.time_pricing, result.time_separation, result.time_total);
+    double gap_tol = RELATIVE_FEAS_TOL * std::max(1.0, std::abs(result.objective));
+    logger.print_summary(result.iterations, result.objective, result.optimal, best_lb, gap_tol,
+                         result.time_lp, result.time_pricing, result.time_separation,
+                         result.time_total);
     return result;
 }
 

@@ -59,15 +59,16 @@ public:
                      removed_col, added_cut, removed_cut, t_lp, t_pr, t_sp, t_tot);
     }
 
-    void print_summary(uint32_t iters, double obj, bool optimal, double t_lp, double t_pr,
-                       double t_sp, double t_tot) const {
+    void print_summary(uint32_t iters, double obj, bool optimal, double lb, double gap_tol,
+                       double t_lp, double t_pr, double t_sp, double t_tot) const {
         if (_verbosity < Verbosity::Summary) {
             return;
         }
         std::fprintf(stderr,
-                     "CG %s after %u iterations. obj=%.6f  "
+                     "CG %s after %u iterations. UB=%.6f LB=%.6f gap=%.3e tol=%.3e  "
                      "t_LP=%.3f  t_PR=%.3f  t_SP=%.3f  t_Tot=%.3f\n",
-                     optimal ? "optimal" : "stopped", iters, obj, t_lp, t_pr, t_sp, t_tot);
+                     optimal ? "optimal" : "stopped", iters, obj, lb, obj - lb, gap_tol, t_lp, t_pr,
+                     t_sp, t_tot);
     }
 };
 
