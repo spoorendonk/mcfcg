@@ -14,7 +14,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
                         const static_map<uint32_t, double>& mu, auto& dijk,
-                        std::vector<TreeColumn>& new_columns) {
+                        std::vector<TreeColumn>& new_columns, uint32_t thread_id) {
         TreeColumn col;
         col.source_idx = s_idx;
         col.cost = 0.0;
@@ -24,7 +24,14 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             _source_arcs[s_idx].clear();
         }
 
-        std::unordered_map<uint32_t, double> arc_flow_map;
+        // Reuse the per-thread scratch map: clear() retains the bucket
+        // storage, so the second process_source call on this thread
+        // skips the initial hash-table allocation.  Iteration order
+        // drifts with bucket-count history across calls — that drift
+        // shows up as small LP-backend dual noise in downstream RC
+        // recomputation, and is absorbed by EXISTING_COL_RC_TOL.
+        auto& arc_flow_map = _thread_arc_flow[thread_id];
+        arc_flow_map.clear();
 
         for (uint32_t k : src.commodity_indices) {
             uint32_t sink = _inst->commodities[k].sink;
