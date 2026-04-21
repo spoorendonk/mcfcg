@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iterator>
+#include <numeric>
 #include <unordered_set>
 #include <vector>
 
@@ -119,11 +120,29 @@ protected:
     std::vector<dijkstra_workspace> _workspaces;
     std::vector<static_map<uint32_t, bool>> _is_targets;
     std::vector<std::vector<ColumnT>> _thread_columns;  // reused across batches
+    std::vector<double> _thread_min_rc_sum;             // per-thread Lagrangian bound accumulator
+    // Per-thread accumulator for the LB rounding-error margin.  Each
+    // priced path contributes `L / SCALE` (path) or `d * L / SCALE`
+    // (tree, demand-weighted) to account for the gap between Dijkstra's
+    // scaled-integer shortest path and the true-reduced-cost shortest
+    // path — see `lb_error_bound()` below.
+    std::vector<double> _thread_rc_error_bound;
     thread_pool* _pool = nullptr;
 
     // Round-robin cursor: where to start pricing next iteration
     uint32_t _last_source_idx = 0;
     uint32_t _batch_size = 0;  // 0 = all sources in one batch
+
+    // Lagrangian/Farley lower bound support.  _last_min_rc_sum is the sum
+    // over all priced convexity entities (commodities for path, sources
+    // for tree) of min(rc*, 0), where rc* is the entity's best reduced
+    // cost found by the pricer.  Added to LP_obj it yields a valid MCF
+    // lower bound, but only when _last_priced_all is true — i.e. every
+    // source was visited in the last price() call (no source postponed,
+    // no max_cols early break).
+    double _last_min_rc_sum = 0.0;
+    double _last_rc_error_bound = 0.0;
+    bool _last_priced_all = false;
 
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
 
@@ -152,6 +171,8 @@ public:
         for (uint32_t wi = 0; wi < num_ws; ++wi)
             _workspaces.emplace_back(inst.graph.num_vertices());
         _thread_columns.resize(num_ws);
+        _thread_min_rc_sum.assign(num_ws, 0.0);
+        _thread_rc_error_bound.assign(num_ws, 0.0);
 
         _rc = inst.graph.create_arc_map<int64_t>();
         _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
@@ -174,17 +195,26 @@ public:
         compute_rc(mu);
 
         uint32_t n_sources = static_cast<uint32_t>(_inst->sources.size());
-        if (n_sources == 0)
+        if (n_sources == 0) {
+            _last_min_rc_sum = 0.0;
+            _last_priced_all = true;
             return {};
+        }
+
+        // Reset the Lagrangian bound accumulators for this price() call.
+        std::fill(_thread_min_rc_sum.begin(), _thread_min_rc_sum.end(), 0.0);
+        std::fill(_thread_rc_error_bound.begin(), _thread_rc_error_bound.end(), 0.0);
 
         uint32_t effective_batch = (_batch_size > 0) ? _batch_size : n_sources;
         uint32_t start = final_round ? 0 : _last_source_idx;
         uint32_t sources_scanned = 0;
+        uint32_t priced_count = 0;
 
         std::vector<ColumnT> all_columns;
         std::vector<uint32_t> batch;
         batch.reserve(effective_batch);
 
+        bool early_break = false;
         while (sources_scanned < n_sources) {
             // Collect next batch of active (non-postponed) sources
             batch.clear();
@@ -194,6 +224,7 @@ public:
                 if (!final_round && _source_postponed[s_idx])
                     continue;
                 batch.push_back(s_idx);
+                ++priced_count;
             }
 
             if (batch.empty())
@@ -204,13 +235,36 @@ public:
             all_columns.insert(all_columns.end(), std::make_move_iterator(batch_cols.begin()),
                                std::make_move_iterator(batch_cols.end()));
 
-            if (max_cols > 0 && all_columns.size() >= max_cols)
+            if (max_cols > 0 && all_columns.size() >= max_cols) {
+                early_break = true;
                 break;
+            }
         }
 
         _last_source_idx = (start + sources_scanned) % n_sources;
+        _last_min_rc_sum =
+            std::accumulate(_thread_min_rc_sum.begin(), _thread_min_rc_sum.end(), 0.0);
+        _last_rc_error_bound =
+            std::accumulate(_thread_rc_error_bound.begin(), _thread_rc_error_bound.end(), 0.0);
+        _last_priced_all = !early_break && priced_count == n_sources;
         return all_columns;
     }
+
+    // Sum over all priced convexity entities of min(rc*, 0) from the
+    // last price() call.  Combine with an LP-optimal objective to get
+    // a Lagrangian/Farley lower bound — valid only when priced_all()
+    // is true.
+    double min_rc_sum() const noexcept { return _last_min_rc_sum; }
+    bool priced_all() const noexcept { return _last_priced_all; }
+
+    // Upper bound on the rounding error in min_rc_sum().  Edge weights
+    // are scaled to int64 at SCALE=1e9 in compute_rc, so A* returns
+    // the path minimizing a rounded-integer cost which can differ from
+    // the true-min-reduced-cost path by at most L/SCALE per path (with
+    // L the path length in arcs, doubled to account for both the
+    // chosen path's and the true-min path's rounding).  Subtract this
+    // from LP_obj + min_rc_sum() to get a certified lower bound.
+    double lb_error_bound() const noexcept { return _last_rc_error_bound; }
 
     void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
         assert(_track_arcs && "filter_for_new_caps requires set_track_arcs(true)");
@@ -314,7 +368,7 @@ protected:
         dijk.add_source(source_v);
         dijk.run_until_targets(is_target, num_targets);
 
-        self().process_source(s_idx, src, duals, mu, dijk, new_columns);
+        self().process_source(s_idx, src, duals, mu, dijk, new_columns, thread_id);
 
         // Clear only the sinks we set (O(commodities-per-source), not O(V)).
         for (uint32_t k : src.commodity_indices)

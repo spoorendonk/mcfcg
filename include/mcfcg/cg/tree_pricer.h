@@ -14,7 +14,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
                         const static_map<uint32_t, double>& mu, auto& dijk,
-                        std::vector<TreeColumn>& new_columns) {
+                        std::vector<TreeColumn>& new_columns, uint32_t thread_id) {
         TreeColumn col;
         col.source_idx = s_idx;
         col.cost = 0.0;
@@ -50,6 +50,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
             double path_orig_cost = 0.0;
             double path_rc = 0.0;
+            uint32_t path_arcs = 0;
             uint32_t v = sink;
             while (dijk.has_pred(v)) {
                 uint32_t a = dijk.pred_arc(v);
@@ -57,9 +58,14 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
                 path_rc += _inst->cost[a] - mu[a];
                 arc_flow_map[a] += d;
                 v = _inst->graph.arc_source(a);
+                ++path_arcs;
             }
             tree_rc += d * path_rc;
             col.cost += d * path_orig_cost;
+            // Tree column's rc is the demand-weighted sum of its per-
+            // commodity path rcs, so the rounding-error budget is
+            // demand-weighted too: d * L / SCALE.
+            _thread_rc_error_bound[thread_id] += d * static_cast<double>(path_arcs) / SCALE;
         }
 
         if (_track_arcs) {
@@ -67,6 +73,13 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             for (auto& [arc, flow] : arc_flow_map) {
                 _source_arcs[s_idx].push_back(arc);
             }
+        }
+
+        // Lagrangian LB accumulator: this source's best tree RC,
+        // regardless of whether the col gets emitted.  Zero for
+        // non-attractive sources.
+        if (tree_rc < 0.0) {
+            _thread_min_rc_sum[thread_id] += tree_rc;
         }
 
         if (tree_rc >= _neg_rc_tol) {

@@ -58,6 +58,14 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     // violation).  Never reset to INF once established — a later iter
     // can only tighten it.
     double best_ub = INF;
+    // Monotonically non-decreasing Lagrangian/Farley lower bound.
+    // LB_iter = LP_obj + pricer.min_rc_sum() when pricer.priced_all()
+    // (every source was visited in that iter's pricing).  Adding
+    // capacity rows or having slacks basic does NOT invalidate the
+    // bound — both can only relax the LP, so LP_obj is still an
+    // under-estimate of the constrained master that the Farley
+    // correction lifts toward OPT.
+    double best_lb = -INF;
 
     auto populate_timing = [&] {
         result.time_lp = timer.elapsed(TimerCat::LP);
@@ -116,7 +124,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                                uint32_t added, uint32_t purged, uint32_t num_purged_cuts) {
             iter_timer.stop(TimerCat::Total);
             logger.print_iteration(
-                iter + 1, best_ub, -INF, obj, master.num_lp_cols(), master.num_lp_rows(),
+                iter + 1, best_ub, best_lb, obj, master.num_lp_cols(), master.num_lp_rows(),
                 num_active_slacks, added, purged, num_new_caps, num_purged_cuts,
                 iter_timer.elapsed(TimerCat::LP), iter_timer.elapsed(TimerCat::Pricing),
                 iter_timer.elapsed(TimerCat::Separation), iter_timer.elapsed(TimerCat::Total));
@@ -189,6 +197,18 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         }
         if (!new_cols.empty()) {
             pricer.reset_postponed();
+        }
+
+        // Lagrangian/Farley LB.  Only valid when the pricer visited
+        // every source (no source postponement skipped anyone, no
+        // max_cols early break).  Monotonically tighten best_lb.
+        // Subtract the pricer's rounding-error budget to guarantee
+        // LB <= OPT: Dijkstra minimizes scaled-integer edge weights,
+        // so its chosen path's true rc may exceed the true-minimum by
+        // up to L/SCALE per entity.
+        if (pricer.priced_all()) {
+            double lb_iter = obj + pricer.min_rc_sum() - pricer.lb_error_bound();
+            best_lb = std::max(best_lb, lb_iter);
         }
 
         // Cap columns at the per-iter limit. Keep the best-reduced-cost

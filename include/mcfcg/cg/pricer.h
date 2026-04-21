@@ -13,7 +13,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi,
                         const static_map<uint32_t, double>& mu, auto& dijk,
-                        std::vector<Column>& new_columns) {
+                        std::vector<Column>& new_columns, uint32_t thread_id) {
         bool found_any = false;
         if (_track_arcs)
             _source_arcs[s_idx].clear();
@@ -37,6 +37,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
             col.cost = 0.0;
             col.commodity = k;
             double true_rc = -pi[k];
+            uint32_t path_arcs = 0;
             vertex_t v = sink;
             while (dijk.has_pred(v)) {
                 uint32_t a = dijk.pred_arc(v);
@@ -46,7 +47,20 @@ class PathPricer : public PricerBase<PathPricer, Column> {
                 col.cost += _inst->cost[a];
                 true_rc += _inst->cost[a] - mu[a];
                 v = _inst->graph.arc_source(a);
+                ++path_arcs;
             }
+
+            // Lagrangian LB accumulator: every commodity's best RC,
+            // regardless of whether the col gets emitted.  Clamped to
+            // zero so unreachable / non-attractive commodities
+            // contribute nothing.
+            if (true_rc < 0.0) {
+                _thread_min_rc_sum[thread_id] += true_rc;
+            }
+            // Rounding-error budget: each arc can shift the scaled-int
+            // cost by 1/SCALE in true units; accumulate per edge for
+            // lb_error_bound().
+            _thread_rc_error_bound[thread_id] += static_cast<double>(path_arcs) / SCALE;
 
             if (true_rc >= _neg_rc_tol)
                 continue;
