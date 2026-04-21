@@ -211,6 +211,20 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             best_lb = std::max(best_lb, lb_iter);
         }
 
+        // Early termination on UB-LB relative gap.  best_ub is a valid
+        // MCF UB (LP obj on an MCF-feasible iter); best_lb is a valid
+        // MCF LB (Lagrangian - scale margin).  When the relative gap
+        // drops below the design feasibility tolerance, the current UB
+        // is within tolerance of OPT and there is no point iterating.
+        if (best_ub < INF) {
+            double gap_tol = RELATIVE_FEAS_TOL * std::max(1.0, std::abs(best_ub));
+            if (best_ub - best_lb < gap_tol) {
+                finish_iter(obj, num_new_caps, num_active_slacks, 0, 0, 0);
+                set_optimal(best_ub, iter);
+                return result;
+            }
+        }
+
         // Cap columns at the per-iter limit. Keep the best-reduced-cost
         // columns rather than the first-found ones so the master LP makes
         // maximal progress per iter.
