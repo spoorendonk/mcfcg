@@ -92,15 +92,31 @@ def build_instance(seed, capacity, modes, subset, time_window):
 
 
 def write_commalab(path, num_vertices, arcs, commodities):
-    """Write instance in CommaLab/UniPi plain-numeric format (1-indexed)."""
+    """Write instance in CommaLab/UniPi plain-numeric format (1-indexed).
+
+    Mirrors Lienkamp & Schiffer's `start_run.py::write_instance`
+    uncapacitated sentinel: `arc.capacity >= 9999 -> -1`.  Our C++
+    reader maps -1 back to +inf so no capacity row is added for those
+    arcs; emitting 9999 verbatim would be read as a finite binding
+    capacity and inflate the objective.
+    """
+    def fmt(value):
+        # Compact: integer-valued floats render as "1" not "1.0"; fractional
+        # values keep full precision ("1.5").  Matches the upstream
+        # `start_run.py::write_instance` which uses f"{arc.cost}".
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return f"{value:g}"
+
     with open(path, "w") as f:
         f.write(f"{num_vertices}\n")
         f.write(f"{len(arcs)}\n")
         f.write(f"{len(commodities)}\n")
         for src, dst, cost, cap in arcs:
-            f.write(f"{src + 1} {dst + 1} {cost} {cap}\n")
+            cap_out = cap if cap < 9999 else -1
+            f.write(f"{src + 1} {dst + 1} {fmt(cost)} {fmt(cap_out)}\n")
         for src, dst, demand in commodities:
-            f.write(f"{src + 1} {dst + 1} {demand}\n")
+            f.write(f"{src + 1} {dst + 1} {fmt(demand)}\n")
 
 
 def generate_family(prefix, mode_str, configs, time_window, seeds, output, gg):
@@ -126,11 +142,14 @@ def generate_family(prefix, mode_str, configs, time_window, seeds, output, gg):
                 node_map = {n: i for i, n in enumerate(nodes)}
                 num_vertices = len(nodes)
 
-                # Extract arcs
+                # Extract arcs.  Keep cost/cap as floats; Lienkamp's
+                # temp_network has fractional costs (e.g. 0.5, 1.5 for
+                # walking arcs) and rounding them to int shifts the LP
+                # objective by ~0.25% on BUS instances.
                 arcs = []
                 for u, v, data in graph.edges(data=True):
-                    cost = int(round(data.get("weight", 1)))
-                    cap = int(round(data.get("cap", 1000)))
+                    cost = float(data.get("weight", 1))
+                    cap = float(data.get("cap", 1000))
                     arcs.append((node_map[u], node_map[v], cost, cap))
 
                 # Extract commodities: sources/sinks are dicts keyed by trip ID

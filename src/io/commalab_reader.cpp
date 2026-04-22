@@ -1,4 +1,7 @@
+#include "mcfcg/graph/static_digraph_builder.h"
 #include "mcfcg/instance.h"
+#include "mcfcg/io/gz_util.h"
+#include "mcfcg/util/limits.h"
 
 #include <fstream>
 #include <sstream>
@@ -6,9 +9,6 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include "mcfcg/graph/static_digraph_builder.h"
-#include "mcfcg/io/gz_util.h"
 
 namespace mcfcg {
 
@@ -18,7 +18,13 @@ namespace mcfcg {
 //   Line 3: <num_commodities>
 //   Next M lines: <src> <dst> <cost> <capacity>   (1-indexed)
 //   Next K lines: <origin> <destination> <demand>  (1-indexed)
-static Instance parse_commalab(std::istream & file, const std::string & path) {
+//
+// A negative capacity encodes an uncapacitated arc and maps to INF, so
+// count_capacitated_arcs excludes it and no capacity row is lazily
+// added.  Mirrors the `-1` sentinel that scripts/generate_instances.py
+// emits for intermodal instances (and Lienkamp & Schiffer's upstream
+// start_run.py emits for `arc.capacity >= 9999`).
+static Instance parse_commalab(std::istream& file, const std::string& path) {
     uint32_t num_vertices = 0, num_arcs = 0, num_commodities = 0;
     file >> num_vertices >> num_arcs >> num_commodities;
     if (file.fail()) {
@@ -36,6 +42,9 @@ static Instance parse_commalab(std::istream & file, const std::string & path) {
         uint32_t src, dst;
         double cost, cap;
         file >> src >> dst >> cost >> cap;
+        if (cap < 0.0) {
+            cap = INF;
+        }
         arc_data.push_back({src - 1, dst - 1, cost, cap});
     }
     if (file.fail()) {
@@ -57,7 +66,7 @@ static Instance parse_commalab(std::istream & file, const std::string & path) {
 
     // Build graph
     static_digraph_builder<double, double> builder(num_vertices);
-    for (auto & a : arc_data) {
+    for (auto& a : arc_data) {
         builder.add_arc(a.src, a.dst, a.cost, a.cap);
     }
     auto [graph, cost_map, cap_map] = builder.build();
@@ -70,7 +79,7 @@ static Instance parse_commalab(std::istream & file, const std::string & path) {
     };
 }
 
-Instance read_commalab(const std::string & path) {
+Instance read_commalab(const std::string& path) {
     if (ends_with_gz(path)) {
         auto data = decompress_gz(path);
         std::istringstream iss(std::move(data));
@@ -83,8 +92,7 @@ Instance read_commalab(const std::string & path) {
     return parse_commalab(file, path);
 }
 
-std::vector<Source> group_by_source(
-    const std::vector<Commodity> & commodities) {
+std::vector<Source> group_by_source(const std::vector<Commodity>& commodities) {
     std::unordered_map<uint32_t, uint32_t> source_index;
     std::vector<Source> sources;
     for (uint32_t k = 0; k < commodities.size(); ++k) {
