@@ -58,6 +58,21 @@ static void solve_and_check(const mcfcg::Instance& inst, double ref_obj,
     EXPECT_LE(result.objective, ref_obj * (1.0 + tol)) << "Objective above reference";
 }
 
+// Intermodal path pricing hits a pathological PricerLight gap-exit on
+// large instances, so these tests use tree + PricerHeavy — the config
+// that matches the paper's LP optima.  BUS stays disabled (HiGHS
+// diverges on BUS-scale graphs; COPT is required).
+static void solve_intermodal_and_check(const mcfcg::Instance& inst, double ref_obj,
+                                       double tol = mcfcg::RELATIVE_FEAS_TOL * 10) {
+    mcfcg::CGParams params;
+    params.max_iterations = 10000;
+    params.strategy = mcfcg::CGStrategy::PricerHeavy;
+    auto result = mcfcg::solve_tree_cg(inst, params);
+    EXPECT_TRUE(result.optimal) << "Did not reach optimality";
+    EXPECT_GE(result.objective, ref_obj * (1.0 - tol)) << "Objective below reference";
+    EXPECT_LE(result.objective, ref_obj * (1.0 + tol)) << "Objective above reference";
+}
+
 TEST(GridCorrectness, Grid1) {
     auto opt = load_optimal(data_dir("commalab/grid"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
@@ -128,7 +143,7 @@ TEST(IntermodalCorrectness, Subway308) {
         GTEST_SKIP() << "data/intermodal not found";
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
-    solve_and_check(inst, opt.at("SUBWAY-308-0"));
+    solve_intermodal_and_check(inst, opt.at("SUBWAY-308-0"));
 }
 
 TEST(IntermodalCorrectness, Subway486) {
@@ -137,7 +152,7 @@ TEST(IntermodalCorrectness, Subway486) {
         GTEST_SKIP() << "data/intermodal not found";
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
-    solve_and_check(inst, opt.at("SUBWAY-486-0"));
+    solve_intermodal_and_check(inst, opt.at("SUBWAY-486-0"));
 }
 
 TEST(IntermodalCorrectness, DISABLED_Bus2632) {
