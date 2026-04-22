@@ -162,12 +162,7 @@ TEST(IntermodalCorrectness, Subway486) {
     solve_intermodal_and_check(inst, opt.at("SUBWAY-486-0"));
 }
 
-// BUS-* tests stay disabled: they solve under HiGHS+tree+PricerHeavy
-// in a few seconds (~6s for BUS-2632, scaling up), but running them
-// on every CI run bloats the suite wall-time and the DISABLED_
-// prefix keeps them accessible via --gtest_also_run_disabled_tests
-// for manual runs and regression hunts.
-TEST(IntermodalCorrectness, DISABLED_Bus2632) {
+TEST(IntermodalCorrectness, Bus2632) {
     auto path = data_dir("intermodal") + "/BUS-2632-0.txt.gz";
     if (!fs::exists(path))
         GTEST_SKIP() << "data/intermodal not found";
@@ -176,7 +171,7 @@ TEST(IntermodalCorrectness, DISABLED_Bus2632) {
     solve_intermodal_and_check(inst, opt.at("BUS-2632-0"));
 }
 
-TEST(IntermodalCorrectness, DISABLED_Bus7896) {
+TEST(IntermodalCorrectness, Bus7896) {
     auto path = data_dir("intermodal") + "/BUS-7896-0.txt.gz";
     if (!fs::exists(path))
         GTEST_SKIP() << "data/intermodal not found";
