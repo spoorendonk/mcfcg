@@ -137,6 +137,18 @@ def generate_family(prefix, mode_str, configs, time_window, seeds, output, gg):
                 )
                 graph = gg.build_graph(instance)
 
+                # gg.build_graph uses nx.DiGraph, which silently collapses
+                # parallel (u, v) arcs — keeping only the last add_edge.
+                # Upstream Lienkamp's temp_network has no parallel arcs
+                # today, so counts match; assert loudly if that ever
+                # changes so we don't silently degrade the LP.
+                assert graph.number_of_edges() == len(instance.temp_network.arcs), (
+                    f"{name}: parallel arcs detected "
+                    f"(temp_network={len(instance.temp_network.arcs)}, "
+                    f"DiGraph={graph.number_of_edges()}) — "
+                    "nx.DiGraph dedupes; switch to direct iteration."
+                )
+
                 # Remap node IDs to contiguous 0..N-1
                 nodes = list(graph.nodes())
                 node_map = {n: i for i, n in enumerate(nodes)}

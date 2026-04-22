@@ -39,8 +39,8 @@ static Instance parse_commalab(std::istream& file, const std::string& path) {
     arc_data.reserve(num_arcs);
 
     for (uint32_t i = 0; i < num_arcs; ++i) {
-        uint32_t src, dst;
-        double cost, cap;
+        uint32_t src = 0, dst = 0;
+        double cost = 0.0, cap = 0.0;
         file >> src >> dst >> cost >> cap;
         if (cap < 0.0) {
             cap = INF;

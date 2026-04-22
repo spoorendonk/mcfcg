@@ -58,12 +58,19 @@ static void solve_and_check(const mcfcg::Instance& inst, double ref_obj,
     EXPECT_LE(result.objective, ref_obj * (1.0 + tol)) << "Objective above reference";
 }
 
-// Intermodal path pricing hits a pathological PricerLight gap-exit on
-// large instances, so these tests use tree + PricerHeavy — the config
-// that matches the paper's LP optima.  BUS stays disabled (HiGHS
-// diverges on BUS-scale graphs; COPT is required).
+// Path formulation stalls on large intermodal graphs (slacks stay
+// basic under HiGHS, LP stops improving around iter 400 with UB=inf),
+// so these tests use the tree formulation.  PricerHeavy and
+// PricerLight both work with tree — we default to PricerHeavy since
+// it exercises the col-cap + partial-pricing + filter bundle that the
+// production intermodal runs use.
+//
+// Tolerance is tighter than solve_and_check's: observed LP-solver
+// noise on SUBWAY intermodal is < 1e-5 relative, so 2 * RELATIVE_FEAS_TOL
+// (2e-4) still catches any reintroduction of the 0.25% translator bug
+// without flaking on float jitter.
 static void solve_intermodal_and_check(const mcfcg::Instance& inst, double ref_obj,
-                                       double tol = mcfcg::RELATIVE_FEAS_TOL * 10) {
+                                       double tol = mcfcg::RELATIVE_FEAS_TOL * 2) {
     mcfcg::CGParams params;
     params.max_iterations = 10000;
     params.strategy = mcfcg::CGStrategy::PricerHeavy;
@@ -155,13 +162,18 @@ TEST(IntermodalCorrectness, Subway486) {
     solve_intermodal_and_check(inst, opt.at("SUBWAY-486-0"));
 }
 
+// BUS-* tests stay disabled: they solve under HiGHS+tree+PricerHeavy
+// in a few seconds (~6s for BUS-2632, scaling up), but running them
+// on every CI run bloats the suite wall-time and the DISABLED_
+// prefix keeps them accessible via --gtest_also_run_disabled_tests
+// for manual runs and regression hunts.
 TEST(IntermodalCorrectness, DISABLED_Bus2632) {
     auto path = data_dir("intermodal") + "/BUS-2632-0.txt.gz";
     if (!fs::exists(path))
         GTEST_SKIP() << "data/intermodal not found";
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
-    solve_and_check(inst, opt.at("BUS-2632-0"));
+    solve_intermodal_and_check(inst, opt.at("BUS-2632-0"));
 }
 
 TEST(IntermodalCorrectness, DISABLED_Bus7896) {
@@ -170,7 +182,7 @@ TEST(IntermodalCorrectness, DISABLED_Bus7896) {
         GTEST_SKIP() << "data/intermodal not found";
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
-    solve_and_check(inst, opt.at("BUS-7896-0"));
+    solve_intermodal_and_check(inst, opt.at("BUS-7896-0"));
 }
 
 // --- Reduced cost validation on real instances ---

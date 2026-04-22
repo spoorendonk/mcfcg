@@ -88,18 +88,21 @@ python3 "$SCRIPT_DIR/generate_instances.py" \
     --seeds 0 \
     --modes subway bus sbt
 
-# --- Step 4: Clean instances ---
+# --- Step 4: Clean and gzip instances ---
+# Cleaned output is gzipped (.txt.gz) — that's what the test suite and
+# mcfcg_cli load.  Skip if the .txt.gz already exists.
 echo "Cleaning instances ..."
 for raw in "$RAW_DIR"/*.txt; do
     [ -f "$raw" ] || continue
     name="$(basename "$raw")"
     cleaned="$DATA_DIR/$name"
-    if [ -f "$cleaned" ]; then
-        echo "  $name: already cleaned, skipping"
+    if [ -f "$cleaned.gz" ]; then
+        echo "  $name.gz: already present, skipping"
         continue
     fi
     echo "  $name: cleaning ..."
     "$CLEAN_BIN" "$raw" --output "$cleaned"
+    gzip -f "$cleaned"
 done
 
 echo ""

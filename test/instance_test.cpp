@@ -2,6 +2,7 @@
 
 #include "test_paths.h"
 
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -82,5 +83,44 @@ TEST_F(InstanceTest, RoundTrip) {
         EXPECT_DOUBLE_EQ(inst2.commodities[i].demand, inst.commodities[i].demand);
     }
 
+    std::remove(out_path.c_str());
+}
+
+// Intermodal-format round-trip: write_commalab must preserve fractional
+// costs (walking/waiting arcs in Lienkamp's temp network) and +INF
+// capacities (uncapped arcs) end-to-end.  Previously write_commalab
+// used llround(), which truncated 0.5 to 0 and mapped INF to the
+// implementation-defined LLONG_MIN sentinel.
+TEST_F(InstanceTest, RoundTripFractionalCostAndInfCap) {
+    static const char* instance = R"(3
+2
+1
+1 2 0.5 -1
+2 3 1.5 6
+1 3 1
+)";
+    std::string in_path = mcfcg::test::unique_test_path("inf_test.txt");
+    {
+        std::ofstream f(in_path);
+        f << instance;
+    }
+    auto inst = mcfcg::read_commalab(in_path);
+
+    ASSERT_EQ(inst.graph.num_arcs(), 2u);
+    // -1 cap should have been mapped to INF on read.
+    EXPECT_TRUE(std::isinf(inst.capacity[0]));
+    EXPECT_DOUBLE_EQ(inst.cost[0], 0.5);
+    EXPECT_DOUBLE_EQ(inst.capacity[1], 6.0);
+    EXPECT_DOUBLE_EQ(inst.cost[1], 1.5);
+
+    std::string out_path = mcfcg::test::unique_test_path("inf_test_roundtrip.txt");
+    mcfcg::write_commalab(inst, out_path);
+
+    auto inst2 = mcfcg::read_commalab(out_path);
+    EXPECT_TRUE(std::isinf(inst2.capacity[0])) << "INF capacity lost in round-trip";
+    EXPECT_DOUBLE_EQ(inst2.cost[0], 0.5) << "Fractional cost lost in round-trip";
+    EXPECT_DOUBLE_EQ(inst2.cost[1], 1.5) << "Fractional cost lost in round-trip";
+
+    std::remove(in_path.c_str());
     std::remove(out_path.c_str());
 }
