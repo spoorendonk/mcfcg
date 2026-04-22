@@ -380,6 +380,133 @@ TEST(FeatureTests, PricerHeavyTree) {
     EXPECT_LE(result.objective, opt.at("grid1") * (1.0 + 0.0001));
 }
 
+// Partial pricing regression guard.  If the col-cap early break fires
+// inside pricer.price() (batch_size < n_sources and enough negative-RC
+// cols found), the round-robin cursor must park mid-sweep so the NEXT
+// price() call resumes from there.  Two failure modes this catches:
+// (1) a misscaled batch_size that never triggers early break, and
+// (2) reset_postponed() on the success path wiping the cursor to 0.
+TEST(FeatureTests, PartialPricingParksCursor) {
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar30");
+    ASSERT_GT(inst.sources.size(), 4U) << "need enough sources for partial pricing";
+
+    mcfcg::PathPricer pricer;
+    // batch_size=2 forces a col-cap check every 2 sources; max_cols=1
+    // fires the early break as soon as the first batch produces a col.
+    pricer.init(inst, /*pool=*/nullptr, /*batch_size=*/2, mcfcg::NEG_RC_TOL);
+
+    // Pi = +INF makes every commodity's shortest path have very
+    // negative reduced cost, so every source emits a column.
+    std::vector<double> pi(inst.commodities.size(), std::numeric_limits<double>::infinity());
+    auto mu = inst.graph.create_arc_map<double>(0.0);
+
+    auto cols1 = pricer.price(pi, mu, /*final_round=*/false, /*max_cols=*/1);
+    EXPECT_FALSE(cols1.empty()) << "pricer must produce at least one col with +INF duals";
+    const uint32_t cursor1 = pricer.last_source_idx();
+    // A mid-sweep break lands at 0 < cursor < n_sources; the modulo wrap
+    // (finishing the sweep) lands back at 0 and is caught by EXPECT_GT.
+    EXPECT_GT(cursor1, 0U) << "cursor did not advance from 0 — early break did not park mid-sweep";
+    EXPECT_FALSE(pricer.priced_all()) << "priced_all should be false after early break";
+
+    auto cols2 = pricer.price(pi, mu, /*final_round=*/false, /*max_cols=*/1);
+    EXPECT_FALSE(cols2.empty());
+    EXPECT_NE(pricer.last_source_idx(), cursor1)
+        << "cursor did not advance on the second price() call";
+    const uint32_t cursor2 = pricer.last_source_idx();
+
+    // clear_postponed must preserve the cursor (this is the fix — the
+    // main CG loop calls it on the success path).  reset_postponed
+    // wipes the cursor and is reserved for warm-start / pricing-exhausted.
+    pricer.clear_postponed();
+    EXPECT_EQ(pricer.last_source_idx(), cursor2)
+        << "clear_postponed() wiped the cursor — partial pricing would be inert";
+
+    pricer.reset_postponed();
+    EXPECT_EQ(pricer.last_source_idx(), 0U) << "reset_postponed() must rewind the cursor to 0";
+}
+
+// Partial-pricing batch-size formula (compute_partial_pricing_batch_size).
+// Kept as a pure function so it's testable without an instance or pool.
+TEST(FeatureTests, PartialPricingBatchSizeFormula) {
+    using mcfcg::compute_partial_pricing_batch_size;
+
+    // Explicit caller setting always wins.
+    EXPECT_EQ(compute_partial_pricing_batch_size(50U, true, 32U, 1000U), 50U);
+    EXPECT_EQ(compute_partial_pricing_batch_size(50U, false, 32U, 1000U), 50U);
+    EXPECT_EQ(compute_partial_pricing_batch_size(1U, true, 32U, 4U), 1U);
+
+    // PricerLight: always 0 (one big batch).
+    EXPECT_EQ(compute_partial_pricing_batch_size(0U, false, 32U, 1000U), 0U);
+    EXPECT_EQ(compute_partial_pricing_batch_size(0U, false, 1U, 10U), 0U);
+
+    // PricerHeavy + small instance (n_sources <= pool_threads): 0.
+    // Partial pricing can't fire so we don't pretend it does.
+    EXPECT_EQ(compute_partial_pricing_batch_size(0U, true, 32U, 10U), 0U);
+    EXPECT_EQ(compute_partial_pricing_batch_size(0U, true, 32U, 32U), 0U);
+    EXPECT_EQ(compute_partial_pricing_batch_size(0U, true, 8U, 0U), 0U);
+
+    // PricerHeavy + larger instance: max(pool_threads, n_sources/4).
+    // pool_threads floor case (n_sources/4 < threads):
+    EXPECT_EQ(compute_partial_pricing_batch_size(0U, true, 32U, 100U), 32U);
+    // n_sources/4 dominates:
+    EXPECT_EQ(compute_partial_pricing_batch_size(0U, true, 32U, 1000U), 250U);
+    // Single-threaded (pool=nullptr → pool_threads=1): n_sources/4 rules.
+    EXPECT_EQ(compute_partial_pricing_batch_size(0U, true, 1U, 100U), 25U);
+
+    // Boundary: n_sources == 4 * pool_threads — both sides equal.
+    EXPECT_EQ(compute_partial_pricing_batch_size(0U, true, 32U, 128U), 32U);
+}
+
+// LB-tracking invariant: a max_cols break that fires exactly on sweep
+// completion must leave priced_all=true, otherwise Lagrangian/Farley LB
+// tracking silently stops firing in the precise iterations where tree
+// PricerHeavy hits its col cap (num_entities = n_sources, one col per
+// source, cap triggered at batch end).  Guards the !early_break drop.
+TEST(FeatureTests, PricerPricedAllSurvivesSweepCompletingBreak) {
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
+    const auto n_sources = static_cast<uint32_t>(inst.sources.size());
+
+    mcfcg::TreePricer pricer;
+    pricer.init(inst, /*pool=*/nullptr, /*batch_size=*/1, mcfcg::NEG_RC_TOL);
+
+    // Large-but-finite dual per source so every tree has negative RC and
+    // emits exactly one column.  +INF would also work but produces
+    // degenerate rc_error bounds in the pricer.
+    std::vector<double> pi_s(n_sources, 1e6);
+    auto mu = inst.graph.create_arc_map<double>(0.0);
+
+    // max_cols == n_sources: with batch=1 and one col per source, the
+    // break fires on the last batch, after priced_count reached n_sources.
+    auto cols = pricer.price(pi_s, mu, /*final_round=*/false, /*max_cols=*/n_sources);
+    EXPECT_EQ(cols.size(), n_sources) << "tree pricer should emit one column per source";
+    EXPECT_TRUE(pricer.priced_all())
+        << "priced_all must remain true when priced_count == n_sources, even if the "
+           "col-cap break fired on the final batch";
+}
+
+// End-to-end LB tracking under PricerHeavy.  planar80 has 80 sources;
+// num_threads=4 forces partial pricing to engage (n_sources/4 = 20 > 4),
+// independent of host hw_concurrency (an 80+-thread box would otherwise
+// route through the small-instance single-batch branch and hide a
+// partial-pricing regression).  Without the priced_all fix, LB tracking
+// would be disabled in every iteration that hit the col cap, leaving
+// result.lower_bound at -INF on convergent runs.
+TEST(FeatureTests, PricerHeavyLagrangianBound) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar80");
+    mcfcg::CGParams params;
+    params.strategy = mcfcg::CGStrategy::PricerHeavy;
+    params.num_threads = 4;
+    auto result = mcfcg::solve_path_cg(inst, params);
+    EXPECT_TRUE(result.optimal);
+    EXPECT_LT(result.iterations, params.max_iterations);
+    EXPECT_GT(result.lower_bound, -mcfcg::INF) << "LB tracking never fired under PricerHeavy";
+    EXPECT_LE(result.lower_bound, result.objective + 1e-6) << "LB cannot exceed UB";
+    double ref = opt.at("planar80");
+    EXPECT_GE(result.objective, ref * (1.0 - 1e-4));
+    EXPECT_LE(result.objective, ref * (1.0 + 1e-4));
+}
+
 // Solve planar150 under both formulations and check the reported
 // objective is within RELATIVE_FEAS_TOL of the reference.  planar150
 // is small enough to run fast but big enough that LB tracking and

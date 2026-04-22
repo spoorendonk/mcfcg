@@ -2,9 +2,11 @@
 
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/util/limits.h"
 #include "mcfcg/util/logger.h"
 #include "mcfcg/util/tolerances.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 
@@ -12,6 +14,12 @@ namespace mcfcg {
 
 struct CGResult {
     double objective;
+    // Best Lagrangian/Farley lower bound seen during solve.  -INF means
+    // LB tracking never fired (no MCF-feasible iter where pricer
+    // visited every source).  Combine with `objective` to report a
+    // gap.  A PricerHeavy regression that broke priced_all would leave
+    // this at -INF even on convergent runs.
+    double lower_bound = -INF;
     // CG-loop master iterations.  Counts every pass through the loop body,
     // including iterations where pricing was deferred under
     // CGStrategy::PricerHeavy (iterations that only added lazy capacity
@@ -25,6 +33,26 @@ struct CGResult {
     double time_separation = 0;
     double time_total = 0;
 };
+
+// Batch size for the pricer's source-level dispatcher.  Partial pricing
+// only engages when the instance has more sources than fit in one
+// thread-pool batch; below that threshold the col-cap early break has
+// no mid-sweep to park in, and we return 0 (single big batch) — the
+// simple default.  For larger instances under PricerHeavy, ~4 batches
+// per sweep (n_sources/4), floored at pool_threads to keep every batch
+// able to saturate the pool.  An explicit caller setting
+// (explicit_batch_size > 0) always wins.
+inline uint32_t compute_partial_pricing_batch_size(uint32_t explicit_batch_size, bool pricer_heavy,
+                                                   uint32_t pool_threads,
+                                                   uint32_t n_sources) noexcept {
+    if (explicit_batch_size > 0) {
+        return explicit_batch_size;
+    }
+    if (!pricer_heavy || n_sources <= pool_threads) {
+        return 0U;
+    }
+    return std::max(pool_threads, n_sources / 4U);
+}
 
 using SolverFactory = std::function<std::unique_ptr<LPSolver>()>;
 
@@ -41,14 +69,15 @@ enum class CGStrategy : uint8_t {
     // to a minimum.  Large col cap, column aging on, cuts and columns added
     // in the same iteration.
     PricerLight,
-    // The pricer is expensive relative to LP solves, so run as few pricing
-    // problems per master iteration as possible.  Shift work toward the
-    // master:
-    //  * cap columns per iter at num_entities (one per source/commodity)
+    // Pricer is expensive; throttle master iterations to as few pricing
+    // sweeps as possible.  Bundle (rationale in CLAUDE.md):
+    //  * cap columns per iter at num_entities
     //  * disable column aging (overrides CGParams::col_age_limit)
     //  * force the source pricing filter on
-    //  * defer pricing in iterations that added lazy capacity rows — let the
-    //    master re-solve and reach a cut-stable state before pricing again
+    //  * defer pricing on cut-adding iterations
+    //  * partial pricing via compute_partial_pricing_batch_size (below)
+    //    — engages only when n_sources > pool_threads; overridden when
+    //    CGParams::pricing_batch_size > 0
     PricerHeavy,
 };
 

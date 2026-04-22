@@ -138,8 +138,9 @@ protected:
     // for tree) of min(rc*, 0), where rc* is the entity's best reduced
     // cost found by the pricer.  Added to LP_obj it yields a valid MCF
     // lower bound, but only when _last_priced_all is true — i.e. every
-    // source was visited in the last price() call (no source postponed,
-    // no max_cols early break).
+    // source was visited in the last price() call (priced_count equals
+    // n_sources; a max_cols break that fires exactly on sweep completion
+    // still counts).
     double _last_min_rc_sum = 0.0;
     double _last_rc_error_bound = 0.0;
     bool _last_priced_all = false;
@@ -223,7 +224,6 @@ public:
         std::vector<uint32_t> batch;
         batch.reserve(effective_batch);
 
-        bool early_break = false;
         while (sources_scanned < n_sources) {
             // Collect next batch of active (non-postponed) sources
             batch.clear();
@@ -245,7 +245,6 @@ public:
                                std::make_move_iterator(batch_cols.end()));
 
             if (max_cols > 0 && all_columns.size() >= max_cols) {
-                early_break = true;
                 break;
             }
         }
@@ -256,7 +255,15 @@ public:
         _last_min_rc_sum = std::accumulate(_source_min_rc.begin(), _source_min_rc.end(), 0.0);
         _last_rc_error_bound =
             std::accumulate(_source_rc_error.begin(), _source_rc_error.end(), 0.0);
-        _last_priced_all = !early_break && priced_count == n_sources;
+        // priced_count == n_sources already proves every source was
+        // visited (postponed sources are skipped without incrementing
+        // it); a max-cols break that fires exactly on the last batch
+        // still completes the sweep and should keep priced_all=true so
+        // the LB gate in cg_loop can fire.  Under PricerHeavy this is
+        // the common case — the col cap is tuned to num_entities and
+        // tree's one-col-per-source emission hits it precisely at the
+        // end of the sweep.
+        _last_priced_all = (priced_count == n_sources);
         return all_columns;
     }
 
@@ -275,6 +282,11 @@ public:
     // chosen path's and the true-min path's rounding).  Subtract this
     // from LP_obj + min_rc_sum() to get a certified lower bound.
     double lb_error_bound() const noexcept { return _last_rc_error_bound; }
+
+    // Round-robin cursor parked by the last price() call; exposed for
+    // tests that verify partial pricing (PricerHeavy) advances it
+    // mid-sweep when the max_cols early break fires.
+    uint32_t last_source_idx() const noexcept { return _last_source_idx; }
 
     void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
         assert(_track_arcs && "filter_for_new_caps requires set_track_arcs(true)");
@@ -296,6 +308,15 @@ public:
     void reset_postponed() {
         std::fill(_source_postponed.begin(), _source_postponed.end(), uint8_t{0});
         _last_source_idx = 0;
+    }
+
+    // Clear postponement flags only; keep the round-robin cursor.  Used
+    // by the main CG loop after a successful pricing pass so partial
+    // pricing resumes from where it parked next iter, rather than
+    // restarting at source 0 every iter.  Calling reset_postponed here
+    // would silently defeat partial pricing under CGStrategy::PricerHeavy.
+    void clear_postponed() {
+        std::fill(_source_postponed.begin(), _source_postponed.end(), uint8_t{0});
     }
 
 protected:

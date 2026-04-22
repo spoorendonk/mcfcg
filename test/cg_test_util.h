@@ -110,7 +110,7 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
             new_cols = pricer.price(pi, mu, true);
         }
         if (!new_cols.empty()) {
-            pricer.reset_postponed();
+            pricer.clear_postponed();
         }
 
         if (new_cols.empty()) {
@@ -200,7 +200,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj,
             new_cols = pricer.price(pi_s, mu, true);
         }
         if (!new_cols.empty()) {
-            pricer.reset_postponed();
+            pricer.clear_postponed();
         }
 
         if (new_cols.empty()) {

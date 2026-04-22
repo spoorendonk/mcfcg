@@ -29,21 +29,23 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                   uint32_t num_entities) {
     auto pool = make_thread_pool(params.num_threads);
 
-    // Strategy bundle: resolve effective params from params.strategy.
-    // `PricerHeavy` caps columns per iter, disables column aging, enables the
-    // source pricing filter, and defers pricing in iterations that added
-    // lazy capacity rows.
+    // Resolve the CGStrategy bundle into effective_* locals; see the
+    // CGStrategy enum doc in path_cg.h for the per-preset contents.
     const bool pricer_heavy = (params.strategy == CGStrategy::PricerHeavy);
     const uint32_t effective_col_limit = pricer_heavy ? num_entities : params.max_cols_per_iter;
     const uint32_t effective_col_age_limit = pricer_heavy ? INF_U32 : params.col_age_limit;
     const bool effective_pricing_filter = pricer_heavy || params.pricing_filter;
+    const uint32_t pool_threads = pool ? pool->num_threads() : 1U;
+    const uint32_t n_sources = static_cast<uint32_t>(inst.sources.size());
+    const uint32_t effective_batch_size = compute_partial_pricing_batch_size(
+        params.pricing_batch_size, pricer_heavy, pool_threads, n_sources);
 
     Master master;
     master.init(inst, params.solver_factory ? params.solver_factory() : nullptr, pool.get(),
                 params.warm_start);
 
     Pricer pricer;
-    pricer.init(inst, pool.get(), params.pricing_batch_size, params.neg_rc_tol);
+    pricer.init(inst, pool.get(), effective_batch_size, params.neg_rc_tol);
     pricer.set_track_arcs(effective_pricing_filter);
 
     Timer timer;
@@ -81,6 +83,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
     auto set_optimal = [&](double obj, uint32_t iter) {
         result.objective = obj;
+        result.lower_bound = best_lb;
         result.iterations = iter + 1;
         result.total_columns = master.num_columns();
         result.optimal = true;
@@ -205,7 +208,10 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             new_cols = pricer.price(pi, mu, true, effective_col_limit);
         }
         if (!new_cols.empty()) {
-            pricer.reset_postponed();
+            // Keep _last_source_idx so partial pricing under PricerHeavy
+            // resumes from its parked cursor next iter; reset_postponed()
+            // would wipe the cursor and defeat partial pricing.
+            pricer.clear_postponed();
         }
 
         // Lagrangian/Farley LB.  Valid only when the LP is MCF-
@@ -310,6 +316,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     // certified UB or just an informative LP value.
     if (solved) {
         result.objective = best_ub < INF ? best_ub : last_lp_obj;
+        result.lower_bound = best_lb;
     }
     populate_timing();
     double gap_tol = RELATIVE_FEAS_TOL * std::max(1.0, std::abs(result.objective));

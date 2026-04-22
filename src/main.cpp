@@ -4,6 +4,7 @@
 #include "mcfcg/instance.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -239,14 +240,23 @@ int main(int argc, char* argv[]) {
     auto end = std::chrono::steady_clock::now();
     double elapsed = std::chrono::duration<double>(end - start).count();
 
-    // CSV output
+    // CSV output.  lower_bound is empty when LB tracking never fired
+    // (best_lb stayed at -INF) so downstream parsers don't have to
+    // handle "-inf" literals — empty cell reads as NaN in pandas.
     std::printf(
-        "instance,formulation,iterations,columns,objective,"
+        "instance,formulation,iterations,columns,objective,lower_bound,"
         "optimal,time,time_lp,time_pricing,time_separation\n");
-    std::printf("%s,%s,%u,%u,%.6f,%d,%.3f,%.3f,%.3f,%.3f\n", instance_path.c_str(),
-                formulation.c_str(), result.iterations, result.total_columns, result.objective,
-                result.optimal ? 1 : 0, elapsed, result.time_lp, result.time_pricing,
-                result.time_separation);
+    if (std::isfinite(result.lower_bound)) {
+        std::printf("%s,%s,%u,%u,%.6f,%.6f,%d,%.3f,%.3f,%.3f,%.3f\n", instance_path.c_str(),
+                    formulation.c_str(), result.iterations, result.total_columns, result.objective,
+                    result.lower_bound, result.optimal ? 1 : 0, elapsed, result.time_lp,
+                    result.time_pricing, result.time_separation);
+    } else {
+        std::printf("%s,%s,%u,%u,%.6f,,%d,%.3f,%.3f,%.3f,%.3f\n", instance_path.c_str(),
+                    formulation.c_str(), result.iterations, result.total_columns, result.objective,
+                    result.optimal ? 1 : 0, elapsed, result.time_lp, result.time_pricing,
+                    result.time_separation);
+    }
 
     return EXIT_SUCCESS;
 }

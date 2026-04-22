@@ -77,66 +77,105 @@ tree column aggregates demand-weighted arc flow over those paths.
 ## Algorithm
 
 Dantzig-Wolfe column generation. The restricted master starts with
-demand / convexity rows only; capacity rows are added lazily on
-violation.  Every CG iteration solves the LP, separates violated
-capacity cuts, then prices one or many columns against the current
-duals.
+demand/convexity rows and slacks sized by
+$\min(\lvert\text{structural rows}\rvert, \lvert\text{capacitated arcs}\rvert)$;
+capacity rows are added lazily on violation. Each iteration solves the
+LP once, separates violated capacity cuts, prices columns against the
+captured duals, and commits what survived.
 
-```text
-solve_cg(Instance, params):
-  master.init()                          # structural rows, slacks per selected mode
-  pricer.init()                          # A* heuristic, per-thread workspaces
+$$
+\begin{array}{l}
+\textbf{Algorithm 1 } \textsf{SolveCG}(G, K, \text{params}) \\
+\hline
+\textsf{master.init}();\ \textsf{pricer.init}() \\
+\textbf{if } \text{warm-start} \textbf{ then seed master: one column per source, priced at } \pi = +\infty \\
+UB \leftarrow +\infty,\ LB \leftarrow -\infty \\
+\textbf{for } it = 1, \ldots, it_{\max} \textbf{ do} \\
+\quad (\pi, \mu,\ \mathit{obj}) \leftarrow \textsf{master.solveAndReadDuals}() \qquad \triangleright \text{duals read BEFORE any mutation} \\
+\quad A^{\text{new}} \leftarrow \textsf{master.separateCapacityViolations}() \qquad \triangleright \text{new lazy rows; no re-solve} \\
+\quad s \leftarrow \textsf{master.numBasicSlacks}() \\
+\quad \textbf{if } s = 0 \wedge A^{\text{new}} = \emptyset \textbf{ then } UB \leftarrow \min(UB, \mathit{obj}) \\
+\quad \textbf{if } \textsf{PricerHeavy} \wedge A^{\text{new}} \ne \emptyset \textbf{ then continue} \qquad \triangleright \text{defer pricing; next iter's LP uses fresh duals} \\
+\quad C \leftarrow \textsf{pricer.price}(\pi, \mu,\ C_{\max}) \\
+\quad \textbf{if } C = \emptyset \textbf{ then } C \leftarrow \textsf{pricer.price}(\pi, \mu,\ C_{\max},\ \text{final}=\top) \qquad \triangleright \text{full sweep ignoring postpone flags} \\
+\quad \textbf{if } C \ne \emptyset \textbf{ then } \textsf{pricer.clearPostponed}() \qquad \triangleright \text{flags only; keep cursor for partial pricing} \\
+\quad \textbf{if } \textsf{pricer.pricedAll} \wedge s = 0 \wedge A^{\text{new}} = \emptyset \textbf{ then} \\
+\qquad LB \leftarrow \max\!\bigl(LB,\ \pi^\top b + \mu^\top u + \textstyle\sum_k d_k \min(\bar c^*_k, 0) - \varepsilon\bigr) \\
+\quad \textbf{if } UB < \infty \wedge 0 \le UB - LB < \tau \cdot \max(1, \lvert UB \rvert) \textbf{ then return optimal}(UB) \\
+\quad \textbf{if } C = \emptyset \textbf{ then} \\
+\qquad \textbf{if } s = 0 \wedge A^{\text{new}} = \emptyset \textbf{ then return optimal}(\mathit{obj}) \\
+\qquad \textbf{if } s > 0 \textbf{ then } \textsf{master.bumpSlacks}() \\
+\qquad \textsf{pricer.resetPostponed}();\ \textbf{continue} \qquad \triangleright \text{fresh sweep next iter} \\
+\quad \text{trim } C \text{ to the } C_{\max} \text{ columns with lowest reduced cost} \\
+\quad \textsf{master.bumpSlacks}();\ \text{purge aged cols};\ \text{purge idle cap rows} \\
+\quad \textsf{master.addColumns}(C) \\
+\textbf{return stopped}(UB) \\
+\end{array}
+$$
 
-  if params.warm_start:                  # EdgeRows slack mode requires this
-    prime master with one column per structural entity
-    (price against +inf duals so every source's tree/path is feasible)
+The LB uses the LP *dual* objective $\pi^\top b + \mu^\top u$ (exact at
+LP optimum even when a barrier backend's primal and dual differ at
+solver tolerance); $\bar c^*_k$ is the pricer's best reduced cost for
+entity $k$, and $\varepsilon$ a rounding-error budget for the
+scale-integer Dijkstra. The structural-row RHS $b$ is $d_k$ for the
+path formulation and $1$ for the tree formulation, so the $d_k$
+weighting collapses under tree.
 
-  for iter in 0 .. max_iterations:
-    status = master.solve()
-    if status != Optimal: break
+`pricer.price` is the source-level dispatcher; each per-source call
+(`PriceOneSource`) is the A* inner body. Postponement is a
+one-iter-ahead filter: a source that emits no negative-RC column is
+skipped on the next non-final call. Flags are cleared whenever the
+main iteration commits columns (`clearPostponed`, keeps the cursor so
+partial pricing resumes), when pricing finally exhausts
+(`resetPostponed`, rewinds to source 0), and after the warm-start
+pass. `filter_for_new_caps` rewrites the flag vector wholesale after
+a cut round: sources whose best-path arcs were touched by a new cap
+are flipped in (`postponed=0`), all others are postponed until a
+later sweep re-examines them.
 
-    # Separation: scan columns for capacity violations, add cuts
-    new_cap_arcs = master.add_violated_capacity_constraints()
-    if new_cap_arcs:
-      master.solve()                     # re-solve so duals reflect cuts
+$$
+\begin{array}{l}
+\textbf{Algorithm 2 } \textsf{pricer.price}(\pi, \mu;\ \text{final}=\bot,\ C_{\max}=\infty) \\
+\hline
+\text{compute } w_a \leftarrow \max(0,\ c_a - \mu_a) \cdot 10^9 \text{ for all } a \in A \qquad \triangleright \text{dense vectorized arc pass} \\
+C \leftarrow \emptyset;\ \textit{pricedCount} \leftarrow 0 \\
+\textbf{for each source } s \text{ (round-robin from cursor, in batches of } B \text{) } \textbf{do} \\
+\quad \textbf{if } \neg\text{final} \wedge s \in \text{Postponed} \textbf{ then continue} \qquad \triangleright \text{skipped sources do not count} \\
+\quad C \leftarrow C \cup \textsf{PriceOneSource}(s, \pi, \mu);\ \textit{pricedCount}{+}{+} \qquad \triangleright \text{parallel across batch (thread pool)} \\
+\quad \textbf{if } |C| \ge C_{\max} \textbf{ then break} \\
+\textit{pricedAll} \leftarrow (\textit{pricedCount} = \lvert \text{sources} \rvert) \qquad \triangleright \text{derived at end; sweep-completing break still counts} \\
+\textbf{return } (C,\ \textit{pricedAll}) \\
+\end{array}
+$$
 
-    # Pricing: generate negative-reduced-cost columns
-    pi = master.get_structural_duals()
-    mu = master.get_capacity_duals()
-    new_cols = pricer.price(pi, mu)
+$$
+\begin{array}{l}
+\textbf{Algorithm 3 } \textsf{PriceOneSource}(s,\ \pi,\ \mu) \\
+\hline
+\text{run A* from } s \text{ with edge weights } w_a \text{ until every reachable sink of } S_s \text{ is settled} \\
+\textbf{for each } k \in S_s \textbf{ do} \\
+\quad \textbf{if } t_k \text{ unreachable then skip} \\
+\quad p_k \leftarrow \text{shortest path};\ \bar c_k \leftarrow \textstyle\sum_{a \in p_k}(c_a - \mu_a) - \pi_k \qquad \triangleright \text{true RC, floating point} \\
+\textbf{path: emit } \{p_k : \bar c_k < \tau_{\mathrm{rc}}\};\ \text{postpone } s \text{ if none emitted} \\
+\textbf{tree: aggregate } f_a = \textstyle\sum_k d_k [a \in p_k];\ \text{emit tree column if RC} < \tau_{\mathrm{rc}},\ \text{else postpone } s \\
+\end{array}
+$$
 
-    if new_cols is empty:
-      new_cols = pricer.price(pi, mu, final_round=True)  # retry postponed sources
-      if new_cols is empty:
-        if master.count_active_slacks() > 0:
-          master.bump_active_slacks()     # grow slack cost, continue
-        else:
-          return optimal(master.get_obj())
+### Iteration log
 
-    master.update_capacity_row_activity()
-    master.update_column_ages()
-    master.bump_active_slacks()           # end-of-iter bump for next solve
-    master.purge_aged_columns()
-    master.purge_nonbinding_capacity_rows()
-    master.add_columns(new_cols)
+`Verbosity::Iteration` prints one row per CG iteration:
 
-  return stopped(last_obj)                # max_iterations reached
-```
-
-Pricing for a single source $s$:
-
-```text
-pricer.price_one_source(s, duals, mu):
-  rc_a = max(0, (c_a - mu_a)) scaled by 1e9    # integer reduced costs
-  run A* Dijkstra from s until every reachable sink of S_s is settled
-  for each sink t_k of s:
-    skip t_k if unreachable — A*'s heap exhausted without settling it
-    extract the shortest path, compute the floating-point true RC
-    PATH:  emit one column per reachable commodity with true_rc < -tol
-    TREE:  aggregate demand-weighted arc flow across reachable sinks of s,
-           emit one tree column (partial if some sinks were unreachable)
-           if the aggregate RC is negative
-```
+| column | meaning |
+|--------|---------|
+| `It` | iteration number |
+| `UB` | running min LP obj over MCF-feasible iters |
+| `LB` | best Lagrangian/Farley bound so far |
+| `LP_obj` | current LP objective (carries slack penalty while `#slk > 0`) |
+| `#col`, `#row` | columns / rows in the LP right now |
+| `#slk` | basic slack columns; non-zero means `LP_obj` is a penalty, not a bound |
+| `+col`, `-col` | columns added / purged this iteration (`*N` = produced but not committed on gap exit) |
+| `+cut`, `-cut` | capacity rows added / purged this iteration |
+| `t_LP`, `t_PR`, `t_SP`, `t_Tot` | per-iter seconds (LP, pricing, separation, total) |
 
 ## Build
 
@@ -154,7 +193,7 @@ cmake --build build -j$(nproc)
 |------|---------|--------|
 | `-DMCFCG_USE_CUOPT=ON`   | OFF | Enable the NVIDIA cuOpt GPU LP backend (requires cuOpt SDK) |
 | `-DMCFCG_USE_COPT=ON`    | OFF | Enable the COPT LP backend (requires COPT installed) |
-| `-DMCFCG_NATIVE_ARCH=OFF` | ON | Disable `-march=native` tuning; produces a portable binary |
+| `-DMCFCG_NATIVE_ARCH=OFF` | ON | Disable `-march=native`. Keep ON for SIMD auto-vectorization of the hot `cost[a] - mu[a]` pricing loop; only turn OFF for portable binaries. |
 
 ## Test
 
