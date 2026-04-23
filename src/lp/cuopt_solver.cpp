@@ -101,7 +101,6 @@ private:
         uint32_t row;
         double value;
     };
-    // For each column, list of (row, value) entries
     std::vector<std::vector<CSCEntry>> _col_entries;
 
     // Cached solution
@@ -124,18 +123,21 @@ public:
     CuOptSolver() = default;
     explicit CuOptSolver(bool verbose) : _verbose(verbose) {}
 
-#ifdef MCFCG_CUOPT_DELTA_API
+    CuOptSolver(const CuOptSolver&) = delete;
+    CuOptSolver& operator=(const CuOptSolver&) = delete;
+    CuOptSolver(CuOptSolver&&) = delete;
+    CuOptSolver& operator=(CuOptSolver&&) = delete;
+
     ~CuOptSolver() override {
+#ifdef MCFCG_CUOPT_DELTA_API
         if (_solution)
             cuOptDestroySolution(&_solution);
         if (_settings)
             cuOptDestroySolverSettings(&_settings);
         if (_problem)
             cuOptDestroyProblem(&_problem);
-    }
-#else
-    ~CuOptSolver() override = default;
 #endif
+    }
 
     uint32_t add_cols(const std::vector<double>& obj, const std::vector<double>& lb,
                       const std::vector<double>& ub) override {
@@ -244,18 +246,16 @@ public:
             delta_mask.assign(mask.begin(), mask.end());
         }
 #endif
-        // Build list of surviving columns and their new indices
         std::vector<uint32_t> old_to_new(n);
         uint32_t new_idx = 0;
         for (uint32_t i = 0; i < n; ++i) {
             if (mask[i] == 1) {
-                old_to_new[i] = UINT32_MAX;  // deleted
+                old_to_new[i] = UINT32_MAX;
             } else {
                 old_to_new[i] = new_idx++;
             }
         }
 
-        // Compact column data
         std::vector<double> new_obj;
         std::vector<double> new_col_lb;
         std::vector<double> new_col_ub;
@@ -275,7 +275,6 @@ public:
         _col_ub = std::move(new_col_ub);
         _col_entries = std::move(new_col_entries);
 
-        // Write new indices back into mask (-1 for deleted)
         for (uint32_t i = 0; i < n; ++i) {
             mask[i] = (old_to_new[i] == UINT32_MAX) ? -1 : static_cast<int32_t>(old_to_new[i]);
         }
@@ -308,18 +307,16 @@ public:
             delta_mask.assign(mask.begin(), mask.end());
         }
 #endif
-        // Build old-to-new row mapping
         std::vector<uint32_t> old_to_new(m);
         uint32_t new_idx = 0;
         for (uint32_t i = 0; i < m; ++i) {
             if (mask[i] == 1) {
-                old_to_new[i] = UINT32_MAX;  // deleted
+                old_to_new[i] = UINT32_MAX;
             } else {
                 old_to_new[i] = new_idx++;
             }
         }
 
-        // Compact row bounds
         std::vector<double> new_row_lb;
         std::vector<double> new_row_ub;
         for (uint32_t i = 0; i < m; ++i) {
@@ -331,7 +328,6 @@ public:
         _row_lb = std::move(new_row_lb);
         _row_ub = std::move(new_row_ub);
 
-        // Update row indices in column entries and remove deleted entries
         for (auto& entries : _col_entries) {
             std::erase_if(entries,
                           [&](const CSCEntry& e) { return old_to_new[e.row] == UINT32_MAX; });
@@ -340,7 +336,6 @@ public:
             }
         }
 
-        // Write new indices back into mask
         for (uint32_t i = 0; i < m; ++i) {
             mask[i] = (old_to_new[i] == UINT32_MAX) ? -1 : static_cast<int32_t>(old_to_new[i]);
         }
@@ -402,17 +397,14 @@ public:
         }
         row_offsets.push_back(offset);  // sentinel
 
-        // Convert bounds and objective to cuopt_float_t
         std::vector<cuopt_float_t> f_obj(_obj.begin(), _obj.end());
         std::vector<cuopt_float_t> f_col_lb(_col_lb.begin(), _col_lb.end());
         std::vector<cuopt_float_t> f_col_ub(_col_ub.begin(), _col_ub.end());
         std::vector<cuopt_float_t> f_row_lb(_row_lb.begin(), _row_lb.end());
         std::vector<cuopt_float_t> f_row_ub(_row_ub.begin(), _row_ub.end());
 
-        // All variables are continuous
         std::vector<char> var_types(n, CUOPT_CONTINUOUS);
 
-        // Create problem
         cuOptOptimizationProblem problem = nullptr;
         auto status = cuOptCreateRangedProblem(
             static_cast<cuopt_int_t>(m), static_cast<cuopt_int_t>(n), CUOPT_MINIMIZE,
@@ -423,7 +415,6 @@ public:
             return LPStatus::Error;
         }
 
-        // Create solver settings
         cuOptSolverSettings settings = nullptr;
         status = cuOptCreateSolverSettings(&settings);
         if (status != CUOPT_SUCCESS) {
@@ -439,7 +430,6 @@ public:
 
         cuOptSetParameter(settings, CUOPT_LOG_TO_CONSOLE, _verbose ? "1" : "0");
 
-        // Solve
         cuOptSolution solution = nullptr;
         status = cuOptSolve(problem, settings, &solution);
         if (status != CUOPT_SUCCESS) {

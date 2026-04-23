@@ -8,10 +8,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(MCFCG_USE_CUOPT "Enable cuOpt LP solver backend" OFF)
 option(MCFCG_CUOPT_DELTA_API
-       "Use incremental delta C API on cuOpt backend. Requires a cuOpt build that exports cuopt_c_delta.h (see spoorendonk/cuopt fork and mcfcg #20)."
+       "Use incremental delta C API on cuOpt backend. Requires a cuOpt build that exports cuopt_c_delta.h (see spoorendonk/cuopt fork and mcfcg epic #20 / sub-issue #21)."
        OFF)
 option(MCFCG_USE_COPT "Enable COPT LP solver backend" OFF)
 option(MCFCG_USE_MOSEK "Enable MOSEK LP solver backend" OFF)
+
+if(MCFCG_CUOPT_DELTA_API AND NOT MCFCG_USE_CUOPT)
+    message(FATAL_ERROR "MCFCG_CUOPT_DELTA_API=ON requires MCFCG_USE_CUOPT=ON.")
+endif()
 option(MCFCG_NATIVE_ARCH "Build with -march=native (host CPU tuning, non-portable binary)" ON)
 
 # HiGHS — always available as default fallback
@@ -67,8 +71,6 @@ if(MCFCG_USE_CUOPT)
     if(MCFCG_CUOPT_DELTA_API)
         target_compile_definitions(mcfcg PRIVATE MCFCG_CUOPT_DELTA_API)
     endif()
-elseif(MCFCG_CUOPT_DELTA_API)
-    message(FATAL_ERROR "MCFCG_CUOPT_DELTA_API requires MCFCG_USE_CUOPT=ON.")
 endif()
 
 if(MCFCG_USE_COPT)
