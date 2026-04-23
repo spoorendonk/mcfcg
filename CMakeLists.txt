@@ -56,18 +56,25 @@ endif()
 
 if(MCFCG_USE_CUOPT)
     target_compile_definitions(mcfcg PUBLIC MCFCG_USE_CUOPT)
+    # CUOPT_ROOT accepts either an install tree ({root}/include + {root}/lib[64])
+    # or a source-tree checkout of spoorendonk/cuopt ({root}/cpp/include +
+    # {root}/cpp/build). CONDA_PREFIX covers the conda-installed case (e.g.
+    # a cuopt_dev env that already has runtime deps like rmm, cublas, etc.).
     find_path(CUOPT_INCLUDE_DIR cuopt/linear_programming/cuopt_c.h
               HINTS ENV CUOPT_ROOT ENV CONDA_PREFIX
-              PATH_SUFFIXES include)
+              PATH_SUFFIXES include cpp/include)
     find_library(CUOPT_LIBRARY cuopt
                  HINTS ENV CUOPT_ROOT ENV CONDA_PREFIX
-                 PATH_SUFFIXES lib lib64)
+                 PATH_SUFFIXES lib lib64 cpp/build)
     if(NOT CUOPT_INCLUDE_DIR OR NOT CUOPT_LIBRARY)
-        message(FATAL_ERROR "cuOpt not found. Set CUOPT_ROOT or CMAKE_PREFIX_PATH.")
+        message(FATAL_ERROR "cuOpt not found. Set CUOPT_ROOT (install prefix or spoorendonk/cuopt source checkout), activate a conda env with cuopt installed, or set CMAKE_PREFIX_PATH.")
     endif()
     target_sources(mcfcg PRIVATE src/lp/cuopt_solver.cpp)
     target_include_directories(mcfcg PRIVATE ${CUOPT_INCLUDE_DIR})
     target_link_libraries(mcfcg PRIVATE ${CUOPT_LIBRARY})
+    if(EXISTS "${CUOPT_INCLUDE_DIR}/cuopt/linear_programming/cuopt_c_delta.h")
+        message(STATUS "cuOpt delta API header detected at ${CUOPT_INCLUDE_DIR}. Enable with -DMCFCG_CUOPT_DELTA_API=ON.")
+    endif()
     if(MCFCG_CUOPT_DELTA_API)
         target_compile_definitions(mcfcg PRIVATE MCFCG_CUOPT_DELTA_API)
     endif()
