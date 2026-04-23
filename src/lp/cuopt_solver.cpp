@@ -12,6 +12,10 @@
 #include <string>
 #include <vector>
 
+#ifdef MCFCG_CUOPT_DELTA_API
+#include <cuopt/linear_programming/cuopt_c_delta.h>
+#endif
+
 namespace mcfcg {
 
 namespace {
@@ -22,11 +26,64 @@ void check_cuopt(cuopt_int_t status, const char* msg) {
     }
 }
 
+// Extract primal / dual / reduced-cost vectors from a cuOptSolution.
+// Returns LPStatus::Optimal on success, or a status reflecting termination.
+LPStatus extract_solution(cuOptSolution solution, uint32_t n, uint32_t m, double& obj,
+                          std::vector<double>& primals, std::vector<double>& duals,
+                          std::vector<double>& reduced_costs) {
+    cuopt_int_t term_status = 0;
+    if (cuOptGetTerminationStatus(solution, &term_status) != CUOPT_SUCCESS) {
+        return LPStatus::Error;
+    }
+    // Note: cuOpt API has "TERIMINATION" typo in constant names
+    if (term_status == CUOPT_TERIMINATION_STATUS_INFEASIBLE)
+        return LPStatus::Infeasible;
+    if (term_status == CUOPT_TERIMINATION_STATUS_UNBOUNDED)
+        return LPStatus::Unbounded;
+    if (term_status != CUOPT_TERIMINATION_STATUS_OPTIMAL)
+        return LPStatus::Error;
+
+    cuopt_float_t obj_val = 0;
+    if (cuOptGetObjectiveValue(solution, &obj_val) != CUOPT_SUCCESS)
+        return LPStatus::Error;
+    obj = static_cast<double>(obj_val);
+
+    std::vector<cuopt_float_t> f_primals(n);
+    if (cuOptGetPrimalSolution(solution, f_primals.data()) != CUOPT_SUCCESS)
+        return LPStatus::Error;
+    primals.assign(f_primals.begin(), f_primals.end());
+
+    std::vector<cuopt_float_t> f_duals(m);
+    if (cuOptGetDualSolution(solution, f_duals.data()) != CUOPT_SUCCESS)
+        return LPStatus::Error;
+    duals.assign(f_duals.begin(), f_duals.end());
+
+    std::vector<cuopt_float_t> f_rc(n);
+    if (cuOptGetReducedCosts(solution, f_rc.data()) != CUOPT_SUCCESS)
+        return LPStatus::Error;
+    reduced_costs.assign(f_rc.begin(), f_rc.end());
+
+    return LPStatus::Optimal;
+}
+
 }  // namespace
 
-// cuOpt has no incremental API (no add_cols/add_rows/delete_cols/delete_rows).
-// This solver maintains the full problem state internally and rebuilds the
-// cuOpt problem from scratch on each solve() call.
+// cuOpt's public C API has no incremental mutators — cuOptCreateRangedProblem
+// takes a fully-formed problem and cuOptDestroyProblem tears it down, so every
+// solve() rebuilds from scratch. The delta C API (see cuopt_c_delta.h on the
+// spoorendonk/cuopt fork, tracked by spoorendonk/mcfcg #20 and sub-issues
+// #22/#23/#24) introduces a persistent problem handle plus
+// cuOptAddColumns / cuOptAddRows / cuOptDeleteColumns / cuOptDeleteRows /
+// cuOptSetVariableObjectiveCoefficient / cuOptResolve.
+//
+// This file compiles two shapes, selected at build time:
+//
+//   * default (MCFCG_CUOPT_DELTA_API undefined): rebuild path — mutators buffer
+//     into host vectors, solve() creates + destroys a cuOptOptimizationProblem
+//     every call. No dependency on the fork.
+//   * opt-in (MCFCG_CUOPT_DELTA_API defined): delta path — mutators forward to
+//     the fork's delta API after the first solve, solve() uses cuOptResolve on
+//     a persistent handle. Requires a cuOpt build that ships cuopt_c_delta.h.
 class CuOptSolver : public LPSolver {
 private:
     // Column data
@@ -55,9 +112,30 @@ private:
 
     bool _verbose = false;
 
+#ifdef MCFCG_CUOPT_DELTA_API
+    // Persistent cuOpt handles, populated by the first solve and reused on
+    // subsequent mutations + resolves. Null until first solve.
+    cuOptOptimizationProblem _problem = nullptr;
+    cuOptSolverSettings _settings = nullptr;
+    cuOptSolution _solution = nullptr;
+#endif
+
 public:
     CuOptSolver() = default;
     explicit CuOptSolver(bool verbose) : _verbose(verbose) {}
+
+#ifdef MCFCG_CUOPT_DELTA_API
+    ~CuOptSolver() override {
+        if (_solution)
+            cuOptDestroySolution(&_solution);
+        if (_settings)
+            cuOptDestroySolverSettings(&_settings);
+        if (_problem)
+            cuOptDestroyProblem(&_problem);
+    }
+#else
+    ~CuOptSolver() override = default;
+#endif
 
     uint32_t add_cols(const std::vector<double>& obj, const std::vector<double>& lb,
                       const std::vector<double>& ub) override {
@@ -68,6 +146,19 @@ public:
             _col_ub.push_back(ub[i]);
             _col_entries.emplace_back();
         }
+#ifdef MCFCG_CUOPT_DELTA_API
+        if (_problem) {
+            // No coefficients — empty CSC (starts = {0, 0, ..., 0}).
+            std::vector<cuopt_int_t> starts(obj.size() + 1, 0);
+            std::vector<cuopt_float_t> f_obj(obj.begin(), obj.end());
+            std::vector<cuopt_float_t> f_lb(lb.begin(), lb.end());
+            std::vector<cuopt_float_t> f_ub(ub.begin(), ub.end());
+            check_cuopt(
+                cuOptAddColumns(_problem, static_cast<cuopt_int_t>(obj.size()), f_obj.data(),
+                                f_lb.data(), f_ub.data(), starts.data(), nullptr, nullptr, nullptr),
+                "cuOptAddColumns");
+        }
+#endif
         return first;
     }
 
@@ -92,6 +183,20 @@ public:
             }
             _col_entries.push_back(std::move(entries));
         }
+#ifdef MCFCG_CUOPT_DELTA_API
+        if (_problem) {
+            std::vector<cuopt_int_t> f_starts(starts.begin(), starts.end());
+            std::vector<cuopt_int_t> f_rows(row_indices.begin(), row_indices.end());
+            std::vector<cuopt_float_t> f_vals(values.begin(), values.end());
+            std::vector<cuopt_float_t> f_obj(obj.begin(), obj.end());
+            std::vector<cuopt_float_t> f_lb(lb.begin(), lb.end());
+            std::vector<cuopt_float_t> f_ub(ub.begin(), ub.end());
+            check_cuopt(cuOptAddColumns(_problem, static_cast<cuopt_int_t>(n), f_obj.data(),
+                                        f_lb.data(), f_ub.data(), f_starts.data(), f_rows.data(),
+                                        f_vals.data(), nullptr),
+                        "cuOptAddColumns");
+        }
+#endif
         return first;
     }
 
@@ -116,11 +221,29 @@ public:
                 _col_entries[col].push_back({row, values[j]});
             }
         }
+#ifdef MCFCG_CUOPT_DELTA_API
+        if (_problem) {
+            std::vector<cuopt_int_t> f_starts(starts.begin(), starts.end());
+            std::vector<cuopt_int_t> f_cols(indices.begin(), indices.end());
+            std::vector<cuopt_float_t> f_vals(values.begin(), values.end());
+            std::vector<cuopt_float_t> f_lb(lb.begin(), lb.end());
+            std::vector<cuopt_float_t> f_ub(ub.begin(), ub.end());
+            check_cuopt(cuOptAddRows(_problem, static_cast<cuopt_int_t>(m), f_lb.data(),
+                                     f_ub.data(), f_starts.data(), f_cols.data(), f_vals.data()),
+                        "cuOptAddRows");
+        }
+#endif
         return first;
     }
 
     void delete_cols(std::vector<int32_t>& mask) override {
         uint32_t n = num_cols();
+#ifdef MCFCG_CUOPT_DELTA_API
+        std::vector<cuopt_int_t> delta_mask;
+        if (_problem) {
+            delta_mask.assign(mask.begin(), mask.end());
+        }
+#endif
         // Build list of surviving columns and their new indices
         std::vector<uint32_t> old_to_new(n);
         uint32_t new_idx = 0;
@@ -156,15 +279,35 @@ public:
         for (uint32_t i = 0; i < n; ++i) {
             mask[i] = (old_to_new[i] == UINT32_MAX) ? -1 : static_cast<int32_t>(old_to_new[i]);
         }
+
+#ifdef MCFCG_CUOPT_DELTA_API
+        if (_problem) {
+            check_cuopt(cuOptDeleteColumns(_problem, delta_mask.data()), "cuOptDeleteColumns");
+        }
+#endif
     }
 
     void set_col_cost(uint32_t col, double cost) override {
         assert(col < _obj.size());
         _obj[col] = cost;
+#ifdef MCFCG_CUOPT_DELTA_API
+        if (_problem) {
+            check_cuopt(
+                cuOptSetVariableObjectiveCoefficient(_problem, static_cast<cuopt_int_t>(col),
+                                                     static_cast<cuopt_float_t>(cost)),
+                "cuOptSetVariableObjectiveCoefficient");
+        }
+#endif
     }
 
     void delete_rows(std::vector<int32_t>& mask) override {
         uint32_t m = num_rows();
+#ifdef MCFCG_CUOPT_DELTA_API
+        std::vector<cuopt_int_t> delta_mask;
+        if (_problem) {
+            delta_mask.assign(mask.begin(), mask.end());
+        }
+#endif
         // Build old-to-new row mapping
         std::vector<uint32_t> old_to_new(m);
         uint32_t new_idx = 0;
@@ -201,6 +344,12 @@ public:
         for (uint32_t i = 0; i < m; ++i) {
             mask[i] = (old_to_new[i] == UINT32_MAX) ? -1 : static_cast<int32_t>(old_to_new[i]);
         }
+
+#ifdef MCFCG_CUOPT_DELTA_API
+        if (_problem) {
+            check_cuopt(cuOptDeleteRows(_problem, delta_mask.data()), "cuOptDeleteRows");
+        }
+#endif
     }
 
     LPStatus solve() override {
@@ -211,8 +360,22 @@ public:
             return LPStatus::Error;
         }
 
+#ifdef MCFCG_CUOPT_DELTA_API
+        if (_problem) {
+            // Resolve the persistent problem. cuOptResolve may reallocate the
+            // solution handle; pass the previous pointer so the implementation
+            // can reuse or free it.
+            auto status = cuOptResolve(_problem, _settings, &_solution);
+            if (status != CUOPT_SUCCESS)
+                return LPStatus::Error;
+            return extract_solution(_solution, n, m, _cached_obj, _cached_primals, _cached_duals,
+                                    _cached_reduced_costs);
+        }
+#endif
+
+        // First-solve path (also the only path when delta API is off): build
+        // the problem from the buffered host state, solve, and extract.
         // Convert internal CSC storage to CSR for cuOpt.
-        // Build CSR row_offsets, col_indices, coeff_values.
         std::vector<std::vector<std::pair<uint32_t, double>>> row_entries(m);
         for (uint32_t c = 0; c < n; ++c) {
             for (const auto& e : _col_entries[c]) {
@@ -240,21 +403,11 @@ public:
         row_offsets.push_back(offset);  // sentinel
 
         // Convert bounds and objective to cuopt_float_t
-        std::vector<cuopt_float_t> f_obj(n);
-        std::vector<cuopt_float_t> f_col_lb(n);
-        std::vector<cuopt_float_t> f_col_ub(n);
-        for (uint32_t i = 0; i < n; ++i) {
-            f_obj[i] = static_cast<cuopt_float_t>(_obj[i]);
-            f_col_lb[i] = static_cast<cuopt_float_t>(_col_lb[i]);
-            f_col_ub[i] = static_cast<cuopt_float_t>(_col_ub[i]);
-        }
-
-        std::vector<cuopt_float_t> f_row_lb(m);
-        std::vector<cuopt_float_t> f_row_ub(m);
-        for (uint32_t i = 0; i < m; ++i) {
-            f_row_lb[i] = static_cast<cuopt_float_t>(_row_lb[i]);
-            f_row_ub[i] = static_cast<cuopt_float_t>(_row_ub[i]);
-        }
+        std::vector<cuopt_float_t> f_obj(_obj.begin(), _obj.end());
+        std::vector<cuopt_float_t> f_col_lb(_col_lb.begin(), _col_lb.end());
+        std::vector<cuopt_float_t> f_col_ub(_col_ub.begin(), _col_ub.end());
+        std::vector<cuopt_float_t> f_row_lb(_row_lb.begin(), _row_lb.end());
+        std::vector<cuopt_float_t> f_row_ub(_row_ub.begin(), _row_ub.end());
 
         // All variables are continuous
         std::vector<char> var_types(n, CUOPT_CONTINUOUS);
@@ -295,74 +448,19 @@ public:
             return LPStatus::Error;
         }
 
-        // Cleanup helper — ensures cuOpt resources are freed on all paths.
-        auto cleanup = [&] {
-            if (solution) {
-                cuOptDestroySolution(&solution);
-            }
-            cuOptDestroySolverSettings(&settings);
-            cuOptDestroyProblem(&problem);
-        };
+        LPStatus result = extract_solution(solution, n, m, _cached_obj, _cached_primals,
+                                           _cached_duals, _cached_reduced_costs);
 
-        // Check termination status
-        cuopt_int_t term_status = 0;
-        if (cuOptGetTerminationStatus(solution, &term_status) != CUOPT_SUCCESS) {
-            cleanup();
-            return LPStatus::Error;
-        }
-
-        LPStatus result = LPStatus::Error;
-        // Note: cuOpt API has "TERIMINATION" typo in constant names
-        if (term_status == CUOPT_TERIMINATION_STATUS_OPTIMAL) {
-            // Extract objective
-            cuopt_float_t obj_val = 0;
-            if (cuOptGetObjectiveValue(solution, &obj_val) != CUOPT_SUCCESS) {
-                cleanup();
-                return LPStatus::Error;
-            }
-            _cached_obj = static_cast<double>(obj_val);
-
-            // Extract primals
-            std::vector<cuopt_float_t> f_primals(n);
-            if (cuOptGetPrimalSolution(solution, f_primals.data()) != CUOPT_SUCCESS) {
-                cleanup();
-                return LPStatus::Error;
-            }
-            _cached_primals.resize(n);
-            for (uint32_t i = 0; i < n; ++i) {
-                _cached_primals[i] = static_cast<double>(f_primals[i]);
-            }
-
-            // Extract duals
-            std::vector<cuopt_float_t> f_duals(m);
-            if (cuOptGetDualSolution(solution, f_duals.data()) != CUOPT_SUCCESS) {
-                cleanup();
-                return LPStatus::Error;
-            }
-            _cached_duals.resize(m);
-            for (uint32_t i = 0; i < m; ++i) {
-                _cached_duals[i] = static_cast<double>(f_duals[i]);
-            }
-
-            // Extract reduced costs
-            std::vector<cuopt_float_t> f_rc(n);
-            if (cuOptGetReducedCosts(solution, f_rc.data()) != CUOPT_SUCCESS) {
-                cleanup();
-                return LPStatus::Error;
-            }
-            _cached_reduced_costs.resize(n);
-            for (uint32_t i = 0; i < n; ++i) {
-                _cached_reduced_costs[i] = static_cast<double>(f_rc[i]);
-            }
-
-            result = LPStatus::Optimal;
-        } else if (term_status == CUOPT_TERIMINATION_STATUS_INFEASIBLE) {
-            result = LPStatus::Infeasible;
-        } else if (term_status == CUOPT_TERIMINATION_STATUS_UNBOUNDED) {
-            result = LPStatus::Unbounded;
-        }
-
-        cleanup();
+#ifdef MCFCG_CUOPT_DELTA_API
+        // Retain the handles for subsequent delta-API calls.
+        _problem = problem;
+        _settings = settings;
+        _solution = solution;
+#else
+        cuOptDestroySolution(&solution);
+        cuOptDestroySolverSettings(&settings);
+        cuOptDestroyProblem(&problem);
+#endif
         return result;
     }
 
