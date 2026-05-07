@@ -74,7 +74,7 @@ LPStatus extract_solution(cuOptSolution solution, uint32_t n, uint32_t m, double
 // spoorendonk/cuopt fork, tracked by spoorendonk/mcfcg #20 and sub-issues
 // #22/#23/#24) introduces a persistent problem handle plus
 // cuOptAddColumns / cuOptAddRows / cuOptDeleteColumns / cuOptDeleteRows /
-// cuOptSetVariableObjectiveCoefficient / cuOptResolve.
+// cuOptSetObjectiveCoefficients / cuOptResolve.
 //
 // This file compiles two shapes, selected at build time:
 //
@@ -241,9 +241,13 @@ public:
     void delete_cols(std::vector<int32_t>& mask) override {
         uint32_t n = num_cols();
 #ifdef MCFCG_CUOPT_DELTA_API
-        std::vector<cuopt_int_t> delta_mask;
+        std::vector<cuopt_int_t> delta_indices;
         if (_problem) {
-            delta_mask.assign(mask.begin(), mask.end());
+            for (uint32_t i = 0; i < n; ++i) {
+                if (mask[i] == 1) {
+                    delta_indices.push_back(static_cast<cuopt_int_t>(i));
+                }
+            }
         }
 #endif
         std::vector<uint32_t> old_to_new(n);
@@ -281,7 +285,9 @@ public:
 
 #ifdef MCFCG_CUOPT_DELTA_API
         if (_problem) {
-            check_cuopt(cuOptDeleteColumns(_problem, delta_mask.data()), "cuOptDeleteColumns");
+            check_cuopt(cuOptDeleteColumns(_problem, static_cast<cuopt_int_t>(delta_indices.size()),
+                                           delta_indices.data()),
+                        "cuOptDeleteColumns");
         }
 #endif
     }
@@ -291,10 +297,10 @@ public:
         _obj[col] = cost;
 #ifdef MCFCG_CUOPT_DELTA_API
         if (_problem) {
-            check_cuopt(
-                cuOptSetVariableObjectiveCoefficient(_problem, static_cast<cuopt_int_t>(col),
-                                                     static_cast<cuopt_float_t>(cost)),
-                "cuOptSetVariableObjectiveCoefficient");
+            const cuopt_int_t idx = static_cast<cuopt_int_t>(col);
+            const cuopt_float_t v = static_cast<cuopt_float_t>(cost);
+            check_cuopt(cuOptSetObjectiveCoefficients(_problem, 1, &idx, &v),
+                        "cuOptSetObjectiveCoefficients");
         }
 #endif
     }
@@ -302,9 +308,13 @@ public:
     void delete_rows(std::vector<int32_t>& mask) override {
         uint32_t m = num_rows();
 #ifdef MCFCG_CUOPT_DELTA_API
-        std::vector<cuopt_int_t> delta_mask;
+        std::vector<cuopt_int_t> delta_indices;
         if (_problem) {
-            delta_mask.assign(mask.begin(), mask.end());
+            for (uint32_t i = 0; i < m; ++i) {
+                if (mask[i] == 1) {
+                    delta_indices.push_back(static_cast<cuopt_int_t>(i));
+                }
+            }
         }
 #endif
         std::vector<uint32_t> old_to_new(m);
@@ -342,7 +352,9 @@ public:
 
 #ifdef MCFCG_CUOPT_DELTA_API
         if (_problem) {
-            check_cuopt(cuOptDeleteRows(_problem, delta_mask.data()), "cuOptDeleteRows");
+            check_cuopt(cuOptDeleteRows(_problem, static_cast<cuopt_int_t>(delta_indices.size()),
+                                        delta_indices.data()),
+                        "cuOptDeleteRows");
         }
 #endif
     }
