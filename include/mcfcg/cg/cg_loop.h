@@ -17,9 +17,9 @@ namespace mcfcg {
 // test/cg_test_util.h.  Any slack still basic with positive primal has
 // its cost multiplied by this factor once per CG iteration; the LP
 // then pivots the slack out on the next solve once the slack cost
-// exceeds the reduced cost of whatever column serves the row.  Replaces
-// the legacy fixed BIG_M = 1e8; MasterBase::bump_active_slacks clamps
-// each slack cost to an absolute ceiling inside the method.
+// exceeds the reduced cost of whatever column serves the row.
+// MasterBase::bump_active_slacks clamps each slack cost to the
+// per-instance absolute ceiling set in MasterBase::init.
 inline constexpr double SLACK_BUMP_FACTOR = 10.0;
 
 // Generic CG loop parameterized on Master, Pricer, and a dual-extraction callable.

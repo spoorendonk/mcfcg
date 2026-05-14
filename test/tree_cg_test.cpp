@@ -172,6 +172,19 @@ TEST_F(TreeCGEdgeRows, SelectorAndSolve) {
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
 }
 
+// Mirror of PathCGSingleSource.SlackCostCeilingIsClampedToExpectedRange.
+// Tree-master's upper bound multiplies in the max per-source demand sum,
+// so the unclamped value here is also well below 1e6 — exercises the
+// lower clamp.  Pins the invariant so future re-tuning of the clamp range
+// surfaces as a unit-test failure.
+TEST_F(TreeCGEdgeRows, SlackCostCeilingIsClampedToExpectedRange) {
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::TreeMaster master;
+    master.init(inst);
+    EXPECT_GE(master.slack_cost_ceiling(), 1e6);
+    EXPECT_LE(master.slack_cost_ceiling(), 1e7);
+}
+
 // Tree EdgeRows with column-purge and row-purge exercises the slack
 // index remap in purge_aged_columns and delete_edge_row_slacks on the
 // tree-column path.  Caps are loose so no cuts actually fire on this

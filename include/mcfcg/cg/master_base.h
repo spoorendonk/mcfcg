@@ -282,14 +282,17 @@ public:
         }
 
         // Slack-cost ceiling: 10× a Derived-supplied upper bound on real
-        // column cost.  Lower-bounded by 1e6 and upper-bounded by 1e7.
-        // The earlier [1e8, 1e9] clamp was a HiGHS-era choice (above 1e9
-        // dual-simplex ratio test breaks), but cuopt-barrier hit an IPM
-        // pathology on transportation instances where slack costs at 1e9
-        // vs real column costs ~1e3-1e5 give ~1e5x dynamic range — barrier
-        // takes 100-1000s on the slack-elimination phase change.  Lowering
-        // the ceiling to 1e7 leaves ~100x headroom over typical real
-        // columns while keeping dynamic range tractable for IPM.
+        // column cost, clamped to [1e6, 1e7].  The upper bound caps the
+        // slack-vs-real-column dynamic range so cuopt-barrier's IPM can
+        // centre cleanly during the CG iter that pivots all slacks out.
+        // Without this cap, a 1e9 ceiling vs ~1e3–1e5 real costs on
+        // transportation instances produced 100–1000s IPM stalls.
+        // Intermodal real columns can reach ~1e5–1e7 but the 1e7 cap
+        // still dominates them with ~1×–100× headroom (verified on
+        // BUS-2632/7896, SBT-43785).  The 1e6 floor prevents the clamp
+        // from inverting on small instances.  1e7 is well below the
+        // HiGHS dual-simplex ratio-test failure regime (~1e9), so HiGHS
+        // runs are unaffected.
         _slack.cost_ceiling = std::clamp(10.0 * self().slack_cost_upper_bound(), 1e6, 1e7);
 
         _slack.mode = select_slack_mode(count_capacitated_arcs(inst), _num_structural_rows);
@@ -365,6 +368,11 @@ public:
     // Which slack placement init() picked.  Used by cg_loop.h for the
     // selection log and by tests.
     SlackMode slack_mode() const noexcept { return _slack.mode; }
+
+    // Per-instance slack-cost ceiling computed in init().  Exposed for
+    // tests that pin the clamp range; bump_active_slacks caps each
+    // slack's cost at this value.
+    double slack_cost_ceiling() const noexcept { return _slack.cost_ceiling; }
 
     uint32_t add_columns(std::vector<ColumnT> cols) {
         if (cols.empty())

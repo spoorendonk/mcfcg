@@ -269,3 +269,17 @@ TEST_F(PathCGCapacityBinding, SelectorPicksCommodityRows) {
     master.init(inst);
     EXPECT_EQ(master.slack_mode(), mcfcg::SlackMode::CommodityRows);
 }
+
+// --- Slack-cost-ceiling clamp ---
+// MasterBase::init clamps cost_ceiling to [1e6, 1e7].  Pin the invariant
+// here so future re-tuning surfaces as a test failure rather than a slow
+// regression on transportation/intermodal.  The path-master upper bound
+// is num_vertices × max_arc_cost; on the tiny instances above it sits
+// well below 1e6, so the clamp's lower bound is exercised.
+TEST_F(PathCGSingleSource, SlackCostCeilingIsClampedToExpectedRange) {
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::PathMaster master;
+    master.init(inst);
+    EXPECT_GE(master.slack_cost_ceiling(), 1e6);
+    EXPECT_LE(master.slack_cost_ceiling(), 1e7);
+}
