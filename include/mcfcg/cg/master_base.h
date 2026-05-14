@@ -166,8 +166,10 @@ protected:
         std::unordered_map<uint32_t, uint32_t> arc_to_col;
 
         // Absolute ceiling on the geometric slack-cost bump.  Set in
-        // MasterBase::init from the formulation-specific upper bound.
-        double cost_ceiling = 1e8;
+        // MasterBase::init from the formulation-specific upper bound; the
+        // default below is never used in practice but kept consistent with
+        // the upper clamp.
+        double cost_ceiling = 1e7;
 
         bool empty() const noexcept { return col_lp.empty(); }
 
@@ -280,13 +282,15 @@ public:
         }
 
         // Slack-cost ceiling: 10× a Derived-supplied upper bound on real
-        // column cost.  Lower-bounded by 1e8 (historical BIG_M — always
-        // sufficient on small instances) and upper-bounded by 1e9 (above
-        // which HiGHS's dual-simplex ratio test starts to fail).  The
-        // 10× factor leaves the slack enough headroom to out-price the
-        // costliest real column; on large-demand tree instances this
-        // lifts the ceiling above 1e8.
-        _slack.cost_ceiling = std::clamp(10.0 * self().slack_cost_upper_bound(), 1e8, 1e9);
+        // column cost.  Lower-bounded by 1e6 and upper-bounded by 1e7.
+        // The earlier [1e8, 1e9] clamp was a HiGHS-era choice (above 1e9
+        // dual-simplex ratio test breaks), but cuopt-barrier hit an IPM
+        // pathology on transportation instances where slack costs at 1e9
+        // vs real column costs ~1e3-1e5 give ~1e5x dynamic range — barrier
+        // takes 100-1000s on the slack-elimination phase change.  Lowering
+        // the ceiling to 1e7 leaves ~100x headroom over typical real
+        // columns while keeping dynamic range tractable for IPM.
+        _slack.cost_ceiling = std::clamp(10.0 * self().slack_cost_upper_bound(), 1e6, 1e7);
 
         _slack.mode = select_slack_mode(count_capacitated_arcs(inst), _num_structural_rows);
         // EdgeRows has no init-time slacks, so the LP is infeasible
