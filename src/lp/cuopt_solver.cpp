@@ -16,6 +16,16 @@
 #include <cuopt/linear_programming/cuopt_c_delta.h>
 #endif
 
+// cuOpt corrected the "TERIMINATION" typo in the termination-status constants
+// in a release after 26.04 (26.04 still ships the typo; the 26.06+ base the
+// delta-api fork tracks has it fixed). Accept either spelling so this backend
+// builds against both an older installed cuOpt and the fork.
+#ifndef CUOPT_TERMINATION_STATUS_OPTIMAL
+#define CUOPT_TERMINATION_STATUS_OPTIMAL CUOPT_TERIMINATION_STATUS_OPTIMAL
+#define CUOPT_TERMINATION_STATUS_INFEASIBLE CUOPT_TERIMINATION_STATUS_INFEASIBLE
+#define CUOPT_TERMINATION_STATUS_UNBOUNDED CUOPT_TERIMINATION_STATUS_UNBOUNDED
+#endif
+
 namespace mcfcg {
 
 namespace {
@@ -35,12 +45,11 @@ LPStatus extract_solution(cuOptSolution solution, uint32_t n, uint32_t m, double
     if (cuOptGetTerminationStatus(solution, &term_status) != CUOPT_SUCCESS) {
         return LPStatus::Error;
     }
-    // Note: cuOpt API has "TERIMINATION" typo in constant names
-    if (term_status == CUOPT_TERIMINATION_STATUS_INFEASIBLE)
+    if (term_status == CUOPT_TERMINATION_STATUS_INFEASIBLE)
         return LPStatus::Infeasible;
-    if (term_status == CUOPT_TERIMINATION_STATUS_UNBOUNDED)
+    if (term_status == CUOPT_TERMINATION_STATUS_UNBOUNDED)
         return LPStatus::Unbounded;
-    if (term_status != CUOPT_TERIMINATION_STATUS_OPTIMAL)
+    if (term_status != CUOPT_TERMINATION_STATUS_OPTIMAL)
         return LPStatus::Error;
 
     cuopt_float_t obj_val = 0;
