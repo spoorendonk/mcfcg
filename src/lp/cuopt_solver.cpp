@@ -234,9 +234,37 @@ public:
         }
 #ifdef MCFCG_CUOPT_DELTA_API
         if (_problem) {
-            std::vector<cuopt_int_t> f_starts(starts.begin(), starts.end());
-            std::vector<cuopt_int_t> f_cols(indices.begin(), indices.end());
-            std::vector<cuopt_float_t> f_vals(values.begin(), values.end());
+            // cuOptAddRows requires each row's column indices sorted strictly
+            // ascending — cuOpt does not re-sort delta-appended rows. The
+            // caller's CSR is not guaranteed sorted: a lazily-added capacity
+            // row (master_base.h add_violated_capacity_constraints) enumerates
+            // columns in creation order, which is no longer ascending in
+            // LP-index space once column purges have remapped _col_to_lp. Sort
+            // each row's (col, value) pairs here, matching the rebuild path.
+            std::vector<cuopt_int_t> f_starts;
+            f_starts.reserve(m + 1);
+            std::vector<cuopt_int_t> f_cols;
+            f_cols.reserve(indices.size());
+            std::vector<cuopt_float_t> f_vals;
+            f_vals.reserve(values.size());
+            std::vector<std::pair<cuopt_int_t, cuopt_float_t>> row_entries;
+            for (uint32_t i = 0; i < m; ++i) {
+                f_starts.push_back(static_cast<cuopt_int_t>(f_cols.size()));
+                uint32_t begin = starts[i];
+                uint32_t end = starts[i + 1];  // caller includes sentinel
+                row_entries.clear();
+                row_entries.reserve(end - begin);
+                for (uint32_t j = begin; j < end; ++j) {
+                    row_entries.emplace_back(static_cast<cuopt_int_t>(indices[j]),
+                                             static_cast<cuopt_float_t>(values[j]));
+                }
+                std::sort(row_entries.begin(), row_entries.end());
+                for (const auto& [col, val] : row_entries) {
+                    f_cols.push_back(col);
+                    f_vals.push_back(val);
+                }
+            }
+            f_starts.push_back(static_cast<cuopt_int_t>(f_cols.size()));  // sentinel
             std::vector<cuopt_float_t> f_lb(lb.begin(), lb.end());
             std::vector<cuopt_float_t> f_ub(ub.begin(), ub.end());
             check_cuopt(cuOptAddRows(_problem, static_cast<cuopt_int_t>(m), f_lb.data(),
