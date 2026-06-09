@@ -10,6 +10,8 @@
       "Bash(*>*)",
       "Bash(*>>*)",
       "Bash(*|*)",
+      "Bash(gh issue close:*)",
+      "Bash(gh issue comment:*)",
       "Edit(*)",
       "Glob(*)",
       "Grep(*)",
