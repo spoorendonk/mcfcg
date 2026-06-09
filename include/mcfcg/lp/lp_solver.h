@@ -102,7 +102,14 @@ public:
 std::unique_ptr<LPSolver> create_lp_solver(bool verbose = false);
 
 #ifdef MCFCG_USE_CUOPT
-std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose = false);
+// cuOpt solve method, plumbed to the CUOPT_METHOD parameter. Barrier is the
+// production default. PDLP (first-order) is warm-startable on the delta path
+// but only converges to usable duals at a tight tolerance — create_cuopt_solver
+// tightens the tolerance to 1e-6 for PDLP so CG pricing does not stall (#24).
+enum class CuOptMethod { Barrier, Pdlp, DualSimplex };
+
+std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose = false,
+                                              CuOptMethod method = CuOptMethod::Barrier);
 #endif
 
 #ifdef MCFCG_USE_COPT

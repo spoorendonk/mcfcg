@@ -36,6 +36,19 @@ void check_cuopt(cuopt_int_t status, const char* msg) {
     }
 }
 
+// Map the backend-agnostic CuOptMethod to cuOpt's CUOPT_METHOD_* constant.
+int cuopt_method_value(CuOptMethod method) {
+    switch (method) {
+        case CuOptMethod::Pdlp:
+            return CUOPT_METHOD_PDLP;
+        case CuOptMethod::DualSimplex:
+            return CUOPT_METHOD_DUAL_SIMPLEX;
+        case CuOptMethod::Barrier:
+            break;
+    }
+    return CUOPT_METHOD_BARRIER;
+}
+
 // Extract primal / dual / reduced-cost vectors from a cuOptSolution.
 // Returns LPStatus::Optimal on success, or a status reflecting termination.
 LPStatus extract_solution(cuOptSolution solution, uint32_t n, uint32_t m, double& obj,
@@ -119,6 +132,7 @@ private:
     std::vector<double> _cached_reduced_costs;
 
     bool _verbose = false;
+    CuOptMethod _method = CuOptMethod::Barrier;
 
 #ifdef MCFCG_CUOPT_DELTA_API
     // Persistent cuOpt handles, populated by the first solve and reused on
@@ -130,7 +144,8 @@ private:
 
 public:
     CuOptSolver() = default;
-    explicit CuOptSolver(bool verbose) : _verbose(verbose) {}
+    explicit CuOptSolver(bool verbose, CuOptMethod method = CuOptMethod::Barrier)
+        : _verbose(verbose), _method(method) {}
 
     CuOptSolver(const CuOptSolver&) = delete;
     CuOptSolver& operator=(const CuOptSolver&) = delete;
@@ -471,8 +486,13 @@ public:
             return LPStatus::Error;
         }
 
-        cuOptSetParameter(settings, CUOPT_METHOD, std::to_string(CUOPT_METHOD_BARRIER).c_str());
-        auto tol_str = std::to_string(LP_FEAS_TOL);
+        cuOptSetParameter(settings, CUOPT_METHOD,
+                          std::to_string(cuopt_method_value(_method)).c_str());
+        // PDLP is first-order: warm-started it stops at the first point in
+        // the tolerance band, so it needs a tighter gap/feasibility target
+        // than barrier/dual-simplex or CG pricing stalls (#24).
+        double tol = (_method == CuOptMethod::Pdlp) ? CUOPT_PDLP_FEAS_TOL : LP_FEAS_TOL;
+        auto tol_str = std::to_string(tol);
         cuOptSetParameter(settings, CUOPT_RELATIVE_GAP_TOLERANCE, tol_str.c_str());
         cuOptSetParameter(settings, CUOPT_RELATIVE_PRIMAL_TOLERANCE, tol_str.c_str());
         cuOptSetParameter(settings, CUOPT_RELATIVE_DUAL_TOLERANCE, tol_str.c_str());
@@ -512,8 +532,8 @@ public:
     uint32_t num_rows() const override { return static_cast<uint32_t>(_row_lb.size()); }
 };
 
-std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose) {
-    return std::make_unique<CuOptSolver>(verbose);
+std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose, CuOptMethod method) {
+    return std::make_unique<CuOptSolver>(verbose, method);
 }
 
 }  // namespace mcfcg

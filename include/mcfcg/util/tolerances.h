@@ -41,6 +41,14 @@ inline constexpr double RELATIVE_FEAS_TOL = 1e-4;
 // deliver solutions at least as tight as what we promise downstream.
 inline constexpr double LP_FEAS_TOL = RELATIVE_FEAS_TOL;  // 1e-4
 
+// cuOpt's PDLP is a first-order method: warm-started, it stops at the
+// first point inside the tolerance band, which at LP_FEAS_TOL leaves the
+// duals too imprecise and stalls CG pricing (spoorendonk/mcfcg #24).
+// PDLP must therefore be driven to a tighter gap/feasibility tolerance
+// than the matrix-factorizing barrier and dual-simplex methods.  Barrier
+// and dual-simplex keep LP_FEAS_TOL.
+inline constexpr double CUOPT_PDLP_FEAS_TOL = 1e-6;
+
 // ── Column / slack activity ────────────────────────────────────────
 // A column (or slack) is considered genuinely basic / active when its
 // LP primal exceeds this threshold.  Must be > LP_FEAS_TOL so that
