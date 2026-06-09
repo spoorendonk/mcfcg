@@ -93,9 +93,11 @@ TEST(LPSolver, IncrementalColumns) {
 }
 
 #ifdef MCFCG_USE_CUOPT
-// Smoke-test each selectable cuOpt method end-to-end on a small LP. PDLP in
-// particular must reach precise duals (driven to 1e-6 inside the backend, see
-// #24) — assert at 1e-6 so a loosened tolerance regression would fail here.
+// Smoke-test each selectable cuOpt method end-to-end on a small LP, giving the
+// PDLP / dual-simplex resolve paths a real consumer (#30). PDLP is driven to a
+// 1e-6 gap/feasibility tolerance inside the backend (#24); the solution-value
+// assertions here use 1e-5 — loose enough to absorb first-order PDLP slack at
+// that tolerance, tight enough that a coarse (e.g. 1e-2) regression fails.
 // Requires a healthy GPU + the cuOpt fork at build time; skipped from the
 // default (HiGHS-only) build because create_cuopt_solver is not compiled.
 class CuOptMethodTest : public ::testing::TestWithParam<mcfcg::CuOptMethod> {};
@@ -110,15 +112,15 @@ TEST_P(CuOptMethodTest, SolvesSimpleLP) {
     auto status = lp->solve();
     ASSERT_EQ(status, mcfcg::LPStatus::Optimal);
 
-    EXPECT_NEAR(lp->get_obj(), 3.0, 1e-6);
+    EXPECT_NEAR(lp->get_obj(), 3.0, 1e-5);
 
     auto primals = lp->get_primals();
-    EXPECT_NEAR(primals[0], 3.0, 1e-6);
-    EXPECT_NEAR(primals[1], 0.0, 1e-6);
+    EXPECT_NEAR(primals[0], 3.0, 1e-5);
+    EXPECT_NEAR(primals[1], 0.0, 1e-5);
 
     auto duals = lp->get_duals();
     ASSERT_EQ(duals.size(), 1u);
-    EXPECT_NEAR(std::abs(duals[0]), 1.0, 1e-6);
+    EXPECT_NEAR(std::abs(duals[0]), 1.0, 1e-5);
 }
 
 INSTANTIATE_TEST_SUITE_P(AllMethods, CuOptMethodTest,
