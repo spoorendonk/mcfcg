@@ -91,3 +91,37 @@ TEST(LPSolver, IncrementalColumns) {
     lp->add_cols({0.5}, {0.0}, {1e20});
     EXPECT_EQ(lp->num_cols(), 2u);
 }
+
+#ifdef MCFCG_USE_CUOPT
+// Smoke-test each selectable cuOpt method end-to-end on a small LP. PDLP in
+// particular must reach precise duals (driven to 1e-6 inside the backend, see
+// #24) — assert at 1e-6 so a loosened tolerance regression would fail here.
+// Requires a healthy GPU + the cuOpt fork at build time; skipped from the
+// default (HiGHS-only) build because create_cuopt_solver is not compiled.
+class CuOptMethodTest : public ::testing::TestWithParam<mcfcg::CuOptMethod> {};
+
+// min x + 2y  s.t. x + y >= 3, x,y >= 0  =>  x=3, y=0, obj=3, dual=1
+TEST_P(CuOptMethodTest, SolvesSimpleLP) {
+    auto lp = mcfcg::create_cuopt_solver(/*verbose=*/false, GetParam());
+
+    lp->add_cols({1.0, 2.0}, {0.0, 0.0}, {1e20, 1e20});
+    lp->add_rows({3.0}, {1e20}, {0, 2}, {0, 1}, {1.0, 1.0});
+
+    auto status = lp->solve();
+    ASSERT_EQ(status, mcfcg::LPStatus::Optimal);
+
+    EXPECT_NEAR(lp->get_obj(), 3.0, 1e-6);
+
+    auto primals = lp->get_primals();
+    EXPECT_NEAR(primals[0], 3.0, 1e-6);
+    EXPECT_NEAR(primals[1], 0.0, 1e-6);
+
+    auto duals = lp->get_duals();
+    ASSERT_EQ(duals.size(), 1u);
+    EXPECT_NEAR(std::abs(duals[0]), 1.0, 1e-6);
+}
+
+INSTANTIATE_TEST_SUITE_P(AllMethods, CuOptMethodTest,
+                         ::testing::Values(mcfcg::CuOptMethod::Barrier, mcfcg::CuOptMethod::Pdlp,
+                                           mcfcg::CuOptMethod::DualSimplex));
+#endif  // MCFCG_USE_CUOPT

@@ -65,7 +65,9 @@ static void print_usage(std::FILE* out) {
         "  --coef N                 TNTP demand coefficient\n"
         "  --threads N              Number of pricing threads (default: 0=auto, 1=serial)\n"
         "  --batch-size N           Pricing batch size (0=all)\n"
-        "  --solver NAME            LP solver: highs (default), cuopt, copt\n"
+        "  --solver NAME            LP solver: highs (default), copt,\n"
+        "                           cuopt[-barrier] (default method), cuopt-pdlp,\n"
+        "                           cuopt-dualsimplex\n"
         "  --verbose-solver         Enable LP solver's own log output\n"
         "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
         "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
@@ -196,10 +198,25 @@ int main(int argc, char* argv[]) {
     params.pricing_batch_size = batch_size;
     params.verbosity = mcfcg::Verbosity::Iteration;
 
-    if (solver == "cuopt") {
+    bool is_cuopt = solver == "cuopt" || solver.rfind("cuopt-", 0) == 0;
+    if (is_cuopt) {
 #ifdef MCFCG_USE_CUOPT
-        params.solver_factory = [verbose_solver] {
-            return mcfcg::create_cuopt_solver(verbose_solver);
+        // "cuopt" and "cuopt-barrier" both select barrier (the default);
+        // "cuopt-pdlp" and "cuopt-dualsimplex" select the other methods.
+        mcfcg::CuOptMethod method = mcfcg::CuOptMethod::Barrier;
+        if (solver == "cuopt-pdlp") {
+            method = mcfcg::CuOptMethod::Pdlp;
+        } else if (solver == "cuopt-dualsimplex") {
+            method = mcfcg::CuOptMethod::DualSimplex;
+        } else if (solver != "cuopt" && solver != "cuopt-barrier") {
+            std::fprintf(stderr,
+                         "Unknown cuOpt method '%s'. Valid: cuopt, cuopt-barrier, "
+                         "cuopt-pdlp, cuopt-dualsimplex\n",
+                         solver.c_str());
+            return EXIT_FAILURE;
+        }
+        params.solver_factory = [verbose_solver, method] {
+            return mcfcg::create_cuopt_solver(verbose_solver, method);
         };
 #else
         std::fprintf(stderr, "cuOpt not available. Rebuild with -DMCFCG_USE_CUOPT=ON.\n");
@@ -221,7 +238,10 @@ int main(int argc, char* argv[]) {
             return mcfcg::create_lp_solver(verbose_solver);
         };
     } else {
-        std::fprintf(stderr, "Unknown solver '%s'. Valid: highs, cuopt, copt\n", solver.c_str());
+        std::fprintf(stderr,
+                     "Unknown solver '%s'. Valid: highs, copt, cuopt, cuopt-barrier, "
+                     "cuopt-pdlp, cuopt-dualsimplex\n",
+                     solver.c_str());
         return EXIT_FAILURE;
     }
 
