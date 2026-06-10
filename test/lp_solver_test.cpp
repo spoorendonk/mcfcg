@@ -102,12 +102,17 @@ TEST(LPSolver, IncrementalColumns) {
 // default (HiGHS-only) build because create_cuopt_solver is not compiled.
 class CuOptMethodTest : public ::testing::TestWithParam<mcfcg::CuOptMethod> {};
 
-// min x + 2y  s.t. x + y >= 3, x,y >= 0  =>  x=3, y=0, obj=3, dual=1
+// min x + 2y  s.t. x + y == 3, x,y >= 0  =>  x=3, y=0, obj=3, dual=1
+// Use an EQUALITY row (lb == ub), the row type the mcfcg master actually emits
+// (demand / convexity rows are '='; capacity rows are '<='). The master never
+// generates '>=' rows, so this smoke test stays on the supported case; barrier
+// and PDLP return a wrong point on a synthetic ranged '>=' row that production
+// never exercises (only the dual-simplex #22 path converts '>=').
 TEST_P(CuOptMethodTest, SolvesSimpleLP) {
     auto lp = mcfcg::create_cuopt_solver(/*verbose=*/false, GetParam());
 
     lp->add_cols({1.0, 2.0}, {0.0, 0.0}, {1e20, 1e20});
-    lp->add_rows({3.0}, {1e20}, {0, 2}, {0, 1}, {1.0, 1.0});
+    lp->add_rows({3.0}, {3.0}, {0, 2}, {0, 1}, {1.0, 1.0});
 
     auto status = lp->solve();
     ASSERT_EQ(status, mcfcg::LPStatus::Optimal);

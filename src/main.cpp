@@ -76,6 +76,59 @@ static void print_usage(std::FILE* out) {
         "  -h, --help               Print this help message and exit.\n");
 }
 
+// Map a --solver name to params.solver_factory. Returns false (after printing a
+// diagnostic) if the name is unknown or the requested backend was not compiled
+// in. Extracted from main() so the argument-parsing loop stays within the
+// clang-tidy cognitive-complexity budget — solver selection is its own concern.
+static bool configure_solver(const std::string& solver, bool verbose_solver,
+                             mcfcg::CGParams& params) {
+    const bool is_cuopt = solver == "cuopt" || solver.rfind("cuopt-", 0) == 0;
+    if (is_cuopt) {
+#ifdef MCFCG_USE_CUOPT
+        // "cuopt" and "cuopt-barrier" both select barrier (the default);
+        // "cuopt-pdlp" and "cuopt-dualsimplex" select the other methods.
+        mcfcg::CuOptMethod method = mcfcg::CuOptMethod::Barrier;
+        if (solver == "cuopt-pdlp") {
+            method = mcfcg::CuOptMethod::Pdlp;
+        } else if (solver == "cuopt-dualsimplex") {
+            method = mcfcg::CuOptMethod::DualSimplex;
+        } else if (solver != "cuopt" && solver != "cuopt-barrier") {
+            std::fprintf(stderr,
+                         "Unknown cuOpt method '%s'. Valid: cuopt, cuopt-barrier, "
+                         "cuopt-pdlp, cuopt-dualsimplex\n",
+                         solver.c_str());
+            return false;
+        }
+        params.solver_factory = [verbose_solver, method] {
+            return mcfcg::create_cuopt_solver(verbose_solver, method);
+        };
+#else
+        std::fprintf(stderr, "cuOpt not available. Rebuild with -DMCFCG_USE_CUOPT=ON.\n");
+        return false;
+#endif
+    } else if (solver == "copt") {
+#ifdef MCFCG_USE_COPT
+        params.solver_factory = [verbose_solver] {
+            return mcfcg::create_copt_solver(verbose_solver);
+        };
+#else
+        std::fprintf(stderr, "COPT not available. Rebuild with -DMCFCG_USE_COPT=ON.\n");
+        return false;
+#endif
+    } else if (solver == "highs") {
+        params.solver_factory = [verbose_solver] {
+            return mcfcg::create_lp_solver(verbose_solver);
+        };
+    } else {
+        std::fprintf(stderr,
+                     "Unknown solver '%s'. Valid: highs, copt, cuopt, cuopt-barrier, "
+                     "cuopt-pdlp, cuopt-dualsimplex\n",
+                     solver.c_str());
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         print_usage(stderr);
@@ -198,50 +251,7 @@ int main(int argc, char* argv[]) {
     params.pricing_batch_size = batch_size;
     params.verbosity = mcfcg::Verbosity::Iteration;
 
-    bool is_cuopt = solver == "cuopt" || solver.rfind("cuopt-", 0) == 0;
-    if (is_cuopt) {
-#ifdef MCFCG_USE_CUOPT
-        // "cuopt" and "cuopt-barrier" both select barrier (the default);
-        // "cuopt-pdlp" and "cuopt-dualsimplex" select the other methods.
-        mcfcg::CuOptMethod method = mcfcg::CuOptMethod::Barrier;
-        if (solver == "cuopt-pdlp") {
-            method = mcfcg::CuOptMethod::Pdlp;
-        } else if (solver == "cuopt-dualsimplex") {
-            method = mcfcg::CuOptMethod::DualSimplex;
-        } else if (solver != "cuopt" && solver != "cuopt-barrier") {
-            std::fprintf(stderr,
-                         "Unknown cuOpt method '%s'. Valid: cuopt, cuopt-barrier, "
-                         "cuopt-pdlp, cuopt-dualsimplex\n",
-                         solver.c_str());
-            return EXIT_FAILURE;
-        }
-        params.solver_factory = [verbose_solver, method] {
-            return mcfcg::create_cuopt_solver(verbose_solver, method);
-        };
-#else
-        std::fprintf(stderr, "cuOpt not available. Rebuild with -DMCFCG_USE_CUOPT=ON.\n");
-        return EXIT_FAILURE;
-#endif
-    } else if (solver == "copt") {
-#ifdef MCFCG_USE_COPT
-        params.solver_factory = [verbose_solver] {
-            return mcfcg::create_copt_solver(verbose_solver);
-        };
-        // COPT's barrier is precise enough to use the default simplex
-        // tolerance; only cuOpt needs the loosened -1e-4.
-#else
-        std::fprintf(stderr, "COPT not available. Rebuild with -DMCFCG_USE_COPT=ON.\n");
-        return EXIT_FAILURE;
-#endif
-    } else if (solver == "highs") {
-        params.solver_factory = [verbose_solver] {
-            return mcfcg::create_lp_solver(verbose_solver);
-        };
-    } else {
-        std::fprintf(stderr,
-                     "Unknown solver '%s'. Valid: highs, copt, cuopt, cuopt-barrier, "
-                     "cuopt-pdlp, cuopt-dualsimplex\n",
-                     solver.c_str());
+    if (!configure_solver(solver, verbose_solver, params)) {
         return EXIT_FAILURE;
     }
 
