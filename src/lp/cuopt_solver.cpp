@@ -49,6 +49,30 @@ int cuopt_method_value(CuOptMethod method) {
     return CUOPT_METHOD_BARRIER;
 }
 
+// cuOpt's infinity is IEEE inf (CUOPT_INFINITY). Coerce any bound at or beyond a
+// large-magnitude sentinel to +/-CUOPT_INFINITY before handing it to cuOpt. A
+// large FINITE bound (e.g. a 1e20 "infinity" stand-in) is a genuine two-sided
+// range to cuOpt: its value enters the barrier/PDLP starting point and breaks
+// the solve down numerically (search-direction NaN, returns the origin as
+// "Optimal"), whereas +/-inf is handled as a one-sided constraint. mcfcg's own
+// INF is already +inf, so this is a no-op for the master; it guards any caller
+// that passes a finite infinity sentinel.
+constexpr double CUOPT_BOUND_INF_THRESHOLD = 1e19;
+cuopt_float_t to_cuopt_bound(double v) {
+    if (v >= CUOPT_BOUND_INF_THRESHOLD)
+        return CUOPT_INFINITY;
+    if (v <= -CUOPT_BOUND_INF_THRESHOLD)
+        return -CUOPT_INFINITY;
+    return static_cast<cuopt_float_t>(v);
+}
+std::vector<cuopt_float_t> to_cuopt_bounds(const std::vector<double>& v) {
+    std::vector<cuopt_float_t> out;
+    out.reserve(v.size());
+    for (double x : v)
+        out.push_back(to_cuopt_bound(x));
+    return out;
+}
+
 // Extract primal / dual / reduced-cost vectors from a cuOptSolution.
 // Returns LPStatus::Optimal on success, or a status reflecting termination.
 LPStatus extract_solution(cuOptSolution solution, uint32_t n, uint32_t m, double& obj,
@@ -177,8 +201,8 @@ public:
             // No coefficients — empty CSC (starts = {0, 0, ..., 0}).
             std::vector<cuopt_int_t> starts(obj.size() + 1, 0);
             std::vector<cuopt_float_t> f_obj(obj.begin(), obj.end());
-            std::vector<cuopt_float_t> f_lb(lb.begin(), lb.end());
-            std::vector<cuopt_float_t> f_ub(ub.begin(), ub.end());
+            auto f_lb = to_cuopt_bounds(lb);
+            auto f_ub = to_cuopt_bounds(ub);
             check_cuopt(
                 cuOptAddColumns(_problem, static_cast<cuopt_int_t>(obj.size()), f_obj.data(),
                                 f_lb.data(), f_ub.data(), starts.data(), nullptr, nullptr, nullptr),
@@ -215,8 +239,8 @@ public:
             std::vector<cuopt_int_t> f_rows(row_indices.begin(), row_indices.end());
             std::vector<cuopt_float_t> f_vals(values.begin(), values.end());
             std::vector<cuopt_float_t> f_obj(obj.begin(), obj.end());
-            std::vector<cuopt_float_t> f_lb(lb.begin(), lb.end());
-            std::vector<cuopt_float_t> f_ub(ub.begin(), ub.end());
+            auto f_lb = to_cuopt_bounds(lb);
+            auto f_ub = to_cuopt_bounds(ub);
             check_cuopt(cuOptAddColumns(_problem, static_cast<cuopt_int_t>(n), f_obj.data(),
                                         f_lb.data(), f_ub.data(), f_starts.data(), f_rows.data(),
                                         f_vals.data(), nullptr),
@@ -280,8 +304,8 @@ public:
                 }
             }
             f_starts.push_back(static_cast<cuopt_int_t>(f_cols.size()));  // sentinel
-            std::vector<cuopt_float_t> f_lb(lb.begin(), lb.end());
-            std::vector<cuopt_float_t> f_ub(ub.begin(), ub.end());
+            auto f_lb = to_cuopt_bounds(lb);
+            auto f_ub = to_cuopt_bounds(ub);
             check_cuopt(cuOptAddRows(_problem, static_cast<cuopt_int_t>(m), f_lb.data(),
                                      f_ub.data(), f_starts.data(), f_cols.data(), f_vals.data()),
                         "cuOptAddRows");
@@ -462,10 +486,10 @@ public:
         row_offsets.push_back(offset);  // sentinel
 
         std::vector<cuopt_float_t> f_obj(_obj.begin(), _obj.end());
-        std::vector<cuopt_float_t> f_col_lb(_col_lb.begin(), _col_lb.end());
-        std::vector<cuopt_float_t> f_col_ub(_col_ub.begin(), _col_ub.end());
-        std::vector<cuopt_float_t> f_row_lb(_row_lb.begin(), _row_lb.end());
-        std::vector<cuopt_float_t> f_row_ub(_row_ub.begin(), _row_ub.end());
+        auto f_col_lb = to_cuopt_bounds(_col_lb);
+        auto f_col_ub = to_cuopt_bounds(_col_ub);
+        auto f_row_lb = to_cuopt_bounds(_row_lb);
+        auto f_row_ub = to_cuopt_bounds(_row_ub);
 
         std::vector<char> var_types(n, CUOPT_CONTINUOUS);
 
