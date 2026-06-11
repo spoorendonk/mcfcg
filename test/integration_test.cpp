@@ -578,40 +578,70 @@ TEST(FeatureTests, ParallelReproducibility) {
               mcfcg::RELATIVE_FEAS_TOL);
 }
 
-// --- cuOpt GPU solver tests ---
+// --- cuOpt / COPT GPU solver tests ---
 
-#ifdef MCFCG_USE_CUOPT
+#if defined(MCFCG_USE_CUOPT) || defined(MCFCG_USE_COPT)
 
 #include "mcfcg/lp/lp_solver.h"
 
-static void solve_and_check_cuopt(const mcfcg::Instance& inst, double ref_obj, double tol = 0.001) {
+// Solve `inst` with the LP solver produced by `factory` and check the CG
+// objective is within `tol` (relative) of `ref_obj`. Shared by the cuOpt and
+// COPT GPU correctness tests below — only the factory differs between them.
+template <typename Factory>
+static void solve_and_check_with_factory(const mcfcg::Instance& inst, double ref_obj,
+                                         Factory factory, double tol = 0.001) {
     mcfcg::CGParams params;
     params.max_iterations = 10000;
-    params.solver_factory = []() { return mcfcg::create_cuopt_solver(); };
+    params.solver_factory = factory;
     auto result = mcfcg::solve_path_cg(inst, params);
-    EXPECT_TRUE(result.optimal) << "Did not reach optimality with cuOpt solver";
+    EXPECT_TRUE(result.optimal) << "Did not reach optimality";
     EXPECT_GE(result.objective, ref_obj * (1.0 - tol)) << "Objective below reference";
     EXPECT_LE(result.objective, ref_obj * (1.0 + tol)) << "Objective above reference";
 }
 
-// cuOpt tests are slow (GPU barrier overhead per LP solve) — disabled by default.
-// Run manually with: --gtest_also_run_disabled_tests --gtest_filter='CuOptCorrectness.*'
-TEST(DISABLED_CuOptCorrectness, Grid1) {
-    auto opt = load_optimal(data_dir("commalab/grid"));
-    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
-    solve_and_check_cuopt(inst, opt.at("grid1"));
+// Run `factory` over the small instances — grid index < 10 and planar index
+// < 300 — checking each CG objective against optimal.csv. Both correctness
+// tests share this sweep.
+template <typename Factory>
+static void check_small_grid_and_planar(Factory factory) {
+    auto grid_opt = load_optimal(data_dir("commalab/grid"));
+    for (int i = 1; i < 10; ++i) {
+        auto name = "grid" + std::to_string(i);
+        auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/" + name);
+        solve_and_check_with_factory(inst, grid_opt.at(name), factory);
+    }
+    auto planar_opt = load_optimal(data_dir("commalab/planar"));
+    for (const char* name : {"planar30", "planar50", "planar80", "planar100", "planar150"}) {
+        auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/" + name);
+        solve_and_check_with_factory(inst, planar_opt.at(name), factory);
+    }
 }
 
-TEST(DISABLED_CuOptCorrectness, Grid2) {
-    auto opt = load_optimal(data_dir("commalab/grid"));
-    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid2");
-    solve_and_check_cuopt(inst, opt.at("grid2"));
-}
+#endif  // MCFCG_USE_CUOPT || MCFCG_USE_COPT
 
-TEST(DISABLED_CuOptCorrectness, Planar30) {
-    auto opt = load_optimal(data_dir("commalab/planar"));
-    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar30");
-    solve_and_check_cuopt(inst, opt.at("planar30"));
+#ifdef MCFCG_USE_CUOPT
+// Single cuOpt correctness test (barrier — the only method this repo exposes).
+// Drives the full path-CG loop, whose incremental column/row add+delete calls
+// go through the cuOpt delta C API when built with -DMCFCG_CUOPT_DELTA_API=ON
+// (otherwise the rebuild path), and checks the LP objective against the paper
+// reference on grid index < 10 and planar index < 300. This is the under-load
+// companion to lp_solver_test's CuOptSolver test, which exercises the same
+// delta calls in isolation. Barrier reaches CG optimality within 0.1% on every
+// instance here (presolve off).
+//
+// Slow (each CG iteration is a GPU solve) — disabled by default. Run with:
+//   --gtest_also_run_disabled_tests --gtest_filter='CuOptCorrectness.*'
+TEST(CuOptCorrectness, DISABLED_SmallGridAndPlanar) {
+    check_small_grid_and_planar([] { return mcfcg::create_cuopt_solver(); });
 }
-
 #endif  // MCFCG_USE_CUOPT
+
+#ifdef MCFCG_USE_COPT
+// Single COPT correctness test (barrier — COPT's fixed method here). Same
+// path-CG correctness sweep as the cuOpt test, over grid index < 10 and planar
+// index < 300. Slow (GPU barrier per LP solve) — disabled by default. Run with:
+//   --gtest_also_run_disabled_tests --gtest_filter='CoptCorrectness.*'
+TEST(CoptCorrectness, DISABLED_SmallGridAndPlanar) {
+    check_small_grid_and_planar([] { return mcfcg::create_copt_solver(); });
+}
+#endif  // MCFCG_USE_COPT

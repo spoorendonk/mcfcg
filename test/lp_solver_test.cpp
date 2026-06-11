@@ -93,44 +93,73 @@ TEST(LPSolver, IncrementalColumns) {
 }
 
 #ifdef MCFCG_USE_CUOPT
-// Smoke-test each selectable cuOpt method end-to-end on a small LP, giving the
-// PDLP / dual-simplex resolve paths a real consumer (#30). PDLP is driven to a
-// 1e-6 gap/feasibility tolerance inside the backend (#24); the solution-value
-// assertions here use 1e-5 — loose enough to absorb first-order PDLP slack at
-// that tolerance, tight enough that a coarse (e.g. 1e-2) regression fails.
+// Single cuOpt correctness test: drive the backend (barrier — the only method
+// this repo exposes) through a sequence of incremental mutations interleaved
+// with solves, checking the objective after each step. When built with
+// -DMCFCG_CUOPT_DELTA_API=ON this exercises the persistent-handle delta C API
+// (cuOptAddColumns / cuOptAddRows / cuOptDeleteRows / cuOptDeleteColumns /
+// cuOptSetObjectiveCoefficients / cuOptResolve); otherwise it exercises the
+// rebuild path. Either way the optimum after each mutation is known in closed
+// form, so a delta bug that corrupts the warm-started problem — a stale
+// coefficient, a botched index remap after delete, an ignored cost update —
+// surfaces as a wrong objective. This is the isolated counterpart to the CG
+// integration test, which exercises the same delta calls under load.
+//
+// The 1e20 column/row bounds also guard the backend's infinity coercion: a
+// FINITE 1e20 (a common "infinity" stand-in) must be coerced to CUOPT_INFINITY,
+// otherwise cuOpt reads e.g. [5, 1e20] as a true two-sided range whose 1e20
+// bound detonates the barrier IPM (NaN search direction -> origin as "Optimal").
+//
 // Requires a healthy GPU + the cuOpt fork at build time; skipped from the
 // default (HiGHS-only) build because create_cuopt_solver is not compiled.
-class CuOptMethodTest : public ::testing::TestWithParam<mcfcg::CuOptMethod> {};
+TEST(CuOptSolver, IncrementalMutationsTrackOptimum) {
+    auto lp = mcfcg::create_cuopt_solver(/*verbose=*/false);
+    const double tol = 1e-4;
 
-// min x + 2y  s.t. x + y >= 3, x,y >= 0  =>  x=3, y=0, obj=3, dual=1
-// Regression guard for the cuOpt backend's infinity coercion. This deliberately
-// passes a FINITE 1e20 as the row upper bound and the column upper bounds (a
-// common "infinity" stand-in). Without coercion, cuOpt reads [3, 1e20] as a true
-// two-sided range whose 1e20 bound detonates the barrier / PDLP IPM (NaN search
-// direction -> returns the origin as "Optimal"). cuopt_solver coerces any bound
-// >= 1e19 to +/-CUOPT_INFINITY, so all three methods solve it. (The mcfcg master
-// itself already uses real +inf via mcfcg::INF, so it never hit this.)
-TEST_P(CuOptMethodTest, SolvesSimpleLP) {
-    auto lp = mcfcg::create_cuopt_solver(/*verbose=*/false, GetParam());
-
-    lp->add_cols({1.0, 2.0}, {0.0, 0.0}, {1e20, 1e20});
-    lp->add_rows({3.0}, {1e20}, {0, 2}, {0, 1}, {1.0, 1.0});
-
-    auto status = lp->solve();
-    ASSERT_EQ(status, mcfcg::LPStatus::Optimal);
-
-    EXPECT_NEAR(lp->get_obj(), 3.0, 1e-5);
-
-    auto primals = lp->get_primals();
-    EXPECT_NEAR(primals[0], 3.0, 1e-5);
-    EXPECT_NEAR(primals[1], 0.0, 1e-5);
-
+    // 1) min x  s.t. x >= 5                         -> x=5, obj=5
+    lp->add_cols({1.0}, {0.0}, {1e20});
+    lp->add_rows({5.0}, {1e20}, {0, 1}, {0}, {1.0});
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 5.0, tol);
+    // Also check the backend returns usable duals, not just a correct
+    // objective: the CG loop consumes the dual vector every iteration, so an
+    // obj-only check would miss a backend that solves but reports garbled
+    // duals. Dual of the binding x >= 5 row is 1.0.
     auto duals = lp->get_duals();
     ASSERT_EQ(duals.size(), 1u);
-    EXPECT_NEAR(std::abs(duals[0]), 1.0, 1e-5);
-}
+    EXPECT_NEAR(std::abs(duals[0]), 1.0, tol);
 
-INSTANTIATE_TEST_SUITE_P(AllMethods, CuOptMethodTest,
-                         ::testing::Values(mcfcg::CuOptMethod::Barrier, mcfcg::CuOptMethod::Pdlp,
-                                           mcfcg::CuOptMethod::DualSimplex));
+    // 2) add y (obj 0.5) into row 0  -> min x+0.5y s.t. x+y>=5 -> y=5, obj=2.5
+    lp->add_cols({0.5}, {0.0}, {1e20}, {0, 1}, {0}, {1.0});
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 2.5, tol);
+
+    // 3) raise y's cost to 2.0                      -> x=5, y=0, obj=5
+    lp->set_col_cost(1, 2.0);
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 5.0, tol);
+
+    // 4) add row y >= 2            -> min x+2y s.t. x+y>=5, y>=2 -> x=3,y=2,obj=7
+    lp->add_rows({2.0}, {1e20}, {0, 1}, {1}, {1.0});
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 7.0, tol);
+
+    // 5) delete the y>=2 row (row index 1)          -> back to x=5, y=0, obj=5
+    std::vector<int32_t> row_mask = {0, 1};
+    lp->delete_rows(row_mask);
+    EXPECT_EQ(row_mask[0], 0);
+    EXPECT_EQ(row_mask[1], -1);
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 5.0, tol);
+
+    // 6) add a fixed-at-zero column z, then delete it -> optimum unchanged (5)
+    lp->add_cols({1.0}, {0.0}, {0.0});  // z in [0,0]
+    ASSERT_EQ(lp->num_cols(), 3u);
+    std::vector<int32_t> col_mask = {0, 0, 1};
+    lp->delete_cols(col_mask);
+    EXPECT_EQ(col_mask[2], -1);
+    ASSERT_EQ(lp->num_cols(), 2u);
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 5.0, tol);
+}
 #endif  // MCFCG_USE_CUOPT

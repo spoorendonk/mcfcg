@@ -33,6 +33,8 @@ public:
         check_copt(COPT_CreateProb(_env, &_prob), "CreateProb");
 
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_LPMETHOD, 2), "LpMethod=barrier");
+        // GPUMode 2 requests the GPU barrier; COPT falls back to CPU when no GPU
+        // is present, so this is safe on a GPU-less host (it does not crash).
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_GPUMODE, 2), "GPUMode=2");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_PRESOLVE, 0), "Presolve=off");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_CROSSOVER, 0), "Crossover=off");

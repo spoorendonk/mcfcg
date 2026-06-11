@@ -26,6 +26,14 @@
 #define CUOPT_TERMINATION_STATUS_UNBOUNDED CUOPT_TERIMINATION_STATUS_UNBOUNDED
 #endif
 
+// CUOPT_PRESOLVE_OFF (the integer value 0 of the "presolve" parameter) is only
+// defined in newer cuOpt headers; older installs declare the CUOPT_PRESOLVE
+// parameter name but not the value enum. Fall back to its documented value so
+// this backend builds against both.
+#ifndef CUOPT_PRESOLVE_OFF
+#define CUOPT_PRESOLVE_OFF 0
+#endif
+
 namespace mcfcg {
 
 namespace {
@@ -36,23 +44,10 @@ void check_cuopt(cuopt_int_t status, const char* msg) {
     }
 }
 
-// Map the backend-agnostic CuOptMethod to cuOpt's CUOPT_METHOD_* constant.
-int cuopt_method_value(CuOptMethod method) {
-    switch (method) {
-        case CuOptMethod::Pdlp:
-            return CUOPT_METHOD_PDLP;
-        case CuOptMethod::DualSimplex:
-            return CUOPT_METHOD_DUAL_SIMPLEX;
-        case CuOptMethod::Barrier:
-            break;
-    }
-    return CUOPT_METHOD_BARRIER;
-}
-
 // cuOpt's infinity is IEEE inf (CUOPT_INFINITY). Coerce any bound at or beyond a
 // large-magnitude sentinel to +/-CUOPT_INFINITY before handing it to cuOpt. A
 // large FINITE bound (e.g. a 1e20 "infinity" stand-in) is a genuine two-sided
-// range to cuOpt: its value enters the barrier/PDLP starting point and breaks
+// range to cuOpt: its value enters the barrier starting point and breaks
 // the solve down numerically (search-direction NaN, returns the origin as
 // "Optimal"), whereas +/-inf is handled as a one-sided constraint. mcfcg's own
 // INF is already +inf, so this is a no-op for the master; it guards any caller
@@ -156,7 +151,6 @@ private:
     std::vector<double> _cached_reduced_costs;
 
     bool _verbose = false;
-    CuOptMethod _method = CuOptMethod::Barrier;
 
 #ifdef MCFCG_CUOPT_DELTA_API
     // Persistent cuOpt handles, populated by the first solve and reused on
@@ -168,8 +162,7 @@ private:
 
 public:
     CuOptSolver() = default;
-    explicit CuOptSolver(bool verbose, CuOptMethod method = CuOptMethod::Barrier)
-        : _verbose(verbose), _method(method) {}
+    explicit CuOptSolver(bool verbose) : _verbose(verbose) {}
 
     CuOptSolver(const CuOptSolver&) = delete;
     CuOptSolver& operator=(const CuOptSolver&) = delete;
@@ -510,13 +503,18 @@ public:
             return LPStatus::Error;
         }
 
-        cuOptSetParameter(settings, CUOPT_METHOD,
-                          std::to_string(cuopt_method_value(_method)).c_str());
-        // PDLP is first-order: warm-started it stops at the first point in
-        // the tolerance band, so it needs a tighter gap/feasibility target
-        // than barrier/dual-simplex or CG pricing stalls (#24).
-        double tol = (_method == CuOptMethod::Pdlp) ? CUOPT_PDLP_FEAS_TOL : LP_FEAS_TOL;
-        auto tol_str = std::to_string(tol);
+        // cuOpt always solves with barrier (IPM). This repo does not expose
+        // per-solver algorithm selection.
+        cuOptSetParameter(settings, CUOPT_METHOD, std::to_string(CUOPT_METHOD_BARRIER).c_str());
+        // Presolve OFF. The CG master mutates this LP incrementally and reads
+        // duals / reduced costs keyed by column and row index every iteration,
+        // and the delta C API appends/deletes rows and columns by index on a
+        // persistent handle. cuOpt presolve aggregates and removes rows/columns,
+        // which breaks that 1:1 index mapping and is wasted work on these
+        // repeatedly-resolved warm-started LPs. _settings is created once and
+        // reused by cuOptResolve, so setting this here covers the delta path too.
+        cuOptSetParameter(settings, CUOPT_PRESOLVE, std::to_string(CUOPT_PRESOLVE_OFF).c_str());
+        auto tol_str = std::to_string(LP_FEAS_TOL);
         cuOptSetParameter(settings, CUOPT_RELATIVE_GAP_TOLERANCE, tol_str.c_str());
         cuOptSetParameter(settings, CUOPT_RELATIVE_PRIMAL_TOLERANCE, tol_str.c_str());
         cuOptSetParameter(settings, CUOPT_RELATIVE_DUAL_TOLERANCE, tol_str.c_str());
@@ -556,8 +554,8 @@ public:
     uint32_t num_rows() const override { return static_cast<uint32_t>(_row_lb.size()); }
 };
 
-std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose, CuOptMethod method) {
-    return std::make_unique<CuOptSolver>(verbose, method);
+std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose) {
+    return std::make_unique<CuOptSolver>(verbose);
 }
 
 }  // namespace mcfcg
