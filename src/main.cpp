@@ -2,6 +2,7 @@
 #include "mcfcg/cg/path_cg.h"
 #include "mcfcg/cg/tree_cg.h"
 #include "mcfcg/instance.h"
+#include "mcfcg/source/source_lp.h"
 
 #include <chrono>
 #include <cmath>
@@ -66,6 +67,8 @@ static void print_usage(std::FILE* out) {
         "  --threads N              Number of pricing threads (default: 0=auto, 1=serial)\n"
         "  --batch-size N           Pricing batch size (0=all)\n"
         "  --solver NAME            LP solver: highs (default), copt, cuopt\n"
+        "  --write-mps PATH         Write the compact source-based LP as MPS to\n"
+        "                           PATH (gz if .gz) and exit; does not solve.\n"
         "  --verbose-solver         Enable LP solver's own log output\n"
         "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
         "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
@@ -122,6 +125,7 @@ int main(int argc, char* argv[]) {
     uint32_t batch_size = 0;
     std::string solver = "highs";
     std::string trips_path;
+    std::string write_mps_path;
     double coef = 0.0;
     bool verbose_solver = false;
     mcfcg::CGParams params;
@@ -149,6 +153,8 @@ int main(int argc, char* argv[]) {
             max_iters = static_cast<uint32_t>(std::atoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--trips") == 0) {
             trips_path = argv[++i];
+        } else if (std::strcmp(argv[i], "--write-mps") == 0) {
+            write_mps_path = argv[++i];
         } else if (std::strcmp(argv[i], "--coef") == 0) {
             coef = std::atof(argv[++i]);
         } else if (std::strcmp(argv[i], "--threads") == 0) {
@@ -209,6 +215,17 @@ int main(int argc, char* argv[]) {
                  "%zu sources\n",
                  inst.graph.num_vertices(), inst.graph.num_arcs(), inst.commodities.size(),
                  inst.sources.size());
+
+    // --write-mps short-circuits: emit the compact source-based LP and exit
+    // without configuring a solver or running column generation.
+    if (!write_mps_path.empty()) {
+        if (!mcfcg::write_source_mps(inst, write_mps_path)) {
+            std::fprintf(stderr, "Failed to write MPS to %s\n", write_mps_path.c_str());
+            return EXIT_FAILURE;
+        }
+        std::fprintf(stderr, "Wrote compact source LP to %s\n", write_mps_path.c_str());
+        return EXIT_SUCCESS;
+    }
 
     uint32_t effective_threads =
         num_threads == 0 ? std::max(1U, std::thread::hardware_concurrency()) : num_threads;

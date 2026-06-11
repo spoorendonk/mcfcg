@@ -42,6 +42,7 @@ add_library(mcfcg
     src/lp/highs_solver.cpp
     src/cg/path_cg.cpp
     src/cg/tree_cg.cpp
+    src/source/source_lp.cpp
 )
 target_include_directories(mcfcg PUBLIC include)
 find_package(ZLIB REQUIRED)
@@ -72,6 +73,18 @@ if(MCFCG_USE_CUOPT)
     target_sources(mcfcg PRIVATE src/lp/cuopt_solver.cpp)
     target_include_directories(mcfcg PRIVATE ${CUOPT_INCLUDE_DIR})
     target_link_libraries(mcfcg PRIVATE ${CUOPT_LIBRARY})
+    # Embed the cuOpt library's directory as a build RPATH so the executables
+    # (defined below) resolve libcuopt at load time without the caller setting
+    # LD_LIBRARY_PATH. libcuopt itself carries an RPATH to its own deps
+    # (librmm / rapids_logger), so this single entry is enough. The path is
+    # derived from the configure-time CUOPT_LIBRARY — nothing hardcoded here.
+    get_filename_component(_cuopt_libdir "${CUOPT_LIBRARY}" DIRECTORY)
+    list(APPEND CMAKE_BUILD_RPATH "${_cuopt_libdir}")
+    # Emit DT_RPATH (searched BEFORE LD_LIBRARY_PATH) rather than the linker's
+    # default DT_RUNPATH (searched AFTER): a stock cuOpt on the caller's
+    # LD_LIBRARY_PATH (e.g. /usr/local/cuopt/lib64) lacks the delta symbols, so
+    # it must not win over the fork build pinned here.
+    add_link_options(-Wl,--disable-new-dtags)
     if(EXISTS "${CUOPT_INCLUDE_DIR}/cuopt/linear_programming/cuopt_c_delta.h")
         message(STATUS "cuOpt delta API header detected at ${CUOPT_INCLUDE_DIR}. Enable with -DMCFCG_CUOPT_DELTA_API=ON.")
     endif()

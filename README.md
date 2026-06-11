@@ -191,9 +191,40 @@ cmake --build build -j$(nproc)
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `-DMCFCG_USE_CUOPT=ON`   | OFF | Enable the NVIDIA cuOpt GPU LP backend (requires cuOpt SDK) |
-| `-DMCFCG_USE_COPT=ON`    | OFF | Enable the COPT LP backend (requires COPT installed) |
+| `-DMCFCG_USE_CUOPT=ON`   | OFF | Enable the NVIDIA cuOpt GPU LP backend (requires cuOpt — see below) |
+| `-DMCFCG_CUOPT_DELTA_API=ON` | OFF | Use cuOpt's incremental delta C API (needs the fork below); requires `MCFCG_USE_CUOPT=ON` |
+| `-DMCFCG_USE_COPT=ON`    | OFF | Enable the COPT LP backend (requires COPT installed, `COPT_HOME` set) |
 | `-DMCFCG_NATIVE_ARCH=OFF` | ON | Disable `-march=native`. Keep ON for SIMD auto-vectorization of the hot `cost[a] - mu[a]` pricing loop; only turn OFF for portable binaries. |
+
+### cuOpt and the delta-API fork
+
+The cuOpt backend mutates the restricted master incrementally (add/delete
+columns and rows, re-solve). Stock cuOpt has no incremental C API, so the
+delta path (`-DMCFCG_CUOPT_DELTA_API=ON`) needs a cuOpt build that ships
+`cuopt_c_delta.h` — the [`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt)
+fork. **You must build that fork yourself first.** Then point the configure at
+it (an install prefix or a source checkout both work):
+
+```bash
+# one combined build with both COPT and the cuOpt delta fork
+cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY \
+  -DMCFCG_USE_COPT=ON \
+  -DMCFCG_USE_CUOPT=ON -DMCFCG_CUOPT_DELTA_API=ON \
+  -DCUOPT_INCLUDE_DIR=/path/to/cuopt/cpp/include \
+  -DCUOPT_LIBRARY=/path/to/cuopt/cpp/build/libcuopt.so
+cmake --build build -j$(nproc)
+```
+
+`libcuopt.so` (and its `librmm` / `rapids_logger` deps) must be reachable by
+the dynamic loader at run time. The build **embeds the cuOpt library directory
+as an RPATH** — derived from `CUOPT_LIBRARY` — so `build/mcfcg_cli`, the tests,
+and the tools run without exporting `LD_LIBRARY_PATH`. If you later **move the
+fork's build directory**, either reconfigure (so the RPATH updates) or put the
+new location on `LD_LIBRARY_PATH`:
+
+```bash
+export LD_LIBRARY_PATH=/path/to/cuopt/cpp/build:$LD_LIBRARY_PATH
+```
 
 ## Test
 

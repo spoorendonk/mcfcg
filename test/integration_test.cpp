@@ -8,6 +8,8 @@
 #include "mcfcg/cg/tree_pricer.h"
 #include "mcfcg/graph/static_digraph_builder.h"
 #include "mcfcg/instance.h"
+#include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/source/source_lp.h"
 
 #include <filesystem>
 #include <fstream>
@@ -576,6 +578,40 @@ TEST(FeatureTests, ParallelReproducibility) {
               mcfcg::RELATIVE_FEAS_TOL);
     EXPECT_LT(std::abs(r2.objective - ref) / std::max(1.0, std::abs(ref)),
               mcfcg::RELATIVE_FEAS_TOL);
+}
+
+// --- Compact source-based formulation (build_source_lp) ---
+//
+// Build the source LP, feed it to a HiGHS LPSolver (rows as bounds-only, then
+// columns with their CSC coefficients), and check the optimum equals the paper
+// reference. This guards the formulation end-to-end — RHS signs, conservation
+// coefficients, and capacity rows — independently of the MPS text writer, which
+// itself is exercised by writing and re-solving in the CLI.
+static void check_source_lp(const std::string& family, const std::string& name) {
+    auto opt = load_optimal(data_dir("commalab/" + family));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/" + family + "/" + name);
+    auto slp = mcfcg::build_source_lp(inst);
+
+    EXPECT_EQ(slp.num_cols, inst.sources.size() * inst.graph.num_arcs());
+    ASSERT_EQ(slp.col_start.size(), slp.num_cols + 1);
+    EXPECT_EQ(slp.col_start.back(), slp.value.size());
+    EXPECT_EQ(slp.row_index.size(), slp.value.size());
+
+    auto lp = mcfcg::create_lp_solver();
+    std::vector<uint32_t> row_starts(slp.num_rows + 1, 0);
+    lp->add_rows(slp.row_lower, slp.row_upper, row_starts, {}, {});
+    lp->add_cols(slp.col_cost, slp.col_lower, slp.col_upper, slp.col_start, slp.row_index,
+                 slp.value);
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    double ref = opt.at(name);
+    EXPECT_NEAR(lp->get_obj(), ref, std::abs(ref) * 1e-6);
+}
+
+TEST(SourceFormulation, Grid1) {
+    check_source_lp("grid", "grid1");
+}
+TEST(SourceFormulation, Planar30) {
+    check_source_lp("planar", "planar30");
 }
 
 // --- cuOpt / COPT GPU solver tests ---

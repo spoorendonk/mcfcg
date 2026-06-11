@@ -2,3 +2,10 @@ build*/
 .cache/
 data/intermodal-repo/
 data/intermodal/raw/
+
+# Derived MPS dumps (regenerable via scripts/write_mps.sh) — large, not committed.
+*.mps.gz
+*.mps
+# Benchmark outputs (scripts/benchmark_solvers.py).
+bench-*.csv
+Highs.log
