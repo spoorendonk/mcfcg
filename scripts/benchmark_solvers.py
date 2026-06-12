@@ -21,6 +21,9 @@ Examples:
 
   # full cuOpt pass, 2h/instance
   python3 scripts/benchmark_solvers.py --solvers cuopt --out bench-cuopt.csv
+
+  # both formulations on every family (override per-family default)
+  python3 scripts/benchmark_solvers.py --formulations path,tree
 """
 
 import argparse
@@ -139,6 +142,11 @@ def main():
     ap.add_argument("--binary", default=os.path.join(REPO, "build/mcfcg_cli"))
     ap.add_argument("--solvers", default="copt,cuopt")
     ap.add_argument("--families", default="grid,planar,transportation,intermodal")
+    ap.add_argument("--formulations", default=None,
+                    help="comma-separated formulations to run for every instance "
+                         "(e.g. 'path,tree'). Overrides each family's default. "
+                         "Omit to use the per-family default (path for grid/planar/"
+                         "transportation, tree for intermodal).")
     ap.add_argument("--instances", default=None,
                     help="fnmatch glob on the ref key to filter (e.g. 'grid1', 'BUS-*').")
     ap.add_argument("--max-planar", type=int, default=None,
@@ -154,6 +162,8 @@ def main():
 
     solvers = [s.strip() for s in args.solvers.split(",") if s.strip()]
     families = [f.strip() for f in args.families.split(",") if f.strip()]
+    override_forms = ([f.strip() for f in args.formulations.split(",") if f.strip()]
+                      if args.formulations else None)
 
     fields = ["family", "instance", "solver", "formulation", "outcome", "objective",
               "ref", "rel_err", "pass", "optimal", "iterations", "columns", "time", "detail"]
@@ -162,15 +172,17 @@ def main():
 
     for family in families:
         refs = load_optimal(os.path.join(REPO, "data", FAMILY_OPTIMAL[family]))
-        for instance, key, formulation, extra in enumerate_family(family):
+        for instance, key, default_form, extra in enumerate_family(family):
             if args.instances and not fnmatch.fnmatch(key, args.instances):
                 continue
             if family == "planar" and args.max_planar is not None:
                 n = int(re.sub(r"\D", "", key))
                 if n > args.max_planar:
                     continue
-            for solver in solvers:
-                sys.stderr.write(f"[{family}] {key} :: {solver} ... ")
+            forms = override_forms if override_forms is not None else [default_form]
+            for formulation in forms:
+              for solver in solvers:
+                sys.stderr.write(f"[{family}] {key} :: {formulation}/{solver} ... ")
                 sys.stderr.flush()
                 r = run_one(args.binary, instance, solver, formulation, extra,
                             args.timeout, args.max_iters)
@@ -216,7 +228,8 @@ def main():
         print("\nNon-pass runs:")
         for r in nonpass:
             d = r["detail"] or (f"rel={r['rel_err']:.2e}" if r["rel_err"] != "" else "")
-            print(f"  {r['solver']:<6} {r['family']:<14} {r['instance']:<16} {r['outcome']:<8} {d}")
+            print(f"  {r['solver']:<6} {r['formulation']:<5} {r['family']:<14} "
+                  f"{r['instance']:<16} {r['outcome']:<8} {d}")
 
 
 if __name__ == "__main__":
