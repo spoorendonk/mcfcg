@@ -681,3 +681,13 @@ TEST(CoptCorrectness, DISABLED_SmallGridAndPlanar) {
     check_small_grid_and_planar([] { return mcfcg::create_copt_solver(); });
 }
 #endif  // MCFCG_USE_COPT
+
+#ifdef MCFCG_USE_MOSEK
+// Single MOSEK correctness test (barrier — MOSEK's fixed method here). Same
+// path-CG correctness sweep as the COPT/cuOpt tests, over grid index < 10 and
+// planar index < 300. Slow (barrier per LP solve) — disabled by default. Run:
+//   --gtest_also_run_disabled_tests --gtest_filter='MosekCorrectness.*'
+TEST(MosekCorrectness, DISABLED_SmallGridAndPlanar) {
+    check_small_grid_and_planar([] { return mcfcg::create_mosek_solver(); });
+}
+#endif  // MCFCG_USE_MOSEK
