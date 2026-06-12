@@ -71,7 +71,10 @@ if(MCFCG_USE_CUOPT)
         message(FATAL_ERROR "cuOpt not found. Set CUOPT_ROOT (install prefix or spoorendonk/cuopt source checkout), activate a conda env with cuopt installed, or set CMAKE_PREFIX_PATH.")
     endif()
     target_sources(mcfcg PRIVATE src/lp/cuopt_solver.cpp)
-    target_include_directories(mcfcg PRIVATE ${CUOPT_INCLUDE_DIR})
+    # SYSTEM so clang-tidy (pre-commit --fix) never analyzes/rewrites the
+    # vendor SDK headers — a PRIVATE include let modernize-* fix-its corrupt
+    # an out-of-repo header. See devkit hook issue.
+    target_include_directories(mcfcg SYSTEM PRIVATE ${CUOPT_INCLUDE_DIR})
     target_link_libraries(mcfcg PRIVATE ${CUOPT_LIBRARY})
     # Embed the cuOpt library's directory as a build RPATH so the executables
     # (defined below) resolve libcuopt at load time without the caller setting
@@ -105,7 +108,7 @@ if(MCFCG_USE_COPT)
         message(FATAL_ERROR "COPT not found. Set COPT_HOME.")
     endif()
     target_sources(mcfcg PRIVATE src/lp/copt_solver.cpp)
-    target_include_directories(mcfcg PRIVATE ${COPT_INCLUDE_DIR})
+    target_include_directories(mcfcg SYSTEM PRIVATE ${COPT_INCLUDE_DIR})
     target_link_libraries(mcfcg PRIVATE ${COPT_LIBRARY})
 endif()
 
@@ -121,7 +124,7 @@ if(MCFCG_USE_MOSEK)
         message(FATAL_ERROR "MOSEK not found. Set MOSEK_HOME (e.g. /opt/mosek/11.0/tools/platform/linux64x86).")
     endif()
     target_sources(mcfcg PRIVATE src/lp/mosek_solver.cpp)
-    target_include_directories(mcfcg PRIVATE ${MOSEK_INCLUDE_DIR})
+    target_include_directories(mcfcg SYSTEM PRIVATE ${MOSEK_INCLUDE_DIR})
     target_link_libraries(mcfcg PRIVATE ${MOSEK_LIBRARY})
     # Embed libmosek64's directory as a build RPATH so the executables resolve
     # it at load time without the caller setting LD_LIBRARY_PATH. Derived from
