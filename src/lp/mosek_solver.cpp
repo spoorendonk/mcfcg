@@ -116,17 +116,39 @@ public:
     MosekSolver(MosekSolver&&) = delete;
     MosekSolver& operator=(MosekSolver&&) = delete;
 
+    // Build parallel MOSEK bound-key / lo / hi arrays from generic (lb, ub)
+    // for a slice of n items, ready for MSK_putvarboundslice/putconboundslice.
+    static void build_bounds(const std::vector<double>& lb, const std::vector<double>& ub,
+                             int32_t n, std::vector<MSKboundkeye>& bk, std::vector<double>& lo,
+                             std::vector<double>& hi) {
+        bk.resize(n);
+        lo.resize(n);
+        hi.resize(n);
+        for (int32_t i = 0; i < n; ++i) {
+            BoundKey b = to_mosek_bound(lb[i], ub[i]);
+            bk[i] = b.bk;
+            lo[i] = b.lo;
+            hi[i] = b.hi;
+        }
+    }
+
     uint32_t add_cols(const std::vector<double>& obj, const std::vector<double>& lb,
                       const std::vector<double>& ub) override {
         uint32_t first = num_cols();
         auto n = static_cast<int32_t>(obj.size());
-        check_mosek(MSK_appendvars(_task, n), "appendvars");
-        for (int32_t i = 0; i < n; ++i) {
-            int32_t j = static_cast<int32_t>(first) + i;
-            check_mosek(MSK_putcj(_task, j, obj[i]), "putcj");
-            BoundKey b = to_mosek_bound(lb[i], ub[i]);
-            check_mosek(MSK_putvarbound(_task, j, b.bk, b.lo, b.hi), "putvarbound");
+        if (n == 0) {
+            return first;
         }
+        check_mosek(MSK_appendvars(_task, n), "appendvars");
+        int32_t lo_idx = static_cast<int32_t>(first);
+        int32_t hi_idx = lo_idx + n;
+        check_mosek(MSK_putcslice(_task, lo_idx, hi_idx, obj.data()), "putcslice");
+        std::vector<MSKboundkeye> bk;
+        std::vector<double> lo;
+        std::vector<double> hi;
+        build_bounds(lb, ub, n, bk, lo, hi);
+        check_mosek(MSK_putvarboundslice(_task, lo_idx, hi_idx, bk.data(), lo.data(), hi.data()),
+                    "putvarboundslice");
         return first;
     }
 
@@ -138,24 +160,28 @@ public:
                "add_cols requires starts.size() == n+1 with starts.back() == values.size()");
         uint32_t first = num_cols();
         auto n = static_cast<int32_t>(obj.size());
-        check_mosek(MSK_appendvars(_task, n), "appendvars");
-
-        std::vector<int32_t> sub;
-        for (int32_t i = 0; i < n; ++i) {
-            int32_t j = static_cast<int32_t>(first) + i;
-            check_mosek(MSK_putcj(_task, j, obj[i]), "putcj");
-            BoundKey b = to_mosek_bound(lb[i], ub[i]);
-            check_mosek(MSK_putvarbound(_task, j, b.bk, b.lo, b.hi), "putvarbound");
-
-            uint32_t beg = starts[i];
-            uint32_t end = starts[i + 1];
-            auto nz = static_cast<int32_t>(end - beg);
-            sub.resize(nz);
-            for (int32_t k = 0; k < nz; ++k) {
-                sub[k] = static_cast<int32_t>(row_indices[beg + k]);
-            }
-            check_mosek(MSK_putacol(_task, j, nz, sub.data(), values.data() + beg), "putacol");
+        if (n == 0) {
+            return first;
         }
+        check_mosek(MSK_appendvars(_task, n), "appendvars");
+        int32_t lo_idx = static_cast<int32_t>(first);
+        int32_t hi_idx = lo_idx + n;
+        check_mosek(MSK_putcslice(_task, lo_idx, hi_idx, obj.data()), "putcslice");
+        std::vector<MSKboundkeye> bk;
+        std::vector<double> lo;
+        std::vector<double> hi;
+        build_bounds(lb, ub, n, bk, lo, hi);
+        check_mosek(MSK_putvarboundslice(_task, lo_idx, hi_idx, bk.data(), lo.data(), hi.data()),
+                    "putvarboundslice");
+
+        // ptr[i]/ptr[i+1] are the begin/end offsets of column i into asub/aval,
+        // so a single (size n+1) int32 copy of starts serves as both ptrb and
+        // ptre = ptr+1. asub is the int32-narrowed row index array.
+        std::vector<int32_t> ptr(starts.begin(), starts.end());
+        std::vector<int32_t> asub(row_indices.begin(), row_indices.end());
+        check_mosek(MSK_putacolslice(_task, lo_idx, hi_idx, ptr.data(), ptr.data() + 1, asub.data(),
+                                     values.data()),
+                    "putacolslice");
         return first;
     }
 
@@ -166,23 +192,25 @@ public:
                "add_rows requires starts.size() == m+1 with starts.back() == values.size()");
         uint32_t first = num_rows();
         auto m = static_cast<int32_t>(lb.size());
-        check_mosek(MSK_appendcons(_task, m), "appendcons");
-
-        std::vector<int32_t> sub;
-        for (int32_t i = 0; i < m; ++i) {
-            int32_t row = static_cast<int32_t>(first) + i;
-            BoundKey b = to_mosek_bound(lb[i], ub[i]);
-            check_mosek(MSK_putconbound(_task, row, b.bk, b.lo, b.hi), "putconbound");
-
-            uint32_t beg = starts[i];
-            uint32_t end = starts[i + 1];
-            auto nz = static_cast<int32_t>(end - beg);
-            sub.resize(nz);
-            for (int32_t k = 0; k < nz; ++k) {
-                sub[k] = static_cast<int32_t>(indices[beg + k]);
-            }
-            check_mosek(MSK_putarow(_task, row, nz, sub.data(), values.data() + beg), "putarow");
+        if (m == 0) {
+            return first;
         }
+        check_mosek(MSK_appendcons(_task, m), "appendcons");
+        int32_t lo_idx = static_cast<int32_t>(first);
+        int32_t hi_idx = lo_idx + m;
+        std::vector<MSKboundkeye> bk;
+        std::vector<double> lo;
+        std::vector<double> hi;
+        build_bounds(lb, ub, m, bk, lo, hi);
+        check_mosek(MSK_putconboundslice(_task, lo_idx, hi_idx, bk.data(), lo.data(), hi.data()),
+                    "putconboundslice");
+
+        // ptr[i]/ptr[i+1]: begin/end offsets of row i into asub/aval (see add_cols).
+        std::vector<int32_t> ptr(starts.begin(), starts.end());
+        std::vector<int32_t> asub(indices.begin(), indices.end());
+        check_mosek(MSK_putarowslice(_task, lo_idx, hi_idx, ptr.data(), ptr.data() + 1, asub.data(),
+                                     values.data()),
+                    "putarowslice");
         return first;
     }
 
