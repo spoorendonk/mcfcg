@@ -614,9 +614,9 @@ TEST(SourceFormulation, Planar30) {
     check_source_lp("planar", "planar30");
 }
 
-// --- cuOpt / COPT GPU solver tests ---
+// --- cuOpt / COPT / MOSEK barrier solver tests ---
 
-#if defined(MCFCG_USE_CUOPT) || defined(MCFCG_USE_COPT)
+#if defined(MCFCG_USE_CUOPT) || defined(MCFCG_USE_COPT) || defined(MCFCG_USE_MOSEK)
 
 #include "mcfcg/lp/lp_solver.h"
 
@@ -653,7 +653,7 @@ static void check_small_grid_and_planar(Factory factory) {
     }
 }
 
-#endif  // MCFCG_USE_CUOPT || MCFCG_USE_COPT
+#endif  // MCFCG_USE_CUOPT || MCFCG_USE_COPT || MCFCG_USE_MOSEK
 
 #ifdef MCFCG_USE_CUOPT
 // Single cuOpt correctness test (barrier — the only method this repo exposes).

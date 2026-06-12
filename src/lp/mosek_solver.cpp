@@ -276,6 +276,14 @@ public:
             return LPStatus::Error;
         }
 
+        // The solution status is the authoritative gate, not trmcode: a
+        // non-converged termination (stall / max-iterations / numerical, all of
+        // which still return res == MSK_RES_OK with trmcode set) leaves the
+        // MSK_SOL_ITR solsta non-OPTIMAL, so the default branch below maps it to
+        // Error. A trmcode warning that nonetheless reached optimal tolerance
+        // yields solsta == OPTIMAL and is a usable solution (cf. COPT's
+        // IMPRECISE -> Optimal); gating on trmcode would spuriously fail those.
+        // Either way an unconverged barrier can never leak out as Optimal (#33).
         MSKsolstae solsta = MSK_SOL_STA_UNKNOWN;
         if (MSK_getsolsta(_task, MSK_SOL_ITR, &solsta) != MSK_RES_OK) {
             return LPStatus::Error;

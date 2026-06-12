@@ -204,6 +204,13 @@ TEST(MosekSolver, IncrementalMutationsTrackOptimum) {
     lp->set_col_cost(1, 2.0);
     ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
     EXPECT_NEAR(lp->get_obj(), 5.0, tol);
+    // Reduced costs follow c - A'y. With the x==5 row dual at 1.0: x is basic so
+    // RC 0; y sits at its lower bound with cost 2, so RC = 2 - 1 = 1. The pricer
+    // consumes these — a flipped sign would make y's RC negative and mislead it.
+    auto rc = lp->get_reduced_costs();
+    ASSERT_EQ(rc.size(), 2u);
+    EXPECT_NEAR(rc[0], 0.0, tol);
+    EXPECT_NEAR(rc[1], 1.0, tol);
 
     // 4) add row y >= 2          -> min x+2y s.t. x+y==5, y>=2 -> x=3,y=2,obj=7
     lp->add_rows({2.0}, {1e20}, {0, 1}, {1}, {1.0});
