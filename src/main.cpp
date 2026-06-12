@@ -66,7 +66,7 @@ static void print_usage(std::FILE* out) {
         "  --coef N                 TNTP demand coefficient\n"
         "  --threads N              Number of pricing threads (default: 0=auto, 1=serial)\n"
         "  --batch-size N           Pricing batch size (0=all)\n"
-        "  --solver NAME            LP solver: highs (default), copt, cuopt\n"
+        "  --solver NAME            LP solver: highs (default), copt, cuopt, mosek\n"
         "  --write-mps PATH         Write the compact source-based LP as MPS to\n"
         "                           PATH (gz if .gz) and exit; does not solve.\n"
         "  --verbose-solver         Enable LP solver's own log output\n"
@@ -101,12 +101,22 @@ static bool configure_solver(const std::string& solver, bool verbose_solver,
         std::fprintf(stderr, "COPT not available. Rebuild with -DMCFCG_USE_COPT=ON.\n");
         return false;
 #endif
+    } else if (solver == "mosek") {
+#ifdef MCFCG_USE_MOSEK
+        params.solver_factory = [verbose_solver] {
+            return mcfcg::create_mosek_solver(verbose_solver);
+        };
+#else
+        std::fprintf(stderr, "MOSEK not available. Rebuild with -DMCFCG_USE_MOSEK=ON.\n");
+        return false;
+#endif
     } else if (solver == "highs") {
         params.solver_factory = [verbose_solver] {
             return mcfcg::create_lp_solver(verbose_solver);
         };
     } else {
-        std::fprintf(stderr, "Unknown solver '%s'. Valid: highs, copt, cuopt\n", solver.c_str());
+        std::fprintf(stderr, "Unknown solver '%s'. Valid: highs, copt, cuopt, mosek\n",
+                     solver.c_str());
         return false;
     }
     return true;

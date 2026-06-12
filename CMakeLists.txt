@@ -111,7 +111,23 @@ endif()
 
 if(MCFCG_USE_MOSEK)
     target_compile_definitions(mcfcg PUBLIC MCFCG_USE_MOSEK)
-    # TODO: find and link MOSEK
+    find_path(MOSEK_INCLUDE_DIR mosek.h
+              HINTS ENV MOSEK_HOME
+              PATH_SUFFIXES h)
+    find_library(MOSEK_LIBRARY mosek64
+                 HINTS ENV MOSEK_HOME
+                 PATH_SUFFIXES bin)
+    if(NOT MOSEK_INCLUDE_DIR OR NOT MOSEK_LIBRARY)
+        message(FATAL_ERROR "MOSEK not found. Set MOSEK_HOME (e.g. /opt/mosek/11.0/tools/platform/linux64x86).")
+    endif()
+    target_sources(mcfcg PRIVATE src/lp/mosek_solver.cpp)
+    target_include_directories(mcfcg PRIVATE ${MOSEK_INCLUDE_DIR})
+    target_link_libraries(mcfcg PRIVATE ${MOSEK_LIBRARY})
+    # Embed libmosek64's directory as a build RPATH so the executables resolve
+    # it at load time without the caller setting LD_LIBRARY_PATH. Derived from
+    # the configure-time MOSEK_LIBRARY — nothing hardcoded here.
+    get_filename_component(_mosek_libdir "${MOSEK_LIBRARY}" DIRECTORY)
+    list(APPEND CMAKE_BUILD_RPATH "${_mosek_libdir}")
 endif()
 
 # CLI

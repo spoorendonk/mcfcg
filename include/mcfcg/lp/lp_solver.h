@@ -112,4 +112,10 @@ std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose = false);
 std::unique_ptr<LPSolver> create_copt_solver(bool verbose = false);
 #endif
 
+#ifdef MCFCG_USE_MOSEK
+// MOSEK always solves with its interior-point (barrier) method, presolve and
+// crossover off — one fixed method per backend, like COPT/cuOpt.
+std::unique_ptr<LPSolver> create_mosek_solver(bool verbose = false);
+#endif
+
 }  // namespace mcfcg

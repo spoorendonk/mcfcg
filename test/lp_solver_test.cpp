@@ -163,3 +163,73 @@ TEST(CuOptSolver, IncrementalMutationsTrackOptimum) {
     EXPECT_NEAR(lp->get_obj(), 5.0, tol);
 }
 #endif  // MCFCG_USE_CUOPT
+
+#ifdef MCFCG_USE_MOSEK
+// MOSEK backend correctness: drive the barrier (the only method this backend
+// exposes — presolve off, crossover off) through incremental mutations
+// interleaved with solves, checking the objective after each step. The optimum
+// after every mutation is known in closed form, so a bug in the bound-key
+// derivation, the index remap after a delete, an ignored cost update, or a
+// flipped dual/reduced-cost sign surfaces as a wrong value here.
+//
+// The first row is an equality (lb == ub) — the row type the mcfcg master
+// actually emits for demand/convexity ('=' rows; capacity rows are '<='). The
+// 1e20 column/row bounds guard the infinity coercion: a finite 1e20 handed to
+// MOSEK as a range bound would corrupt the interior-point starting point, so it
+// must be mapped to an open (MSK_BK_LO/UP) bound key instead.
+//
+// Requires the MOSEK SDK + a valid license at build/run time; skipped from the
+// default (HiGHS-only) build because create_mosek_solver is not compiled.
+TEST(MosekSolver, IncrementalMutationsTrackOptimum) {
+    auto lp = mcfcg::create_mosek_solver(/*verbose=*/false);
+    const double tol = 1e-3;
+
+    // 1) min x  s.t. x == 5                         -> x=5, obj=5
+    lp->add_cols({1.0}, {0.0}, {1e20});
+    lp->add_rows({5.0}, {5.0}, {0, 1}, {0}, {1.0});
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 5.0, tol);
+    // The CG loop consumes the dual vector every iteration, so verify duals are
+    // usable, not just the objective. Dual of the binding x == 5 row is 1.0.
+    auto duals = lp->get_duals();
+    ASSERT_EQ(duals.size(), 1u);
+    EXPECT_NEAR(duals[0], 1.0, tol);
+
+    // 2) add y (obj 0.5) into row 0  -> min x+0.5y s.t. x+y==5 -> y=5, obj=2.5
+    lp->add_cols({0.5}, {0.0}, {1e20}, {0, 1}, {0}, {1.0});
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 2.5, tol);
+
+    // 3) raise y's cost to 2.0                      -> x=5, y=0, obj=5
+    lp->set_col_cost(1, 2.0);
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 5.0, tol);
+
+    // 4) add row y >= 2          -> min x+2y s.t. x+y==5, y>=2 -> x=3,y=2,obj=7
+    lp->add_rows({2.0}, {1e20}, {0, 1}, {1}, {1.0});
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 7.0, tol);
+
+    // 5) delete the y>=2 row (row index 1)          -> back to x=5, y=0, obj=5
+    std::vector<int32_t> row_mask = {0, 1};
+    lp->delete_rows(row_mask);
+    EXPECT_EQ(row_mask[0], 0);
+    EXPECT_EQ(row_mask[1], -1);
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 5.0, tol);
+
+    // 6) add a fixed-at-zero column z, then delete it -> optimum unchanged (5)
+    lp->add_cols({1.0}, {0.0}, {0.0});  // z in [0,0]
+    ASSERT_EQ(lp->num_cols(), 3u);
+    std::vector<int32_t> col_mask = {0, 0, 1};
+    lp->delete_cols(col_mask);
+    EXPECT_EQ(col_mask[2], -1);
+    ASSERT_EQ(lp->num_cols(), 2u);
+    ASSERT_EQ(lp->solve(), mcfcg::LPStatus::Optimal);
+    EXPECT_NEAR(lp->get_obj(), 5.0, tol);
+
+    // has_basis() is false for the barrier (no crossover); get_basic_cols empty.
+    EXPECT_FALSE(lp->has_basis());
+    EXPECT_TRUE(lp->get_basic_cols().empty());
+}
+#endif  // MCFCG_USE_MOSEK
