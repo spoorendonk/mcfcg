@@ -20,6 +20,11 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         col.cost = 0.0;
         double tree_rc = -pi_s[s_idx];
         double source_rc_error = 0.0;
+        // π-free Lagrangian path sum Σ_k d_k·sp_k(c−μ) for this source,
+        // accumulated WITHOUT the −π_s seed so the convexity dual cancels
+        // in cg_loop's L(μ) (tree convexity RHS=1 ⇒ the per-source weight
+        // collapses).
+        double source_lagr_sum = 0.0;
 
         if (_track_arcs) {
             _source_arcs[s_idx].clear();
@@ -62,6 +67,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
                 ++path_arcs;
             }
             tree_rc += d * path_rc;
+            source_lagr_sum += d * path_rc;
             col.cost += d * path_orig_cost;
             // Tree column's rc is the demand-weighted sum of its per-
             // commodity path rcs, so the rounding-error budget is
@@ -78,12 +84,11 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             }
         }
 
-        // Lagrangian LB accumulator: this source's best tree RC,
-        // regardless of whether the col gets emitted.  Zero for
-        // non-attractive sources.  Written to a per-source slot for
-        // deterministic final summation.
-        _source_min_rc[s_idx] = tree_rc < 0.0 ? tree_rc : 0.0;
+        // Per-source LB slots (deterministic final summation).  source_lagr_sum
+        // is the π-free Σ_k d_k·sp_k(c−μ) for this source; source_rc_error its
+        // rounding budget.
         _source_rc_error[s_idx] = source_rc_error;
+        _source_lagr_sum[s_idx] = source_lagr_sum;
 
         if (tree_rc >= _neg_rc_tol) {
             _source_postponed[s_idx] = 1;

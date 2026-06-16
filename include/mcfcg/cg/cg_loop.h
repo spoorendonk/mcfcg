@@ -8,6 +8,7 @@
 #include "mcfcg/util/timer.h"
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
 #include <vector>
 
@@ -65,13 +66,12 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     // NOT a valid MCF bound (carries slack penalty / infeasible flow),
     // but keeps result.objective a real number for log / CSV parsers.
     double last_lp_obj = 0.0;
-    // Monotonically non-decreasing Lagrangian/Farley lower bound.
-    // LB_iter = LP_obj + pricer.min_rc_sum() when pricer.priced_all()
-    // (every source was visited in that iter's pricing).  Adding
-    // capacity rows or having slacks basic does NOT invalidate the
-    // bound — both can only relax the LP, so LP_obj is still an
-    // under-estimate of the constrained master that the Farley
-    // correction lifts toward OPT.
+    // Monotonically non-decreasing π-free capacity-relaxation Lagrangian LB.
+    // LB_iter = cap_dual_term + pricer.lagrangian_path_sum() −
+    // pricer.lb_error_bound(), taken when pricer.priced_all() (every source
+    // visited this iter).  Valid for any μ≤0 by weak Lagrangian duality —
+    // independent of slack/feasibility state — so slacks basic or fresh
+    // capacity rows do NOT invalidate it.  See the LB block below.
     double best_lb = -INF;
 
     auto populate_timing = [&] {
@@ -94,6 +94,10 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     };
 
     timer.start(TimerCat::Total);
+    // Wall-clock anchor for the optional time budget (params.time_limit_seconds).
+    // The Timer only exposes accumulated stopped time, so the live check needs
+    // its own monotonic start point.
+    const auto wall_start = std::chrono::steady_clock::now();
 
     if (params.warm_start) {
         // One-shot initialization: price every source against +inf duals to
@@ -116,6 +120,16 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     }
 
     for (uint32_t iter = 0; iter < params.max_iterations; ++iter) {
+        // Wall-clock budget check at the iteration boundary.  Breaking here
+        // (rather than mid-iteration) leaves the master/pricer in a consistent
+        // state; the shared exit path below stops the Total timer and emits the
+        // best UB/LB as a non-optimal result.
+        if (params.time_limit_seconds > 0.0 &&
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - wall_start).count() >
+                params.time_limit_seconds) {
+            break;
+        }
+
         Timer iter_timer;
         iter_timer.start(TimerCat::Total);
 
@@ -164,6 +178,13 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         auto primals = master.get_primals();
         auto pi = get_pricing_duals(master);
         const auto& mu = master.get_capacity_duals();
+        // Snapshot the capacity-dual term Σ_a cap_a·μ_a NOW, against the row
+        // set the LP was solved with — before separation mutates
+        // _cap_row_to_arc below.  This is the master-side half of the π-free
+        // Lagrangian LB; capturing it pre-separation is what lets the LB fire
+        // even on iters that add cuts (the new rows carry μ=0, contributing 0,
+        // which is exactly a valid relaxation of the not-yet-dualized rows).
+        double cap_dual_term = master.compute_capacity_dual_term(mu);
         master.update_capacity_row_activity(iter);
         master.update_column_ages(primals);
         uint32_t num_active_slacks = master.count_active_slacks(primals);
@@ -214,23 +235,25 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             pricer.clear_postponed();
         }
 
-        // Lagrangian/Farley LB.  Valid only when the LP is MCF-
-        // feasible (same gate as UB: no slack basic, no fresh capacity
-        // violation) AND the pricer visited every source (no
-        // postponement skipped anyone, no max_cols early break).
-        // A slack-basic LP has duals polluted by the slack penalty
-        // and a cut-pending LP has mu missing entries; either gives
-        // a nonsensical Lagrangian reconstruction (observed LB orders
-        // of magnitude above OPT on EdgeRows path).
-        // The rounding-error budget accounts for Dijkstra minimizing
-        // scaled-integer edge weights rather than true reduced cost.
-        if (pricer.priced_all() && num_active_slacks == 0 && num_new_caps == 0) {
-            // Use the LP dual obj (Σ pi·b + Σ cap*mu) rather than the
-            // primal obj so the Lagrangian reconstruction is exact at
-            // LP optimum even when the backend's primal and dual
-            // differ at solver tolerance (barrier-without-crossover).
-            double dual_obj = master.compute_dual_obj(pi, mu);
-            double lb_iter = dual_obj + pricer.min_rc_sum() - pricer.lb_error_bound();
+        // π-free capacity-relaxation Lagrangian LB:
+        //   L(μ) = Σ_a cap_a·μ_a + Σ_k d_k·sp_k(c−μ) − rounding_margin
+        // valid for ANY μ≤0 by weak Lagrangian duality — independent of π
+        // and of slack/feasibility state.  The pricer accumulates sp_k(c−μ)
+        // WITHOUT subtracting π_k (lagrangian_path_sum), so the structural
+        // duals cancel analytically rather than numerically: this is what
+        // makes the bound valid while a slack is basic (which would otherwise
+        // pin π_k at the bumped slack cost and inflate the old clamped
+        // reconstruction "orders of magnitude above OPT").  cap_dual_term was
+        // snapshotted pre-separation against the solved row set.  Gated only
+        // on priced_all() — the sum must cover every commodity; the slack and
+        // new-cap gates are no longer needed.
+        // Precondition: arc costs are non-negative, so c−μ ≥ 0 (μ≤0) and every
+        // sp_k(c−μ) ≥ 0 — this is what makes dropping an unreachable
+        // commodity's term only LOWER the bound (still ≤ OPT) rather than
+        // risk raising it.  If negative arc costs are ever introduced,
+        // revisit this and the val<=0 clamp in the pricer's compute_rc.
+        if (pricer.priced_all()) {
+            double lb_iter = cap_dual_term + pricer.lagrangian_path_sum() - pricer.lb_error_bound();
             best_lb = std::max(best_lb, lb_iter);
         }
 

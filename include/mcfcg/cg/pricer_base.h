@@ -122,27 +122,32 @@ protected:
     std::vector<std::vector<ColumnT>> _thread_columns;  // reused across batches
     // Per-source LB accumulators.  Writing to a per-source slot (instead
     // of a per-thread slot) keeps the final sum order-independent of the
-    // thread pool's task→thread dispatch, so `_last_min_rc_sum` and
-    // `_last_rc_error_bound` are deterministic run-to-run.  Each source
-    // is processed by exactly one thread in a given batch, so no race.
-    std::vector<double> _source_min_rc;
+    // thread pool's task→thread dispatch, so the reductions below are
+    // deterministic run-to-run.  Each source is processed by exactly one
+    // thread in a given batch, so no race.
     std::vector<double> _source_rc_error;
+    // Per-source accumulator for the π-free Lagrangian LB: Σ_{k in source}
+    // d_k · sp_k(c−μ), the demand-weighted reduced-cost shortest-path sum
+    // WITHOUT subtracting the structural dual π.
+    std::vector<double> _source_lagr_sum;
     thread_pool* _pool = nullptr;
 
     // Round-robin cursor: where to start pricing next iteration
     uint32_t _last_source_idx = 0;
     uint32_t _batch_size = 0;  // 0 = all sources in one batch
 
-    // Lagrangian/Farley lower bound support.  _last_min_rc_sum is the sum
-    // over all priced convexity entities (commodities for path, sources
-    // for tree) of min(rc*, 0), where rc* is the entity's best reduced
-    // cost found by the pricer.  Added to LP_obj it yields a valid MCF
-    // lower bound, but only when _last_priced_all is true — i.e. every
-    // source was visited in the last price() call (priced_count equals
-    // n_sources; a max_cols break that fires exactly on sweep completion
-    // still counts).
-    double _last_min_rc_sum = 0.0;
+    // π-free capacity-relaxation Lagrangian lower-bound support.
+    // _last_lagr_path_sum is Σ_k d_k·sp_k(c−μ) over all priced convexity
+    // entities (commodities for path, sources for tree); combined with
+    // Σ cap·μ in cg_loop it gives a lower bound valid for any μ≤0 regardless
+    // of slack/feasibility state (the structural duals cancel analytically).
+    // _last_rc_error_bound bounds the scale-integer rounding gap (subtracted
+    // to certify the bound).  Both are valid only when _last_priced_all is
+    // true — every source visited in the last price() call (priced_count
+    // equals n_sources; a max_cols break that fires exactly on sweep
+    // completion still counts).
     double _last_rc_error_bound = 0.0;
+    double _last_lagr_path_sum = 0.0;
     bool _last_priced_all = false;
 
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
@@ -172,8 +177,8 @@ public:
         for (uint32_t wi = 0; wi < num_ws; ++wi)
             _workspaces.emplace_back(inst.graph.num_vertices());
         _thread_columns.resize(num_ws);
-        _source_min_rc.assign(inst.sources.size(), 0.0);
         _source_rc_error.assign(inst.sources.size(), 0.0);
+        _source_lagr_sum.assign(inst.sources.size(), 0.0);
 
         _rc = inst.graph.create_arc_map<int64_t>();
         _lower_bounds = compute_lower_bounds_to_targets(inst, SCALE);
@@ -199,8 +204,8 @@ public:
         // path (including n_sources==0 and early breaks) leaves them
         // in a defined state.
         _last_priced_all = false;
-        _last_min_rc_sum = 0.0;
         _last_rc_error_bound = 0.0;
+        _last_lagr_path_sum = 0.0;
 
         uint32_t n_sources = static_cast<uint32_t>(_inst->sources.size());
         if (n_sources == 0) {
@@ -212,8 +217,8 @@ public:
         // not revisited this call (postponed under non-final_round) keep
         // their zero and contribute nothing — correct since priced_all
         // will be false in that case and the LB gate skips reading.
-        std::fill(_source_min_rc.begin(), _source_min_rc.end(), 0.0);
         std::fill(_source_rc_error.begin(), _source_rc_error.end(), 0.0);
+        std::fill(_source_lagr_sum.begin(), _source_lagr_sum.end(), 0.0);
 
         uint32_t effective_batch = (_batch_size > 0) ? _batch_size : n_sources;
         uint32_t start = final_round ? 0 : _last_source_idx;
@@ -252,9 +257,10 @@ public:
         _last_source_idx = (start + sources_scanned) % n_sources;
         // Deterministic summation in source-index order — independent
         // of thread dispatch.
-        _last_min_rc_sum = std::accumulate(_source_min_rc.begin(), _source_min_rc.end(), 0.0);
         _last_rc_error_bound =
             std::accumulate(_source_rc_error.begin(), _source_rc_error.end(), 0.0);
+        _last_lagr_path_sum =
+            std::accumulate(_source_lagr_sum.begin(), _source_lagr_sum.end(), 0.0);
         // priced_count == n_sources already proves every source was
         // visited (postponed sources are skipped without incrementing
         // it); a max-cols break that fires exactly on the last batch
@@ -267,20 +273,21 @@ public:
         return all_columns;
     }
 
-    // Sum over all priced convexity entities of min(rc*, 0) from the
-    // last price() call.  Combine with an LP-optimal objective to get
-    // a Lagrangian/Farley lower bound — valid only when priced_all()
-    // is true.
-    double min_rc_sum() const noexcept { return _last_min_rc_sum; }
     bool priced_all() const noexcept { return _last_priced_all; }
 
-    // Upper bound on the rounding error in min_rc_sum().  Edge weights
-    // are scaled to int64 at SCALE=1e9 in compute_rc, so A* returns
+    // π-free capacity-relaxation Lagrangian path sum Σ_k d_k·sp_k(c−μ) from
+    // the last price() call.  Add Σ_a cap_a·μ_a and subtract lb_error_bound()
+    // to obtain L(μ) ≤ OPT, valid for any μ≤0 independent of slack state.
+    // Valid only when priced_all() is true.
+    double lagrangian_path_sum() const noexcept { return _last_lagr_path_sum; }
+
+    // Upper bound on the rounding error in lagrangian_path_sum().  Edge
+    // weights are scaled to int64 at SCALE=1e9 in compute_rc, so A* returns
     // the path minimizing a rounded-integer cost which can differ from
     // the true-min-reduced-cost path by at most L/SCALE per path (with
     // L the path length in arcs, doubled to account for both the
     // chosen path's and the true-min path's rounding).  Subtract this
-    // from LP_obj + min_rc_sum() to get a certified lower bound.
+    // from the Lagrangian bound to certify it.
     double lb_error_bound() const noexcept { return _last_rc_error_bound; }
 
     // Round-robin cursor parked by the last price() call; exposed for

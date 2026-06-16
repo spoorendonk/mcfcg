@@ -97,6 +97,11 @@ struct CGParams {
     // Purge inactive columns after this many iters (0=off).  Ignored under
     // CGStrategy::PricerHeavy, which disables column aging entirely.
     uint32_t col_age_limit = 5;
+    // Wall-clock budget for the CG loop in seconds (0 = no limit).  When
+    // exceeded the loop breaks gracefully at the next iteration boundary,
+    // reporting the best UB/LB found so far (result.optimal stays false) so
+    // the CLI/benchmark always emits a result instead of being killed.
+    double time_limit_seconds = 0.0;
     SolverFactory solver_factory;  // Custom LP solver; uses HiGHS if null
 };
 

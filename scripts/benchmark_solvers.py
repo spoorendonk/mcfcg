@@ -34,6 +34,12 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
+
+# GNU time (not the bash builtin) reports a process's peak RSS via `-f %M` in
+# kilobytes — the same whole-process high-water mark the paper's mem_gb column
+# uses. We wrap each run in it when present so the comparison carries memory.
+GNU_TIME = "/usr/bin/time"
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -108,23 +114,109 @@ def parse_csv_row(stdout):
     return None
 
 
-def run_one(binary, instance, solver, formulation, extra, timeout, max_iters):
+def write_log(log_path, cmd, stdout, stderr, returncode, outcome):
+    """Persist a run's full console output for later forensic reconstruction.
+
+    The CLI runs at Verbosity::Iteration (src/main.cpp), so stderr carries the
+    per-iteration CG log (It/UB/LB/LP_obj/#col/#row/#slk/+col/-col/+cut/-cut,
+    timings, t_acc) plus the summary line — enough to reconstruct cut growth,
+    slack dynamics, and bound history. stdout carries the final CSV row. We dump
+    both verbatim regardless of outcome (success, error, or killed) so a partial
+    run is never silently lost.
+    """
+    with open(log_path, "w") as f:
+        f.write("# cmd: " + " ".join(cmd) + "\n")
+        f.write(f"# outcome: {outcome}\n")
+        if returncode is not None:
+            f.write(f"# returncode: {returncode}\n")
+        f.write("# === STDERR (CG iteration log + preamble) ===\n")
+        f.write(stderr or "")
+        f.write("\n# === STDOUT (result CSV) ===\n")
+        f.write(stdout or "")
+
+
+def read_peak_mem_gb(mem_path):
+    """Parse GNU time's `-f %M` output (peak RSS in KB) into GB, or '' on miss."""
+    if not mem_path or not os.path.exists(mem_path):
+        return ""
+    try:
+        with open(mem_path) as f:
+            kb = int(f.read().strip().split()[-1])
+        return round(kb / 1024.0 / 1024.0, 3)
+    except (ValueError, IndexError):
+        return ""
+    finally:
+        try:
+            os.remove(mem_path)
+        except OSError:
+            pass
+
+
+def run_one(binary, instance, solver, formulation, extra, timeout, max_iters, log_path=None,
+            time_limit=None):
     cmd = [binary, instance, "--solver", solver, "--formulation", formulation,
            "--max-iters", str(max_iters)] + extra
+    # Prefer the CLI's own --time-limit: it stops the CG loop at an iteration
+    # boundary and still prints its result, so the run self-terminates cleanly
+    # instead of being SIGKILLed. The subprocess `timeout` below is only a safety
+    # net (set comfortably above time_limit by the caller).
+    if time_limit:
+        cmd = cmd + ["--time-limit", str(time_limit)]
+    # Wrap in GNU time to capture whole-process peak RSS (paper's mem_gb metric).
+    # `-o` keeps the measurement out of the child's stderr so the saved log stays
+    # the clean CG iteration log. Falls back to the bare command if unavailable.
+    mem_path = None
+    run_cmd = cmd
+    if os.path.exists(GNU_TIME):
+        fd, mem_path = tempfile.mkstemp(prefix="mcfcg_mem_", suffix=".txt")
+        os.close(fd)
+        run_cmd = [GNU_TIME, "-o", mem_path, "-f", "%M"] + cmd
+    # Stream stdout/stderr straight to temp files rather than buffering in memory,
+    # so a partial run's output survives even if the safety-net timeout kills the
+    # process — the saved log is assembled from these files regardless of outcome.
+    out_fd, out_path = tempfile.mkstemp(prefix="mcfcg_out_", suffix=".txt")
+    err_fd, err_path = tempfile.mkstemp(prefix="mcfcg_err_", suffix=".txt")
+    os.close(out_fd)
+    os.close(err_fd)
     # The binary inherits the caller's environment. A cuOpt build embeds an
     # RPATH to libcuopt, so no LD_LIBRARY_PATH is normally needed; set it in your
     # shell only if the cuOpt fork build was moved after configuring.
+    killed = False
+    returncode = None
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return {"outcome": "timeout"}
-    if proc.returncode != 0:
-        tail = "\n".join(proc.stderr.strip().splitlines()[-3:])
-        return {"outcome": "error", "returncode": proc.returncode, "stderr_tail": tail}
-    row = parse_csv_row(proc.stdout)
+        with open(out_path, "w") as out_f, open(err_path, "w") as err_f:
+            proc = subprocess.Popen(run_cmd, stdout=out_f, stderr=err_f, text=True)
+            try:
+                returncode = proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                killed = True
+        with open(out_path) as f:
+            stdout = f.read()
+        with open(err_path) as f:
+            stderr = f.read()
+    finally:
+        for p in (out_path, err_path):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+    mem_gb = read_peak_mem_gb(mem_path)
+    outcome = "timeout" if killed else ("ok" if returncode == 0 else "error")
+    if log_path:
+        write_log(log_path, cmd, stdout, stderr, returncode, outcome)
+    if killed:
+        return {"outcome": "timeout", "mem_gb": mem_gb}
+    if returncode != 0:
+        tail = "\n".join(stderr.strip().splitlines()[-3:])
+        return {"outcome": "error", "returncode": returncode, "stderr_tail": tail,
+                "mem_gb": mem_gb}
+    row = parse_csv_row(stdout)
     if row is None:
-        tail = "\n".join(proc.stderr.strip().splitlines()[-3:])
-        return {"outcome": "error", "returncode": 0, "stderr_tail": "no CSV row; " + tail}
+        tail = "\n".join(stderr.strip().splitlines()[-3:])
+        return {"outcome": "error", "returncode": 0, "stderr_tail": "no CSV row; " + tail,
+                "mem_gb": mem_gb}
     return {
         "outcome": "ok",
         "objective": float(row["objective"]),
@@ -133,6 +225,7 @@ def run_one(binary, instance, solver, formulation, extra, timeout, max_iters):
         "iterations": int(row["iterations"]),
         "columns": int(row["columns"]),
         "time": float(row["time"]),
+        "mem_gb": mem_gb,
     }
 
 
@@ -151,11 +244,25 @@ def main():
                     help="fnmatch glob on the ref key to filter (e.g. 'grid1', 'BUS-*').")
     ap.add_argument("--max-planar", type=int, default=None,
                     help="skip planar instances larger than this vertex count.")
-    ap.add_argument("--timeout", type=float, default=7200.0, help="seconds per instance (default 2h).")
+    ap.add_argument("--timeout", type=float, default=7200.0,
+                    help="hard wall-clock safety net per instance, in seconds (default 2h). The "
+                         "process is killed if it exceeds this. When --time-limit is set, the "
+                         "effective net is max(this, time-limit + 300).")
+    ap.add_argument("--time-limit", type=float, default=None,
+                    help="CLI-side CG wall-clock budget in seconds, passed as --time-limit. The "
+                         "solver stops at the next iteration and still reports its best UB/LB "
+                         "(result marked non-optimal). Preferred over relying on --timeout.")
     ap.add_argument("--max-iters", type=int, default=10000)
     ap.add_argument("--tol", type=float, default=1e-3, help="relative objective tolerance for pass.")
     ap.add_argument("--out", default="bench-results.csv")
+    ap.add_argument("--logdir", default=None,
+                    help="directory to save each run's full stdout+stderr (the per-iteration "
+                         "CG log: cut growth, slack/bound history, timings). One file per run, "
+                         "named <family>__<instance>__<formulation>__<solver>.log.")
     args = ap.parse_args()
+
+    if args.logdir:
+        os.makedirs(args.logdir, exist_ok=True)
 
     if not os.path.exists(args.binary):
         sys.exit(f"binary not found: {args.binary} (build it first)")
@@ -166,7 +273,8 @@ def main():
                       if args.formulations else None)
 
     fields = ["family", "instance", "solver", "formulation", "outcome", "objective",
-              "ref", "rel_err", "pass", "optimal", "iterations", "columns", "time", "detail"]
+              "ref", "rel_err", "pass", "optimal", "iterations", "columns", "time", "mem_gb",
+              "detail"]
     rows = []
     summary = {s: {"pass": 0, "fail": 0, "timeout": 0, "error": 0, "noref": 0} for s in solvers}
 
@@ -184,14 +292,22 @@ def main():
               for solver in solvers:
                 sys.stderr.write(f"[{family}] {key} :: {formulation}/{solver} ... ")
                 sys.stderr.flush()
+                log_path = (os.path.join(args.logdir,
+                                         f"{family}__{key}__{formulation}__{solver}.log")
+                            if args.logdir else None)
+                # Keep the hard kill comfortably above the CLI budget so the
+                # solver self-terminates and prints before the safety net fires.
+                net = (max(args.timeout, args.time_limit + 300.0)
+                       if args.time_limit else args.timeout)
                 r = run_one(args.binary, instance, solver, formulation, extra,
-                            args.timeout, args.max_iters)
+                            net, args.max_iters, log_path=log_path,
+                            time_limit=args.time_limit)
                 ref = refs.get(key)
                 rec = {"family": family, "instance": key, "solver": solver,
                        "formulation": formulation, "outcome": r["outcome"],
                        "objective": "", "ref": "" if ref is None else ref,
                        "rel_err": "", "pass": "", "optimal": "", "iterations": "",
-                       "columns": "", "time": "", "detail": ""}
+                       "columns": "", "time": "", "mem_gb": r.get("mem_gb", ""), "detail": ""}
                 if r["outcome"] == "ok":
                     rec.update(objective=r["objective"], optimal=r["optimal"],
                                iterations=r["iterations"], columns=r["columns"], time=r["time"])

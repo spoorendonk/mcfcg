@@ -1,6 +1,8 @@
+#include "mcfcg/cg/master.h"
 #include "mcfcg/cg/master_base.h"
 #include "mcfcg/cg/path_cg.h"
 #include "mcfcg/cg/tree_cg.h"
+#include "mcfcg/cg/tree_master.h"
 #include "mcfcg/instance.h"
 #include "mcfcg/source/source_lp.h"
 
@@ -70,9 +72,13 @@ static void print_usage(std::FILE* out) {
         "  --write-mps PATH         Write the compact source-based LP as MPS to\n"
         "                           PATH (gz if .gz) and exit; does not solve.\n"
         "  --verbose-solver         Enable LP solver's own log output\n"
+        "  --stats-only             Print instance cost-scale + slack-ceiling stats\n"
+        "                           (CSV) and exit; builds no LP solve.\n"
         "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
         "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
         "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-3)\n"
+        "  --time-limit S           Wall-clock budget in seconds (0=off); stops the CG\n"
+        "                           loop at the next iter and reports best UB/LB.\n"
         "  --strategy S             pricer-light (default) or pricer-heavy\n"
         "  -h, --help               Print this help message and exit.\n");
 }
@@ -138,6 +144,7 @@ int main(int argc, char* argv[]) {
     std::string write_mps_path;
     double coef = 0.0;
     bool verbose_solver = false;
+    bool stats_only = false;
     mcfcg::CGParams params;
 
     for (int i = 1; i < argc; ++i) {
@@ -147,6 +154,10 @@ int main(int argc, char* argv[]) {
         }
         if (std::strcmp(argv[i], "--verbose-solver") == 0) {
             verbose_solver = true;
+            continue;
+        }
+        if (std::strcmp(argv[i], "--stats-only") == 0) {
+            stats_only = true;
             continue;
         }
         if (i == 1) {
@@ -179,6 +190,8 @@ int main(int argc, char* argv[]) {
             params.row_inactivity_threshold = static_cast<uint32_t>(std::atoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--neg-rc-tol") == 0) {
             params.neg_rc_tol = std::atof(argv[++i]);
+        } else if (std::strcmp(argv[i], "--time-limit") == 0) {
+            params.time_limit_seconds = std::atof(argv[++i]);
         } else if (std::strcmp(argv[i], "--strategy") == 0) {
             std::string s = argv[++i];
             if (s == "pricer-heavy") {
@@ -225,6 +238,58 @@ int main(int argc, char* argv[]) {
                  "%zu sources\n",
                  inst.graph.num_vertices(), inst.graph.num_arcs(), inst.commodities.size(),
                  inst.sources.size());
+
+    // --stats-only short-circuits: report the instance cost scale and the
+    // slack-cost ceiling (the headroom diagnostic) and exit before any solve.
+    // Builds the chosen master via init() so the reported ceiling /
+    // slack_cost_upper_bound come from the same code path a real solve uses
+    // (single source of truth); init() with a null solver uses a HiGHS LP and
+    // performs no optimization.
+    if (stats_only) {
+        double sum_arc_costs = 0.0;
+        double max_arc = 0.0;
+        for (uint32_t a : inst.graph.arcs()) {
+            double c = inst.cost[a];
+            sum_arc_costs += c;
+            max_arc = std::max(max_arc, c);
+        }
+        double max_src_demand_sum = 0.0;
+        double total_demand = 0.0;
+        for (const auto& src : inst.sources) {
+            double sum = 0.0;
+            for (uint32_t k : src.commodity_indices) {
+                sum += inst.commodities[k].demand;
+            }
+            max_src_demand_sum = std::max(max_src_demand_sum, sum);
+            total_demand += sum;
+        }
+        double ub_val = 0.0;
+        double ceiling = 0.0;
+        mcfcg::SlackMode mode = mcfcg::SlackMode::CommodityRows;
+        if (formulation == "tree") {
+            mcfcg::TreeMaster master;
+            master.init(inst, nullptr, nullptr, /*warm_start=*/true);
+            ub_val = master.slack_cost_upper_bound_value();
+            ceiling = master.slack_cost_ceiling();
+            mode = master.slack_mode();
+        } else {
+            mcfcg::PathMaster master;
+            master.init(inst, nullptr, nullptr, /*warm_start=*/true);
+            ub_val = master.slack_cost_upper_bound_value();
+            ceiling = master.slack_cost_ceiling();
+            mode = master.slack_mode();
+        }
+        std::printf(
+            "instance,formulation,vertices,arcs,commodities,sources,max_arc_cost,"
+            "sum_arc_costs,max_src_demand_sum,total_demand,slack_cost_upper_bound,"
+            "slack_cost_ceiling,slack_mode\n");
+        std::printf("%s,%s,%u,%u,%zu,%zu,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%s\n", instance_path.c_str(),
+                    formulation.c_str(), inst.graph.num_vertices(), inst.graph.num_arcs(),
+                    inst.commodities.size(), inst.sources.size(), max_arc, sum_arc_costs,
+                    max_src_demand_sum, total_demand, ub_val, ceiling,
+                    mode == mcfcg::SlackMode::EdgeRows ? "EdgeRows" : "CommodityRows");
+        return EXIT_SUCCESS;
+    }
 
     // --write-mps short-circuits: emit the compact source-based LP and exit
     // without configuring a solver or running column generation.

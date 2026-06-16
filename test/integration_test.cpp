@@ -58,6 +58,11 @@ static void solve_and_check(const mcfcg::Instance& inst, double ref_obj,
     EXPECT_TRUE(result.optimal) << "Did not reach optimality";
     EXPECT_GE(result.objective, ref_obj * (1.0 - tol)) << "Objective below reference";
     EXPECT_LE(result.objective, ref_obj * (1.0 + tol)) << "Objective above reference";
+    // The π-free Lagrangian LB is provably ≤ OPT; assert it never exceeds the
+    // reference (any violation is a bug in the bound).
+    if (std::isfinite(result.lower_bound)) {
+        EXPECT_LE(result.lower_bound, ref_obj * (1.0 + tol)) << "LB exceeds reference optimum";
+    }
 }
 
 // Path formulation stalls on large intermodal graphs (slacks stay
@@ -80,6 +85,9 @@ static void solve_intermodal_and_check(const mcfcg::Instance& inst, double ref_o
     EXPECT_TRUE(result.optimal) << "Did not reach optimality";
     EXPECT_GE(result.objective, ref_obj * (1.0 - tol)) << "Objective below reference";
     EXPECT_LE(result.objective, ref_obj * (1.0 + tol)) << "Objective above reference";
+    if (std::isfinite(result.lower_bound)) {
+        EXPECT_LE(result.lower_bound, ref_obj * (1.0 + tol)) << "LB exceeds reference optimum";
+    }
 }
 
 TEST(GridCorrectness, Grid1) {
@@ -557,6 +565,88 @@ TEST(FeatureTests, LagrangianBoundTree) {
     double ref = opt.at("planar150");
     double rel = std::abs(result.objective - ref) / std::max(1.0, std::abs(ref));
     EXPECT_LT(rel, mcfcg::RELATIVE_FEAS_TOL) << "obj=" << result.objective << " ref=" << ref;
+}
+
+// The π-free Lagrangian LB must be (a) always valid (≤ OPT) and (b) AVAILABLE
+// while slacks are basic — the property that lets gap-termination fire on hard
+// instances (the old clamped LB was suppressed whenever a slack was basic).
+// Drives a manual tree CG loop on a capacity-binding instance, computing
+// L(μ) = Σcap·μ + Σ_k d_k·sp_k(c−μ) − margin every priced iteration (with the
+// capacity-dual term snapshotted pre-separation, exactly as cg_loop does), and
+// asserts the bound never exceeds the reference optimum and that at least one
+// slack-basic iteration produced a finite valid bound.
+TEST(FeatureTests, LagrangianBoundValidWhileSlacksBasic) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar30");
+    double ref = opt.at("planar30");
+
+    mcfcg::TreeMaster master;
+    master.init(inst);
+    mcfcg::TreePricer pricer;
+    pricer.init(inst);
+
+    std::vector<double> big_pi(inst.sources.size(), std::numeric_limits<double>::infinity());
+    auto empty_mu = inst.graph.create_arc_map<double>(0.0);
+    auto init_cols = pricer.price(big_pi, empty_mu, true);
+    if (!init_cols.empty()) {
+        master.add_columns(std::move(init_cols));
+    }
+    pricer.reset_postponed();
+
+    bool saw_slack_basic_lb = false;
+    bool optimal = false;
+    for (uint32_t iter = 0; iter < 10000; ++iter) {
+        ASSERT_EQ(master.solve(), mcfcg::LPStatus::Optimal) << "LP not optimal at iter " << iter;
+        auto primals = master.get_primals();
+        auto pi_s = master.get_structural_duals();
+        const auto& mu = master.get_capacity_duals();
+        // Snapshot Σcap·μ against the solved row set, before separation mutates it.
+        double cap_dual_term = master.compute_capacity_dual_term(mu);
+        uint32_t slacks = master.count_active_slacks(primals);
+
+        auto new_cap_arcs = master.add_violated_capacity_constraints(primals);
+        uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
+
+        auto new_cols = pricer.price(pi_s, mu, false);
+        if (new_cols.empty()) {
+            new_cols = pricer.price(pi_s, mu, true);
+        }
+        if (!new_cols.empty()) {
+            pricer.clear_postponed();
+        }
+
+        if (pricer.priced_all()) {
+            double lb = cap_dual_term + pricer.lagrangian_path_sum() - pricer.lb_error_bound();
+            EXPECT_TRUE(std::isfinite(lb)) << "LB not finite at iter " << iter;
+            EXPECT_LE(lb, ref * (1.0 + 1e-6))
+                << "LB exceeds OPT at iter " << iter << " (slacks basic=" << slacks << ")";
+            if (slacks > 0 && std::isfinite(lb)) {
+                saw_slack_basic_lb = true;
+            }
+        }
+
+        if (new_cols.empty()) {
+            if (num_new_caps == 0 && slacks == 0) {
+                optimal = true;
+                break;
+            }
+            if (slacks > 0) {
+                (void)master.bump_active_slacks(primals, mcfcg::SLACK_BUMP_FACTOR);
+            }
+            pricer.reset_postponed();
+            continue;
+        }
+        (void)master.bump_active_slacks(primals, mcfcg::SLACK_BUMP_FACTOR);
+        master.add_columns(std::move(new_cols));
+    }
+    EXPECT_TRUE(optimal) << "manual tree loop did not converge";
+    // This assertion is the whole point of the feature: it requires planar30
+    // (a capacity-binding instance) to pass through at least one fully-priced
+    // iteration with a slack still basic.  If a future pricing/slack change
+    // makes planar30 reach feasibility before any priced iteration, swap in
+    // another capacity-binding instance rather than dropping the check.
+    EXPECT_TRUE(saw_slack_basic_lb)
+        << "never observed a finite Lagrangian LB while a slack was basic";
 }
 
 // Repeated parallel runs must land within the design feasibility

@@ -22,8 +22,8 @@ class PathPricer : public PricerBase<PathPricer, Column> {
         // source are processed sequentially in this call, so local
         // accumulation is race-free.  Written to the pricer's
         // per-source slot at the end for deterministic final sum.
-        double source_min_rc = 0.0;
         double source_rc_error = 0.0;
+        double source_lagr_sum = 0.0;
 
         for (uint32_t k : src.commodity_indices) {
             vertex_t sink = _inst->commodities[k].sink;
@@ -44,6 +44,11 @@ class PathPricer : public PricerBase<PathPricer, Column> {
             col.cost = 0.0;
             col.commodity = k;
             double true_rc = -pi[k];
+            // π-free reduced-cost path sum sp_k(c−μ), accumulated separately
+            // from true_rc so the Lagrangian LB never forms (sp_k − π_k) and
+            // re-adds π_k — catastrophic cancellation when a basic slack pins
+            // π_k at the bumped slack cost (~1e7).
+            double path_rc_sum = 0.0;
             vertex_t v = sink;
             while (dijk.has_pred(v)) {
                 uint32_t a = dijk.pred_arc(v);
@@ -52,23 +57,20 @@ class PathPricer : public PricerBase<PathPricer, Column> {
                     _source_arcs[s_idx].push_back(a);
                 col.cost += _inst->cost[a];
                 true_rc += _inst->cost[a] - mu[a];
+                path_rc_sum += _inst->cost[a] - mu[a];
                 v = _inst->graph.arc_source(a);
             }
 
-            // Lagrangian LB accumulator.  Path formulation demand row k
-            // has RHS d_k, so the Farley correction is d_k · min(rc*_k,
-            // 0) (shifting π_k down by |rc*_k| to regain dual
-            // feasibility costs d_k per unit in the dual obj).  The
-            // rounding-error budget is scaled by d_k too so it matches
-            // the correction's units.  LP_FEAS_TOL per arc bounds both
-            // integer-scale rounding and the val<=0 clamp in
-            // compute_rc (|val| is bounded by LP_FEAS_TOL at numerical
-            // noise, which is the only regime where the clamp fires
-            // under correct mu<=0 sign convention).
+            // π-free Lagrangian LB term: d_k · sp_k(c−μ), the demand-weighted
+            // reduced-cost shortest-path sum, UNCLAMPED and WITHOUT the −π_k
+            // seed (the structural dual cancels Σπ_k d_k in cg_loop's L(μ)).
+            // The rounding-error budget is demand-weighted to match its units;
+            // LP_FEAS_TOL per arc bounds both integer-scale rounding and the
+            // val<=0 clamp in compute_rc (|val| is bounded by LP_FEAS_TOL at
+            // numerical noise, the only regime where the clamp fires under the
+            // correct mu<=0 sign convention).
             double demand = _inst->commodities[k].demand;
-            if (true_rc < 0.0) {
-                source_min_rc += demand * true_rc;
-            }
+            source_lagr_sum += demand * path_rc_sum;
             source_rc_error += demand * static_cast<double>(col.arcs.size()) * LP_FEAS_TOL;
 
             if (true_rc >= _neg_rc_tol)
@@ -81,8 +83,8 @@ class PathPricer : public PricerBase<PathPricer, Column> {
         }
 
         _source_postponed[s_idx] = found_any ? 0 : 1;
-        _source_min_rc[s_idx] = source_min_rc;
         _source_rc_error[s_idx] = source_rc_error;
+        _source_lagr_sum[s_idx] = source_lagr_sum;
     }
 };
 

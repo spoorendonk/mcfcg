@@ -166,9 +166,9 @@ protected:
         std::unordered_map<uint32_t, uint32_t> arc_to_col;
 
         // Absolute ceiling on the geometric slack-cost bump.  Set in
-        // MasterBase::init from the formulation-specific upper bound; the
-        // default below is never used in practice but kept consistent with
-        // the upper clamp.
+        // MasterBase::init from the formulation-specific upper bound, clamped
+        // to the active backend's LPSolver::max_slack_cost().  The default
+        // below is never used in practice (init always overwrites it).
         double cost_ceiling = 1e7;
 
         bool empty() const noexcept { return col_lp.empty(); }
@@ -281,19 +281,26 @@ public:
             _max_cost = 1.0;
         }
 
+        // Create LP first so the slack-cost ceiling can use the backend's
+        // tolerance (LPSolver::max_slack_cost): HiGHS/cuOpt cap at 1e7, robust
+        // barriers (MOSEK/COPT) allow higher so instances with per-row column
+        // cost > 1e7 can still price their slacks out.
+        _lp = lp ? std::move(lp) : create_lp_solver();
+
         // Slack-cost ceiling: 10× a Derived-supplied upper bound on real
-        // column cost, clamped to [1e6, 1e7].  The upper bound caps the
-        // slack-vs-real-column dynamic range so cuopt-barrier's IPM can
-        // centre cleanly during the CG iter that pivots all slacks out.
-        // Without this cap, a 1e9 ceiling vs ~1e3–1e5 real costs on
-        // transportation instances produced 100–1000s IPM stalls.
-        // Intermodal real columns can reach ~1e5–1e7 but the 1e7 cap
-        // still dominates them with ~1×–100× headroom (verified on
-        // BUS-2632/7896, SBT-43785).  The 1e6 floor prevents the clamp
-        // from inverting on small instances.  1e7 is well below the
-        // HiGHS dual-simplex ratio-test failure regime (~1e9), so HiGHS
-        // runs are unaffected.
-        _slack.cost_ceiling = std::clamp(10.0 * self().slack_cost_upper_bound(), 1e6, 1e7);
+        // column cost, clamped to [1e6, backend max].  The upper bound caps the
+        // slack-vs-real-column dynamic range so cuopt-barrier's IPM can centre
+        // cleanly during the CG iter that pivots all slacks out (without a cap,
+        // a 1e9 ceiling vs ~1e3–1e5 real costs produced 100–1000s IPM stalls).
+        // The backend max (max_slack_cost) is 1e7 for HiGHS (below its
+        // dual-simplex ratio-test failure regime ~1e9) and cuOpt, and 1e9 for
+        // MOSEK/COPT.  A ceiling below the real per-row column cost leaves that
+        // row's slack basic forever (no slack-free UB; the LP can even certify
+        // below OPT), so the higher cap matters on expensive instances such as
+        // planar2500 tree (~1.7e7/source).  The 1e6 floor prevents the clamp
+        // from inverting on small instances.
+        _slack.cost_ceiling =
+            std::clamp(10.0 * self().slack_cost_upper_bound(), 1e6, _lp->max_slack_cost());
 
         _slack.mode = select_slack_mode(count_capacitated_arcs(inst), _num_structural_rows);
         // EdgeRows has no init-time slacks, so the LP is infeasible
@@ -309,9 +316,6 @@ public:
                 "(no init-time slacks means the LP is only feasible once "
                 "warm-start seeds one column per structural row).");
         }
-
-        // Create LP once
-        _lp = lp ? std::move(lp) : create_lp_solver();
 
         if (_slack.mode == SlackMode::CommodityRows) {
             // Slack columns (one per structural row, no row coefficients yet)
@@ -373,6 +377,15 @@ public:
     // tests that pin the clamp range; bump_active_slacks caps each
     // slack's cost at this value.
     double slack_cost_ceiling() const noexcept { return _slack.cost_ceiling; }
+
+    // Max arc cost over the instance (the per-arc cost upper bound used to seed
+    // slack costs).  Exposed for the --stats-only headroom diagnostic.
+    double max_arc_cost() const noexcept { return _max_cost; }
+
+    // The Derived formulation's upper bound on real column cost (path:
+    // |V|·max_arc_cost; tree: ·max-per-source-demand-sum).  Public forwarder for
+    // the headroom diagnostic, which compares it against the (clamped) ceiling.
+    double slack_cost_upper_bound_value() const { return self().slack_cost_upper_bound(); }
 
     uint32_t add_columns(std::vector<ColumnT> cols) {
         if (cols.empty())
@@ -504,31 +517,21 @@ public:
         return std::vector<double>(all.begin(), all.begin() + _num_structural_rows);
     }
 
-    // LP dual objective at the current solved duals: Σ π_k * b_k + Σ
-    // cap_a * μ_a, where b_k is the structural row's RHS (demand[k]
-    // for path, 1 for tree's convexity row).  Preferred over get_obj()
-    // for the Lagrangian LB: at LP optimum they match by strong
-    // duality, but barrier-without-crossover returns an interior
-    // solution where primal and dual differ by a few units, and using
-    // the primal inflates the reconstructed Lagrangian above OPT on
-    // pathological instances (seen on grid1 path).
-    // Takes pi and mu explicitly to avoid silent breakage if the
-    // caller forgets a prior get_capacity_duals() that would populate
-    // the cache.
-    double compute_dual_obj(const std::vector<double>& pi_structural,
-                            const static_map<uint32_t, double>& mu) const {
-        double dual_obj = 0.0;
-        for (uint32_t k = 0; k < pi_structural.size(); ++k) {
-            // The "tight" side of the row carries the RHS: lower
-            // bound for ≥ / = rows (path demand, tree convexity).
-            auto [low, high] = self().structural_row_bounds(k);
-            double rhs = std::isfinite(low) ? low : high;
-            dual_obj += pi_structural[k] * rhs;
-        }
+    // Capacity-dual contribution Σ_a cap_a · μ_a over the currently-existing
+    // capacity rows.  This is the only master-side term in the π-free
+    // capacity-relaxation Lagrangian lower bound L(μ) = Σ cap·μ +
+    // Σ_k d_k·sp_k(c−μ); the structural π·b term is intentionally excluded
+    // because it cancels against the pricer's π-free reduced-shortest-path
+    // sum, which is what makes the bound valid while slacks are basic (a basic
+    // slack pins π_k at the bumped slack cost).  Using only μ (not the
+    // structural duals or the primal obj) also sidesteps the barrier-interior
+    // primal/dual drift that an explicit dual-objective reconstruction suffers.
+    double compute_capacity_dual_term(const static_map<uint32_t, double>& mu) const {
+        double term = 0.0;
         for (uint32_t arc : _cap_row_to_arc) {
-            dual_obj += _inst->capacity[arc] * mu[arc];
+            term += _inst->capacity[arc] * mu[arc];
         }
-        return dual_obj;
+        return term;
     }
 
     const static_map<uint32_t, double>& get_capacity_duals() const {

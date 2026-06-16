@@ -97,6 +97,16 @@ public:
     // Returns per-column basis status: true = basic, false = non-basic.
     // Only valid when has_basis() returns true.
     virtual std::vector<bool> get_basic_cols() const { return {}; }
+
+    // Upper bound on the slack-cost ceiling this backend can tolerate without
+    // numerical trouble (MasterBase::init clamps the per-instance ceiling to
+    // this).  The default 1e7 suits HiGHS (its dual-simplex ratio test starts
+    // failing near ~1e9) and cuOpt-barrier (whose IPM stalls on a wide
+    // slack-vs-real dynamic range).  Robust CPU/GPU barriers (MOSEK, COPT)
+    // override this higher so that instances with expensive columns (per-row
+    // cost > 1e7, e.g. planar2500 tree) can still price their slacks out and
+    // reach a slack-free upper bound.
+    virtual double max_slack_cost() const { return 1e7; }
 };
 
 std::unique_ptr<LPSolver> create_lp_solver(bool verbose = false);

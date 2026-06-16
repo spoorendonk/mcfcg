@@ -29,6 +29,10 @@ void check_mosek(MSKrescodee res, const char* msg) {
 // the numeric value handed to MOSEK for an infinite side is ignored by the key.
 constexpr double MOSEK_BOUND_INF_THRESHOLD = 1e19;
 
+// Barrier (interior-point) primal/dual feasibility and relative-gap tolerance.
+// Tunable knob for the "tighter tol → better-centered → fewer CG iters" experiment.
+constexpr double MOSEK_INTPNT_TOL = 1e-6;
+
 // Derive a MOSEK bound key + clamped (lb, ub) pair from a generic (lb, ub).
 struct BoundKey {
     MSKboundkeye bk;
@@ -91,14 +95,18 @@ public:
                     "IntpntBasis=never");
         check_mosek(MSK_putobjsense(_task, MSK_OBJECTIVE_SENSE_MINIMIZE), "ObjSense=min");
 
-        // Keep barrier tolerances one order tighter than LP_FEAS_TOL so the
+        // Barrier convergence tolerances.  Tighter than LP_FEAS_TOL so the
         // interior-point duals are precise enough for the pricer's NEG_RC_TOL
-        // (same rationale as the COPT backend's FEASTOL/DUALTOL).
-        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_PFEAS, LP_FEAS_TOL / 10),
+        // (same rationale as the COPT backend's FEASTOL/DUALTOL).  Set to 1e-6
+        // (vs the prior LP_FEAS_TOL/10 = 1e-5): a more tightly centered barrier
+        // solution can converge in fewer outer CG iterations on the large
+        // transportation/planar instances, and yields objectives that agree
+        // with the paper reference to better than the 1e-3 comparison tol.
+        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_PFEAS, MOSEK_INTPNT_TOL),
                     "TolPfeas");
-        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_DFEAS, LP_FEAS_TOL / 10),
+        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_DFEAS, MOSEK_INTPNT_TOL),
                     "TolDfeas");
-        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_REL_GAP, LP_FEAS_TOL / 10),
+        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_REL_GAP, MOSEK_INTPNT_TOL),
                     "TolRelGap");
     }
 
@@ -347,6 +355,13 @@ public:
         check_mosek(MSK_getnumcon(_task, &m), "getnumcon");
         return static_cast<uint32_t>(m);
     }
+
+    // MOSEK's interior-point method handles a much wider slack-vs-real-column
+    // dynamic range than HiGHS/cuOpt, so allow a higher slack-cost ceiling.
+    // This lets instances whose per-row column cost exceeds 1e7 (e.g.
+    // planar2500 tree, ~1.7e7/source) price their slacks out and reach a
+    // slack-free upper bound, which the 1e7 default would never permit.
+    double max_slack_cost() const override { return 1e9; }
 };
 
 std::unique_ptr<LPSolver> create_mosek_solver(bool verbose) {

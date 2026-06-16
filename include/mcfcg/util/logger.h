@@ -12,6 +12,9 @@ enum class Verbosity : uint8_t { Silent, Summary, Iteration, Debug };
 
 class CGLogger {
     Verbosity _verbosity;
+    // Running sum of per-iteration total time, printed as the t_acc column so a
+    // long run's wall-clock progress is visible without summing the log by hand.
+    double _t_acc = 0.0;
 
 public:
     explicit CGLogger(Verbosity verbosity) : _verbosity(verbosity) {}
@@ -20,9 +23,9 @@ public:
         if (_verbosity < Verbosity::Iteration) {
             return;
         }
-        std::fprintf(stderr, "%5s %12s %12s %12s %6s %6s %5s %6s %6s %6s %6s %7s %7s %7s %7s\n",
+        std::fprintf(stderr, "%5s %12s %12s %12s %6s %6s %5s %6s %6s %6s %6s %7s %7s %7s %7s %9s\n",
                      "It", "UB", "LB", "LP_obj", "#col", "#row", "#slk", "+col", "-col", "+cut",
-                     "-cut", "t_LP", "t_PR", "t_SP", "t_Tot");
+                     "-cut", "t_LP", "t_PR", "t_SP", "t_Tot", "t_acc");
     }
 
     // NOLINTBEGIN(bugprone-easily-swappable-parameters)
@@ -30,8 +33,9 @@ public:
                          uint32_t num_col, uint32_t num_row, uint32_t num_active_slacks,
                          uint32_t added_col, bool added_not_committed, uint32_t removed_col,
                          uint32_t added_cut, uint32_t removed_cut, double t_lp, double t_pr,
-                         double t_sp, double t_tot) const {
+                         double t_sp, double t_tot) {
         // NOLINTEND(bugprone-easily-swappable-parameters)
+        _t_acc += t_tot;
         if (_verbosity < Verbosity::Iteration) {
             return;
         }
@@ -62,10 +66,11 @@ public:
         } else {
             std::snprintf(added_buf, sizeof(added_buf), "%u", added_col);
         }
-        std::fprintf(stderr,
-                     "%5u %12s %12s %12s %6u %6u %5u %6s %6u %6u %6u %7.3f %7.3f %7.3f %7.3f\n",
-                     iter, ub_buf, lb_buf, obj_buf, num_col, num_row, num_active_slacks, added_buf,
-                     removed_col, added_cut, removed_cut, t_lp, t_pr, t_sp, t_tot);
+        std::fprintf(
+            stderr,
+            "%5u %12s %12s %12s %6u %6u %5u %6s %6u %6u %6u %7.3f %7.3f %7.3f %7.3f %9.3f\n", iter,
+            ub_buf, lb_buf, obj_buf, num_col, num_row, num_active_slacks, added_buf, removed_col,
+            added_cut, removed_cut, t_lp, t_pr, t_sp, t_tot, _t_acc);
     }
 
     void print_summary(uint32_t iters, double obj, bool optimal, double lb, double gap_tol,

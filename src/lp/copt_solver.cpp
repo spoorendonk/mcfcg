@@ -246,6 +246,12 @@ public:
         check_copt(COPT_GetIntAttr(_prob, COPT_INTATTR_ROWS, &m), "GetIntAttr(Rows)");
         return static_cast<uint32_t>(m);
     }
+
+    // COPT's barrier tolerates a wide slack-vs-real dynamic range; allow a
+    // higher slack-cost ceiling than the 1e7 default so expensive-column
+    // instances (per-row cost > 1e7) can price their slacks out.  See
+    // LPSolver::max_slack_cost and the MOSEK override.
+    double max_slack_cost() const override { return 1e9; }
 };
 
 std::unique_ptr<LPSolver> create_copt_solver(bool verbose) {
