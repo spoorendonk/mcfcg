@@ -49,9 +49,16 @@ from benchmark_solvers import (  # noqa: E402
 CEILING_CLAMP_HI = 1e7  # MasterBase::init upper clamp
 
 
-def run_stats(binary, instance, formulation, extra, timeout):
-    """Run mcfcg_cli --stats-only and return the parsed stats dict, or None."""
-    cmd = [binary, instance, "--formulation", formulation, "--stats-only"] + extra
+def run_stats(binary, instance, formulation, extra, timeout, solver="highs"):
+    """Run mcfcg_cli --stats-only and return the parsed stats dict, or None.
+
+    The reported slack_cost_ceiling reflects the chosen backend's
+    LPSolver::max_slack_cost (1e7 for HiGHS/cuOpt, 1e9 for MOSEK/COPT), so pass
+    the solver you actually intend to run.  --stats-only never optimizes, but a
+    non-HiGHS backend still needs its license/GPU just to be constructed.
+    """
+    cmd = ([binary, instance, "--formulation", formulation, "--solver", solver, "--stats-only"]
+           + extra)
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -78,6 +85,9 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--binary", default=os.path.join(REPO, "build/mcfcg_cli"))
+    ap.add_argument("--solver", default="highs",
+                    help="backend whose slack ceiling to report (highs/copt/cuopt/mosek). "
+                         "Default highs needs no license; others must be built in + licensed.")
     ap.add_argument("--families", default="grid,planar,transportation,intermodal")
     ap.add_argument("--instances", default=None, help="fnmatch glob on the ref key to filter.")
     ap.add_argument("--timeout", type=float, default=600.0, help="seconds per --stats-only run.")
@@ -100,7 +110,7 @@ def main():
                 continue
             sys.stderr.write(f"[{family}] {key} :: {formulation} ... ")
             sys.stderr.flush()
-            s = run_stats(args.binary, instance, formulation, extra, args.timeout)
+            s = run_stats(args.binary, instance, formulation, extra, args.timeout, args.solver)
             if s is None:
                 sys.stderr.write("FAILED/timeout\n")
                 rows.append({"family": family, "instance": key, "formulation": formulation,

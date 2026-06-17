@@ -73,7 +73,7 @@ static void print_usage(std::FILE* out) {
         "                           PATH (gz if .gz) and exit; does not solve.\n"
         "  --verbose-solver         Enable LP solver's own log output\n"
         "  --stats-only             Print instance cost-scale + slack-ceiling stats\n"
-        "                           (CSV) and exit; builds no LP solve.\n"
+        "                           (CSV) for the chosen --solver and exit; no solve.\n"
         "  --col-age-limit N        Purge columns after N idle iters (default: 5, 0=off)\n"
         "  --row-inactivity N       Purge cap rows after N idle iters (default: 5, 0=off)\n"
         "  --neg-rc-tol X           Reduced cost tolerance (default: -1e-3)\n"
@@ -243,9 +243,15 @@ int main(int argc, char* argv[]) {
     // slack-cost ceiling (the headroom diagnostic) and exit before any solve.
     // Builds the chosen master via init() so the reported ceiling /
     // slack_cost_upper_bound come from the same code path a real solve uses
-    // (single source of truth); init() with a null solver uses a HiGHS LP and
-    // performs no optimization.
+    // (single source of truth).  The master is built with the SELECTED backend
+    // so slack_cost_ceiling reflects that backend's LPSolver::max_slack_cost
+    // (e.g. 1e9 for MOSEK/COPT vs 1e7 for HiGHS).  init() only adds rows/cols —
+    // it never optimizes — but creating a non-HiGHS backend still needs its
+    // license/GPU; the default (HiGHS) needs neither.
     if (stats_only) {
+        if (!configure_solver(solver, verbose_solver, params)) {
+            return EXIT_FAILURE;
+        }
         double sum_arc_costs = 0.0;
         double max_arc = 0.0;
         for (uint32_t a : inst.graph.arcs()) {
@@ -268,13 +274,13 @@ int main(int argc, char* argv[]) {
         mcfcg::SlackMode mode = mcfcg::SlackMode::CommodityRows;
         if (formulation == "tree") {
             mcfcg::TreeMaster master;
-            master.init(inst, nullptr, nullptr, /*warm_start=*/true);
+            master.init(inst, params.solver_factory(), nullptr, /*warm_start=*/true);
             ub_val = master.slack_cost_upper_bound_value();
             ceiling = master.slack_cost_ceiling();
             mode = master.slack_mode();
         } else {
             mcfcg::PathMaster master;
-            master.init(inst, nullptr, nullptr, /*warm_start=*/true);
+            master.init(inst, params.solver_factory(), nullptr, /*warm_start=*/true);
             ub_val = master.slack_cost_upper_bound_value();
             ceiling = master.slack_cost_ceiling();
             mode = master.slack_mode();
