@@ -5,6 +5,7 @@
 
 #include <cassert>
 #include <copt.h>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -35,7 +36,12 @@ public:
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_LPMETHOD, 2), "LpMethod=barrier");
         // GPUMode 2 requests the GPU barrier; COPT falls back to CPU when no GPU
         // is present, so this is safe on a GPU-less host (it does not crash).
-        check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_GPUMODE, 2), "GPUMode=2");
+        // Override via MCFCG_COPT_GPUMODE (0=CPU, 1=GPU mode 1, 2=GPU mode 2).
+        int gpu_mode = 2;
+        if (const char* gm = std::getenv("MCFCG_COPT_GPUMODE")) {
+            gpu_mode = std::atoi(gm);
+        }
+        check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_GPUMODE, gpu_mode), "GPUMode");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_PRESOLVE, 0), "Presolve=off");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_CROSSOVER, 0), "Crossover=off");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_LOGGING, verbose ? 1 : 0), "Logging");
