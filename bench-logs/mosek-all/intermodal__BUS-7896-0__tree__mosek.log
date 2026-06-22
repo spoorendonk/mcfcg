@@ -1,0 +1,28 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/intermodal/BUS-7896-0.txt.gz --solver mosek --formulation tree --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 130395 vertices, 710935 arcs, 7883 commodities, 7883 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=7883, capped_arcs=524037)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   2.0473e+05  15766   7960   475      0      0     77      0   0.013   0.000   0.050   0.063     0.063
+    2          inf         -inf   2.0647e+05  16209   7960   631    443      0      0      0   0.015   0.052   0.050   0.120     0.183
+    3          inf         -inf   2.1095e+05  16209   8034    32      0      0     74      0   0.020   0.000   0.052   0.073     0.255
+    4          inf         -inf   2.1189e+05  16209   8036    96      0      0      2      0   0.035   0.000   0.050   0.086     0.341
+    5          inf         -inf   2.1189e+05  16240   8036    96     31      0      0      0   0.034   0.023   0.049   0.106     0.447
+    6          inf   1.6752e+05   2.1656e+05  16797   8036   109    557      0      0      0   0.039   0.212   0.050   0.303     0.751
+    7          inf   1.6752e+05   2.1070e+05  16797   8047     2      0      0     11      0   0.050   0.000   0.051   0.102     0.852
+    8          inf   1.6752e+05   2.1071e+05  16797   8048     2      0      0      1      0   0.057   0.000   0.052   0.110     0.962
+    9          inf   1.6752e+05   2.1071e+05  16832   7985     2     35      0      0     63   0.055   0.025   0.050   0.131     1.093
+   10          inf   1.6752e+05   2.1116e+05  16832   7992     2      0      0      7      0   0.042   0.000   0.050   0.093     1.186
+   11          inf   1.6752e+05   2.1116e+05  16870   7991     2     38      0      0      1   0.043   0.027   0.049   0.120     1.306
+   12          inf   2.0304e+05   2.1162e+05  16981   7963     2    111      0      0     28   0.050   0.211   0.050   0.311     1.617
+   13          inf   2.0304e+05   2.1059e+05  16981   7979     0      0      0     16      0   0.036   0.000   0.050   0.086     1.703
+   14   2.1059e+05   2.0304e+05   2.1059e+05  16985   7977     0      4      0      0      2   0.043   0.030   0.051   0.124     1.827
+   15   2.1059e+05   2.1058e+05   2.1059e+05  16985   7977     0     *3      0      0      0   0.044   0.202   0.050   0.297     2.124
+CG optimal after 15 iterations. UB=210593.000000 LB=210576.484863 gap=1.652e+01 tol=2.106e+01  t_LP=0.578  t_PR=1.021  t_SP=0.754  t_Tot=2.363
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/intermodal/BUS-7896-0.txt.gz,tree,15,9102,210593.000000,210576.484863,1,2.525,0.578,1.021,0.754

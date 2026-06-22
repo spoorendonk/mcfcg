@@ -1,0 +1,26 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/transportation/Winnipeg_net.tntp.gz --solver cuopt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+TNTP: net=/home/simon/code/my/mcfcg/data/transportation/Winnipeg_net.tntp.gz trips=/home/simon/code/my/mcfcg/data/transportation/Winnipeg_trips.tntp.gz coef=2000.0
+Instance: 1052 vertices, 2836 arcs, 4345 commodities, 135 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=4345, capped_arcs=2836)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   3.9643e+02   3.9655e+02   4542   4542     0      0      0    197      0   0.409   0.003   0.001   0.413     0.413
+    2          inf   3.9643e+02   1.3116e+03   7606   4542   197   3064      0      0      0   0.152   0.001   0.000   0.155     0.569
+    3          inf   3.9643e+02   4.1819e+02   9453   4607     0   1782      0     65      0   0.108   0.001   0.001   0.113     0.682
+    4          inf   3.9643e+02   4.6118e+02  11903   4621    17   2436      0     14      0   0.198   0.002   0.001   0.202     0.883
+    5          inf   3.9643e+02   4.2511e+02  14004   4631     2   2091      0     10      0   0.185   0.001   0.001   0.188     1.072
+    6          inf   3.9643e+02   4.2366e+02  15466   4631     2   1462      0      0      0   0.224   0.001   0.000   0.227     1.299
+    7          inf   4.1830e+02   4.2111e+02  16288   4632     0    821      0      1      0   0.217   0.001   0.001   0.220     1.519
+    8          inf   4.1990e+02   4.2029e+02  14442   4517     0    309   2040      1    116   0.275   0.001   0.000   0.280     1.799
+    9          inf   4.2008e+02   4.2017e+02  12987   4482     0     28   1448      1     36   0.189   0.001   0.000   0.193     1.993
+   10   4.2016e+02   4.2009e+02   4.2016e+02  10492   4463     0      3   2479      0     19   0.152   0.001   0.000   0.157     2.149
+   11   4.2016e+02   4.2009e+02   4.2016e+02   8318   4455     0     21   2187      0      8   0.123   0.001   0.000   0.127     2.277
+   12   4.2016e+02   4.2009e+02   4.2016e+02   8318   4455     0      0      0      0      0   0.115   0.002   0.000   0.118     2.395
+CG optimal after 12 iterations. UB=420.162006 LB=420.089690 gap=7.232e-02 tol=4.202e-02  t_LP=2.348  t_PR=0.024  t_SP=0.007  t_Tot=2.401
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/transportation/Winnipeg_net.tntp.gz,path,12,8208,420.162006,420.089690,1,2.410,2.348,0.024,0.007

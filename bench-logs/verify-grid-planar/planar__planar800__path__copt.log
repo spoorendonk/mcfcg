@@ -1,0 +1,27 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/planar/planar800 --solver copt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 800 vertices, 4388 arcs, 12756 commodities, 800 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=12756, capped_arcs=4388)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   1.1440e+09   1.1440e+09  12973  12973     0      0      0    217      0   0.384   0.014   0.004   0.401     0.401
+    2          inf   1.1440e+09   1.5566e+11  23473  12973   217  10500      0      0      0   0.780   0.007   0.001   0.792     1.193
+    3          inf   1.1440e+09   1.1904e+09  31703  13012     0   8191      0     39      0   0.407   0.006   0.003   0.423     1.616
+    4          inf   1.1440e+09   1.2665e+09  40756  13020     3   9045      0      8      0   0.560   0.005   0.003   0.578     2.194
+    5          inf   1.1447e+09   1.1730e+09  48264  13021     0   7507      0      1      0   0.563   0.006   0.004   0.579     2.773
+    6          inf   1.1582e+09   1.1693e+09  54198  13022     0   5933      0      1      0   0.575   0.006   0.005   0.592     3.365
+    7          inf   1.1641e+09   1.1678e+09  58664  13024     0   4464      0      2      0   0.680   0.007   0.005   0.698     4.063
+    8   1.1675e+09   1.1669e+09   1.1675e+09  55857  12935     0   3224   5942      0     89   0.732   0.005   0.001   0.763     4.826
+    9   1.1675e+09   1.1673e+09   1.1674e+09  53053  12913     0   1969   4751      2     24   0.547   0.006   0.004   0.580     5.406
+   10   1.1674e+09   1.1673e+09   1.1674e+09  53053  12913     0  *1868      0      0      0   0.473   0.006   0.001   0.481     5.887
+CG optimal after 10 iterations. UB=1167385798.522215 LB=1167292803.934051 gap=9.299e+04 tol=1.167e+05  t_LP=5.700  t_PR=0.086  t_SP=0.031  t_Tot=5.906
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/planar/planar800,path,10,52896,1167385798.522215,1167292803.934051,1,5.947,5.700,0.086,0.031

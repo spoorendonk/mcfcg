@@ -1,0 +1,21 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/intermodal/SBT-18765-0.txt.gz --solver cuopt --formulation tree --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 188487 vertices, 1782614 arcs, 18745 commodities, 18745 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=18745, capped_arcs=1535594)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   4.7848e+05  37490  18817   354      0      0     72      0   0.473   0.000   0.128   0.602     0.602
+    2          inf         -inf   4.8278e+05  38163  18817   549    673      0      0      0   0.073   0.167   0.126   0.367     0.969
+    3          inf         -inf   4.8136e+05  38163  18830    10      0      0     13      0   0.080   0.000   0.127   0.208     1.177
+    4          inf         -inf   4.8141e+05  38163  18831    17      0      0      1      0   0.073   0.000   0.121   0.195     1.372
+    5          inf         -inf   4.8150e+05  38184  18831    22     21      0      0      0   0.075   0.048   0.124   0.247     1.619
+    6          inf   4.7090e+05   4.8411e+05  38381  18831    18    197      0      0      0   0.110   1.938   0.123   2.171     3.791
+    7          inf   4.7090e+05   4.8111e+05  38381  18832     0      0      0      1      0   0.079   0.000   0.121   0.201     3.991
+    8   4.8111e+05   4.8107e+05   4.8111e+05  38381  18832     0     *9      0      0      0   0.076   2.040   0.121   2.237     6.228
+CG optimal after 8 iterations. UB=481112.008078 LB=481065.527555 gap=4.648e+01 tol=4.811e+01  t_LP=1.039  t_PR=6.301  t_SP=0.991  t_Tot=8.338
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/intermodal/SBT-18765-0.txt.gz,tree,8,19636,481112.008078,481065.527555,1,8.717,1.039,6.301,0.991

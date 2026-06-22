@@ -1,5 +1,6 @@
 #ifdef MCFCG_USE_COPT
 
+#include "mcfcg/lp/backend_util.h"
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/util/tolerances.h"
 
@@ -143,51 +144,21 @@ public:
     }
 
     void delete_cols(std::vector<int32_t>& mask) override {
-        // Build list of indices to delete
-        std::vector<int> del_list;
-        for (size_t i = 0; i < mask.size(); ++i) {
-            if (mask[i] == 1) {
-                del_list.push_back(static_cast<int>(i));
-            }
-        }
-
+        auto del_list = detail::collect_delete_indices(mask);
         if (!del_list.empty()) {
             check_copt(COPT_DelCols(_prob, static_cast<int>(del_list.size()), del_list.data()),
                        "DelCols");
         }
-
-        // Recompute mask: new index for surviving columns
-        uint32_t new_idx = 0;
-        for (size_t i = 0; i < mask.size(); ++i) {
-            if (mask[i] == 1) {
-                mask[i] = -1;
-            } else {
-                mask[i] = static_cast<int32_t>(new_idx++);
-            }
-        }
+        detail::remap_delete_mask(mask);
     }
 
     void delete_rows(std::vector<int32_t>& mask) override {
-        std::vector<int> del_list;
-        for (size_t i = 0; i < mask.size(); ++i) {
-            if (mask[i] == 1) {
-                del_list.push_back(static_cast<int>(i));
-            }
-        }
-
+        auto del_list = detail::collect_delete_indices(mask);
         if (!del_list.empty()) {
             check_copt(COPT_DelRows(_prob, static_cast<int>(del_list.size()), del_list.data()),
                        "DelRows");
         }
-
-        uint32_t new_idx = 0;
-        for (size_t i = 0; i < mask.size(); ++i) {
-            if (mask[i] == 1) {
-                mask[i] = -1;
-            } else {
-                mask[i] = static_cast<int32_t>(new_idx++);
-            }
-        }
+        detail::remap_delete_mask(mask);
     }
 
     void set_col_cost(uint32_t col, double cost) override {

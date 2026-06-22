@@ -1,0 +1,32 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/grid/grid8 --solver mosek --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 625 vertices, 2400 arcs, 500 commodities, 343 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=500, capped_arcs=2400)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   2.7778e+06   1000    500   499      0      0      0      0   0.010   0.002   0.000   0.013     0.013
+    2          inf         -inf   2.5136e+07   1000    500   349      0      0      0      0   0.001   0.002   0.000   0.003     0.016
+    3          inf         -inf   4.1328e+07   1000    776     0      0      0    276      0   0.001   0.002   0.001   0.003     0.019
+    4          inf         -inf   1.0076e+08   1369    776   208    369      0      0      0   0.036   0.001   0.000   0.038     0.057
+    5          inf         -inf   2.3597e+08   1728    798   173    359      0     22      0   0.044   0.001   0.000   0.046     0.103
+    6          inf         -inf   1.8250e+08   2100    847    90    372      0     49      0   0.058   0.001   0.000   0.060     0.162
+    7          inf         -inf   4.9588e+07   2485    900    27    385      0     53      0   0.086   0.001   0.000   0.088     0.251
+    8          inf         -inf   4.1806e+07   2820    925     0    335      0     25      0   0.113   0.001   0.001   0.115     0.366
+    9          inf         -inf   4.1764e+07   3058    861     0    280     42     15     79   0.143   0.001   0.001   0.146     0.512
+   10          inf         -inf   4.1743e+07   3202    873     0    235     91     12      0   0.096   0.001   0.000   0.099     0.611
+   11          inf         -inf   4.1727e+07   3306    881     0    216    112     11      3   0.113   0.001   0.001   0.115     0.726
+   12          inf         -inf   4.1720e+07   3267    868     0    201    240      3     16   0.121   0.001   0.001   0.123     0.849
+   13          inf         -inf   4.1715e+07   2972    854     0    115    410      6     20   0.105   0.001   0.000   0.108     0.957
+   14          inf         -inf   4.1714e+07   2781    839     0    124    315      2     17   0.091   0.001   0.000   0.093     1.050
+   15          inf         -inf   4.1712e+07   2616    828     0    104    269      1     12   0.090   0.001   0.000   0.093     1.143
+   16          inf         -inf   4.1711e+07   2423    824     0     37    230      4      8   0.085   0.001   0.000   0.087     1.230
+   17          inf         -inf   4.1711e+07   2323    819     0     25    125      1      6   0.088   0.001   0.000   0.090     1.320
+   18          inf         -inf   4.1711e+07   2217    815     0     13    119      1      5   0.080   0.001   0.000   0.082     1.402
+   19   4.1711e+07   4.1711e+07   4.1711e+07   2217    815     0     *9      0      0      0   0.077   0.001   0.000   0.078     1.480
+CG optimal after 19 iterations. UB=41711137.322390 LB=41710983.476976 gap=1.538e+02 tol=4.171e+03  t_LP=1.437  t_PR=0.026  t_SP=0.008  t_Tot=1.484
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/grid/grid8,path,19,1717,41711137.322390,41710983.476976,1,1.488,1.437,0.026,0.008

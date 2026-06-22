@@ -1,0 +1,34 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/planar/planar50 --solver copt --formulation tree --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 50 vertices, 250 arcs, 267 commodities, 50 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=50, capped_arcs=250)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   1.1503e+08   4.0970e+06    100     50    50      0      0      0      0   0.254   0.000   0.000   0.255     0.255
+    2          inf   1.1503e+08   3.9142e+07    100     50    43      0      0      0      0   0.080   0.000   0.000   0.080     0.335
+    3          inf   1.1503e+08   1.1503e+08    100     84     0      0      0     34      0   0.080   0.000   0.000   0.081     0.415
+    4          inf   1.1503e+08   1.9455e+08    146     84    24     46      0      0      0   0.073   0.000   0.000   0.074     0.489
+    5          inf   1.1503e+08   6.4598e+08    187     85    25     41      0      1      0   0.061   0.000   0.000   0.061     0.550
+    6          inf   1.1503e+08   7.0696e+08    228     89    13     41      0      4      0   0.066   0.000   0.000   0.066     0.617
+    7          inf   1.1503e+08   3.9220e+08    272     97    10     44      0      8      0   0.067   0.000   0.000   0.067     0.684
+    8          inf   1.1503e+08   1.0423e+09    318    102     8     46      0      5      0   0.076   0.000   0.000   0.077     0.761
+    9          inf   1.1503e+08   1.2447e+08    357     99     0     41      2      3      6   0.078   0.000   0.000   0.079     0.839
+   10   1.2364e+08   1.1955e+08   1.2364e+08    374     99     0     38     21      0      0   0.069   0.000   0.000   0.070     0.909
+   11   1.2364e+08   1.2083e+08   1.2290e+08    396    101     0     32     10      2      0   0.071   0.000   0.000   0.072     0.980
+   12   1.2262e+08   1.2083e+08   1.2262e+08    416    100     0     39     19      0      1   0.071   0.000   0.000   0.072     1.052
+   13   1.2237e+08   1.2190e+08   1.2237e+08    391     96     0     24     49      0      4   0.071   0.000   0.000   0.071     1.124
+   14   1.2227e+08   1.2210e+08   1.2227e+08    370     96     0     19     40      0      0   0.079   0.000   0.000   0.079     1.203
+   15   1.2224e+08   1.2211e+08   1.2224e+08    345     95     0     19     44      0      1   0.070   0.000   0.000   0.070     1.273
+   16   1.2221e+08   1.2216e+08   1.2221e+08    306     95     0     10     49      0      0   0.070   0.000   0.000   0.071     1.344
+   17   1.2220e+08   1.2220e+08   1.2220e+08    306     95     0     *3      0      0      0   0.067   0.000   0.000   0.068     1.411
+CG optimal after 17 iterations. UB=122199882.037321 LB=122199109.120486 gap=7.729e+02 tol=1.222e+04  t_LP=1.405  t_PR=0.004  t_SP=0.001  t_Tot=1.413
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/planar/planar50,tree,17,256,122199882.037321,122199109.120486,1,1.430,1.405,0.004,0.001

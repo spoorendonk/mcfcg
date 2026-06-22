@@ -1,0 +1,22 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/grid/grid5 --solver cuopt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 225 vertices, 840 arcs, 100 commodities, 83 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=100, capped_arcs=840)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   5.0295e+06   5.5950e+05    200    100   100      0      0      0      0   0.364   0.001   0.000   0.365     0.365
+    2          inf   5.0295e+06   4.3345e+06    200    107    35      0      0      7      0   0.024   0.000   0.000   0.024     0.389
+    3          inf   5.0295e+06   7.3488e+06    225    123    19     25      0     16      0   0.058   0.000   0.000   0.058     0.447
+    4          inf   5.0295e+06   9.2773e+06    267    133    22     42      0     10      0   0.032   0.000   0.000   0.033     0.479
+    5          inf   5.0295e+06   6.4630e+06    305    147     8     38      0     14      0   0.036   0.000   0.000   0.036     0.516
+    6          inf   5.0295e+06   5.0550e+06    341    152     2     36      0      5      0   0.040   0.000   0.000   0.041     0.557
+    7          inf   5.0441e+06   5.0506e+06    364    155     0     23      0      3      0   0.044   0.000   0.000   0.044     0.600
+    8          inf   5.0489e+06   5.0498e+06    375    157     0     11      0      2      0   0.045   0.000   0.000   0.045     0.646
+    9   5.0497e+06   5.0496e+06   5.0497e+06    375    157     0     *2      0      0      0   0.048   0.000   0.000   0.048     0.694
+CG optimal after 9 iterations. UB=5049688.789309 LB=5049643.309612 gap=4.548e+01 tol=5.050e+02  t_LP=0.690  t_PR=0.004  t_SP=0.000  t_Tot=0.695
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/grid/grid5,path,9,275,5049688.789309,5049643.309612,1,0.702,0.690,0.004,0.000

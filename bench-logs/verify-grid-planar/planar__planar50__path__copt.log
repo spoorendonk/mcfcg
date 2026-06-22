@@ -1,0 +1,26 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/planar/planar50 --solver copt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 50 vertices, 250 arcs, 267 commodities, 50 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=267, capped_arcs=250)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   1.1503e+08   1.1503e+08    301    301     0      0      0     34      0   0.331   0.000   0.000   0.331     0.331
+    2          inf   1.1503e+08   2.4408e+08    513    301    34    212      0      0      0   0.154   0.000   0.000   0.155     0.486
+    3          inf   1.1775e+08   1.2149e+08    624    311     0    101      0     10      0   0.156   0.000   0.000   0.157     0.642
+    4          inf   1.1775e+08   1.2847e+08    752    322     2    117      0     11      0   0.154   0.000   0.000   0.154     0.796
+    5          inf   1.1775e+08   1.2437e+08    856    326     1    100      0      4      0   0.156   0.000   0.000   0.156     0.953
+    6          inf   1.2154e+08   1.2240e+08    902    327     0     45      0      1      0   0.155   0.000   0.000   0.156     1.109
+    7   1.2224e+08   1.2210e+08   1.2224e+08    918    327     0     16      0      0      0   0.157   0.000   0.000   0.158     1.266
+    8   1.2221e+08   1.2219e+08   1.2221e+08    827    322     0      4     90      0      5   0.159   0.000   0.000   0.159     1.426
+    9   1.2220e+08   1.2220e+08   1.2220e+08    827    322     0     *0      0      0      0   0.157   0.000   0.000   0.157     1.583
+CG optimal after 9 iterations. UB=122199689.000011 LB=122199688.172894 gap=8.271e-01 tol=1.222e+04  t_LP=1.579  t_PR=0.002  t_SP=0.002  t_Tot=1.584
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/planar/planar50,path,9,772,122199689.000011,122199688.172894,1,1.600,1.579,0.002,0.002

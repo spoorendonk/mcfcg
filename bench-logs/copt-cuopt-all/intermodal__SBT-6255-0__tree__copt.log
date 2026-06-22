@@ -1,0 +1,25 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/intermodal/SBT-6255-0.txt.gz --solver copt --formulation tree --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 163487 vertices, 809375 arcs, 6251 commodities, 6251 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=6251, capped_arcs=562355)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   1.5957e+05  12502   6351   120      0      0    100      0   0.275   0.000   0.058   0.333     0.333
+    2          inf         -inf   1.6193e+05  12845   6351   241    343      0      0      0   0.066   0.054   0.061   0.182     0.515
+    3          inf         -inf   1.6080e+05  12845   6369     6      0      0     18      0   0.065   0.000   0.062   0.128     0.643
+    4          inf         -inf   1.6086e+05  12845   6370    13      0      0      1      0   0.062   0.000   0.061   0.124     0.767
+    5          inf         -inf   1.6086e+05  12852   6370    13      7      0      0      0   0.062   0.027   0.062   0.150     0.916
+    6          inf   1.5653e+05   1.6287e+05  12998   6370    12    146      0      0      0   0.061   0.384   0.060   0.506     1.422
+    7          inf   1.5653e+05   1.6061e+05  12998   6377     0      0      0      7      0   0.062   0.000   0.057   0.120     1.542
+    8   1.6061e+05   1.6059e+05   1.6061e+05  12998   6377     0     *1      0      0      0   0.062   0.398   0.058   0.519     2.060
+CG optimal after 8 iterations. UB=160606.000003 LB=160593.921669 gap=1.208e+01 tol=1.606e+01  t_LP=0.715  t_PR=1.277  t_SP=0.478  t_Tot=2.475
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/intermodal/SBT-6255-0.txt.gz,tree,8,6747,160606.000003,160593.921669,1,2.723,0.715,1.277,0.478

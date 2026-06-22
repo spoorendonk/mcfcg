@@ -1,0 +1,21 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/grid/grid4 --solver mosek --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 100 vertices, 360 arcs, 100 commodities, 63 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=100, capped_arcs=360)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   3.0156e+06   5.4674e+05    200    100    97      0      0      0      0   0.010   0.000   0.000   0.011     0.011
+    2          inf   3.0156e+06   2.9899e+06    200    120     7      0      0     20      0   0.000   0.000   0.000   0.001     0.011
+    3          inf   3.0156e+06   3.2758e+06    252    126    24     52      0      6      0   0.001   0.000   0.000   0.002     0.013
+    4          inf   3.0156e+06   4.2678e+06    286    130    13     34      0      4      0   0.002   0.000   0.000   0.002     0.015
+    5          inf   3.0156e+06   3.0340e+06    320    133     1     34      0      3      0   0.002   0.000   0.000   0.002     0.017
+    6          inf   3.0306e+06   3.0324e+06    328    139     0      8      0      6      0   0.002   0.000   0.000   0.002     0.020
+    7   3.0319e+06   3.0315e+06   3.0319e+06    334    139     0      6      0      0      0   0.002   0.000   0.000   0.002     0.022
+    8   3.0317e+06   3.0315e+06   3.0317e+06    334    139     0     *5      0      0      0   0.002   0.000   0.000   0.002     0.025
+CG optimal after 8 iterations. UB=3031706.999769 LB=3031483.510071 gap=2.235e+02 tol=3.032e+02  t_LP=0.022  t_PR=0.002  t_SP=0.000  t_Tot=0.025
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/grid/grid4,path,8,234,3031706.999769,3031483.510071,1,0.029,0.022,0.002,0.000

@@ -1,0 +1,26 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/transportation/ChicagoRegional_net.tntp.gz --solver copt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+TNTP: net=/home/simon/code/my/mcfcg/data/transportation/ChicagoRegional_net.tntp.gz trips=/home/simon/code/my/mcfcg/data/transportation/ChicagoRegional_trips.tntp.gz coef=4.1
+Instance: 12982 vertices, 39018 arcs, 2297945 commodities, 1771 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=2297945, capped_arcs=39018)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   5.4984e+06   5.4992e+06 2298237 2298237     0      0      0    292      0   3.286   0.408   0.274   4.004     4.004
+    2          inf   5.4984e+06   6.4563e+06 2348237 2298237   292  50000      0      0      0  24.325   0.383   0.030  24.813    28.817
+    3          inf   5.4984e+06   1.1705e+07 2398249 2298249   239  50000      0     12      0  32.310   0.331   0.163  32.892    61.709
+    4          inf   5.4984e+06   4.4172e+07 2448267 2298267   208  50000      0     18      0  51.164   0.341   0.164  51.755   113.464
+    5          inf   5.4984e+06   2.4770e+08 2498270 2298270   163  50000      0      3      0  49.846   0.332   0.168  50.425   163.890
+    6          inf   5.4984e+06   1.4797e+09 2548274 2298274   123  50000      0      4      0  45.144   0.353   0.178  45.767   209.657
+    7          inf   5.4984e+06   7.3821e+09 2598285 2298285    87  50000      0     11      0  52.633   0.321   0.185  53.221   262.878
+    8          inf   5.4984e+06   4.8737e+09 2620413 2298249    60  50000  27836      6     42  54.969   0.330   0.190  56.542   319.420
+CG stopped after 8 iterations. UB=4873700347.266281 LB=5498380.680423 gap=4.868e+09 tol=4.874e+05  t_LP=363.706  t_PR=6.077  t_SP=1.352  t_Tot=372.731
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/transportation/ChicagoRegional_net.tntp.gz,path,8,2620109,4873700347.266281,5498380.680423,0,373.976,363.706,6.077,1.352

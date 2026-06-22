@@ -1,5 +1,6 @@
 #ifdef MCFCG_USE_MOSEK
 
+#include "mcfcg/lp/backend_util.h"
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/util/tolerances.h"
 
@@ -20,15 +21,11 @@ void check_mosek(MSKrescodee res, const char* msg) {
     }
 }
 
-// MOSEK's infinity is a one-sided bound key, not a finite number: the master
-// and tests pass 1e20 as an "infinity" stand-in. Treat any bound with
-// magnitude >= 1e19 as infinite when picking the MSKboundkeye, mirroring the
-// cuOpt backend's CUOPT_BOUND_INF_THRESHOLD. Passing 1e20 to MOSEK as a finite
-// range bound would corrupt the interior-point starting point (the bound value
-// enters the barrier), so only the bound *key* is allowed to encode infinity;
-// the numeric value handed to MOSEK for an infinite side is ignored by the key.
-constexpr double MOSEK_BOUND_INF_THRESHOLD = 1e19;
-
+// MOSEK's infinity is a one-sided bound key, not a finite number. Treat any
+// bound with magnitude >= LP_BOUND_INF_THRESHOLD as infinite when picking the
+// MSKboundkeye; the numeric value handed to MOSEK for an infinite side is then
+// ignored by the key (see backend_util.h for why the threshold matters).
+//
 // Derive a MOSEK bound key + clamped (lb, ub) pair from a generic (lb, ub).
 struct BoundKey {
     MSKboundkeye bk;
@@ -37,8 +34,8 @@ struct BoundKey {
 };
 
 BoundKey to_mosek_bound(double lb, double ub) {
-    bool lb_inf = lb <= -MOSEK_BOUND_INF_THRESHOLD;
-    bool ub_inf = ub >= MOSEK_BOUND_INF_THRESHOLD;
+    bool lb_inf = lb <= -detail::LP_BOUND_INF_THRESHOLD;
+    bool ub_inf = ub >= detail::LP_BOUND_INF_THRESHOLD;
     if (lb_inf && ub_inf) {
         return {MSK_BK_FR, 0.0, 0.0};
     }
@@ -219,51 +216,23 @@ public:
     }
 
     void delete_cols(std::vector<int32_t>& mask) override {
-        std::vector<int32_t> del_list;
-        for (size_t i = 0; i < mask.size(); ++i) {
-            if (mask[i] == 1) {
-                del_list.push_back(static_cast<int32_t>(i));
-            }
-        }
-
+        auto del_list = detail::collect_delete_indices(mask);
         if (!del_list.empty()) {
             check_mosek(
                 MSK_removevars(_task, static_cast<int32_t>(del_list.size()), del_list.data()),
                 "removevars");
         }
-
-        uint32_t new_idx = 0;
-        for (size_t i = 0; i < mask.size(); ++i) {
-            if (mask[i] == 1) {
-                mask[i] = -1;
-            } else {
-                mask[i] = static_cast<int32_t>(new_idx++);
-            }
-        }
+        detail::remap_delete_mask(mask);
     }
 
     void delete_rows(std::vector<int32_t>& mask) override {
-        std::vector<int32_t> del_list;
-        for (size_t i = 0; i < mask.size(); ++i) {
-            if (mask[i] == 1) {
-                del_list.push_back(static_cast<int32_t>(i));
-            }
-        }
-
+        auto del_list = detail::collect_delete_indices(mask);
         if (!del_list.empty()) {
             check_mosek(
                 MSK_removecons(_task, static_cast<int32_t>(del_list.size()), del_list.data()),
                 "removecons");
         }
-
-        uint32_t new_idx = 0;
-        for (size_t i = 0; i < mask.size(); ++i) {
-            if (mask[i] == 1) {
-                mask[i] = -1;
-            } else {
-                mask[i] = static_cast<int32_t>(new_idx++);
-            }
-        }
+        detail::remap_delete_mask(mask);
     }
 
     void set_col_cost(uint32_t col, double cost) override {

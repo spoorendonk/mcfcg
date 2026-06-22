@@ -1,5 +1,6 @@
 #ifdef MCFCG_USE_CUOPT
 
+#include "mcfcg/lp/backend_util.h"
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/util/tolerances.h"
 
@@ -44,20 +45,19 @@ void check_cuopt(cuopt_int_t status, const char* msg) {
     }
 }
 
-// cuOpt's infinity is IEEE inf (CUOPT_INFINITY). Coerce any bound at or beyond a
-// large-magnitude sentinel to +/-CUOPT_INFINITY before handing it to cuOpt. A
+// cuOpt's infinity is IEEE inf (CUOPT_INFINITY). Coerce any bound at or beyond
+// LP_BOUND_INF_THRESHOLD to +/-CUOPT_INFINITY before handing it to cuOpt. A
 // large FINITE bound (e.g. a 1e20 "infinity" stand-in) is a genuine two-sided
 // range to cuOpt: its value enters the barrier starting point and breaks
 // the solve down numerically (search-direction NaN, returns the origin as
 // "Optimal"), whereas +/-inf is handled as a one-sided constraint. mcfcg's own
 // INF is already +inf, so this is a no-op for the master; it guards any caller
 // that passes a finite infinity sentinel.
-constexpr double CUOPT_BOUND_INF_THRESHOLD = 1e19;
 cuopt_float_t to_cuopt_bound(double v) {
-    if (v >= CUOPT_BOUND_INF_THRESHOLD) {
+    if (v >= detail::LP_BOUND_INF_THRESHOLD) {
         return CUOPT_INFINITY;
     }
-    if (v <= -CUOPT_BOUND_INF_THRESHOLD) {
+    if (v <= -detail::LP_BOUND_INF_THRESHOLD) {
         return -CUOPT_INFINITY;
     }
     return static_cast<cuopt_float_t>(v);

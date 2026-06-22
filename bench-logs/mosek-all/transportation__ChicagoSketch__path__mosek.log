@@ -1,0 +1,19 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/transportation/ChicagoSketch_net.tntp.gz --solver mosek --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+TNTP: net=/home/simon/code/my/mcfcg/data/transportation/ChicagoSketch_net.tntp.gz trips=/home/simon/code/my/mcfcg/data/transportation/ChicagoSketch_trips.tntp.gz coef=2.4
+Instance: 933 vertices, 2950 arcs, 93513 commodities, 386 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=93513, capped_arcs=2950)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   6.6870e+06   6.6874e+06  93557  93557     0      0      0     44      0   0.139   0.009   0.023   0.172     0.172
+    2          inf   6.6870e+06   7.5938e+06 121997  93557    44  28440      0      0      0   1.406   0.005   0.001   1.427     1.599
+    3          inf   6.7048e+06   6.7081e+06 124465  93560     0   2465      0      3      0   0.886   0.004   0.007   0.900     2.499
+    4   6.7059e+06   6.7051e+06   6.7059e+06 125021  93560     0    556      0      0      0   1.803   0.004   0.001   1.810     4.309
+    5   6.7059e+06   6.7056e+06   6.7059e+06 125021  93560     0     *0      0      0      0   1.839   0.007   0.001   1.848     6.158
+CG optimal after 5 iterations. UB=6705856.165438 LB=6705551.712578 gap=3.045e+02 tol=6.706e+02  t_LP=6.073  t_PR=0.091  t_SP=0.034  t_Tot=6.219
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/transportation/ChicagoSketch_net.tntp.gz,path,5,124974,6705856.165438,6705551.712578,1,6.251,6.073,0.091,0.034

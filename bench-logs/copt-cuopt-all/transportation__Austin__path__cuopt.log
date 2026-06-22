@@ -1,0 +1,15 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/transportation/Austin_net.tntp.gz --solver cuopt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+TNTP: net=/home/simon/code/my/mcfcg/data/transportation/Austin_net.tntp.gz trips=/home/simon/code/my/mcfcg/data/transportation/Austin_trips.tntp.gz coef=6.0
+Instance: 7388 vertices, 18961 arcs, 1081717 commodities, 1117 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=1081717, capped_arcs=18961)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   5.1777e+06   5.1950e+06 1082303 1082303     0      0      0    586      0   3.717   0.169   1.898   5.789     5.789
+CG stopped after 1 iterations. UB=5195010.671226 LB=5177732.714290 gap=1.728e+04 tol=5.195e+02  t_LP=16.804  t_PR=2.691  t_SP=1.898  t_Tot=21.399
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/transportation/Austin_net.tntp.gz,path,1,0,5195010.671226,5177732.714290,0,21.641,16.804,2.691,1.898

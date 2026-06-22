@@ -1,0 +1,21 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/intermodal/SBT-6255-0.txt.gz --solver cuopt --formulation tree --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 163487 vertices, 809375 arcs, 6251 commodities, 6251 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=6251, capped_arcs=562355)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   1.5957e+05  12502   6355   130      0      0    104      0   0.379   0.000   0.061   0.441     0.441
+    2          inf         -inf   1.6193e+05  12843   6355   241    341      0      0      0   0.049   0.056   0.062   0.168     0.609
+    3          inf         -inf   1.6080e+05  12843   6373     6      0      0     18      0   0.049   0.000   0.059   0.108     0.717
+    4          inf         -inf   1.6086e+05  12843   6374    13      0      0      1      0   0.051   0.000   0.057   0.109     0.826
+    5          inf         -inf   1.6086e+05  12849   6374    13      6      0      0      0   0.051   0.026   0.057   0.134     0.960
+    6          inf   1.5659e+05   1.6287e+05  12995   6374    12    146      0      0      0   0.051   0.381   0.057   0.489     1.449
+    7          inf   1.5659e+05   1.6061e+05  12995   6380     0      0      0      6      0   0.046   0.000   0.057   0.103     1.552
+    8   1.6061e+05   1.6059e+05   1.6061e+05  12995   6380     0     *1      0      0      0   0.046   0.402   0.058   0.506     2.058
+CG optimal after 8 iterations. UB=160606.006007 LB=160593.837435 gap=1.217e+01 tol=1.606e+01  t_LP=0.722  t_PR=1.285  t_SP=0.469  t_Tot=2.479
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/intermodal/SBT-6255-0.txt.gz,tree,8,6744,160606.006007,160593.837435,1,2.678,0.722,1.285,0.469

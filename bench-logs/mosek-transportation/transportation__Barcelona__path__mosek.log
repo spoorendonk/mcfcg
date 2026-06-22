@@ -1,0 +1,25 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/transportation/Barcelona_net.tntp.gz --solver mosek --formulation path --max-iters 10000
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+TNTP: net=/home/simon/code/my/mcfcg/data/transportation/Barcelona_net.tntp.gz trips=/home/simon/code/my/mcfcg/data/transportation/Barcelona_trips.tntp.gz coef=5050.0
+Instance: 1020 vertices, 2522 arcs, 7922 commodities, 97 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=7922, capped_arcs=2522)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot
+    1          inf         -inf   2.3756e+02   8052   8052     0      0      0    130      0   0.022   0.002   0.004   0.029
+    2          inf         -inf   4.3230e+03  13407   8052   130   5355      0      0      0   0.238   0.001   0.000   0.244
+    3          inf         -inf   2.4631e+02  16269   8130     0   2784      0     78      0   0.166   0.001   0.004   0.175
+    4          inf         -inf   2.8651e+02  19658   8134     5   3385      0      4      0   0.377   0.002   0.004   0.391
+    5          inf         -inf   2.4462e+02  22262   8135     0   2603      0      1      0   0.453   0.001   0.005   0.462
+    6          inf         -inf   2.4389e+02  23508   8139     0   1242      0      4      0   0.438   0.001   0.004   0.445
+    7   2.4358e+02   2.4321e+02   2.4358e+02  24465   8139     0    957      0      0      0   0.426   0.001   0.001   0.430
+    8   2.4352e+02   2.4344e+02   2.4352e+02  21067   8071     0    153   3483      0     68   0.426   0.001   0.001   0.432
+    9   2.4351e+02   2.4345e+02   2.4351e+02  18695   8035     0     23   2359      0     36   0.327   0.001   0.000   0.332
+   10   2.4351e+02   2.4345e+02   2.4351e+02  14978   8030     0      7   3719      0      5   0.262   0.001   0.001   0.267
+   11   2.4351e+02   2.4345e+02   2.4351e+02  14978   8030     0      0      0      0      0   0.227   0.002   0.000   0.230
+CG optimal after 11 iterations. UB=243.505688 LB=243.448452 gap=5.724e-02 tol=2.435e-02  t_LP=3.362  t_PR=0.023  t_SP=0.024  t_Tot=3.444
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/transportation/Barcelona_net.tntp.gz,path,11,14870,243.505688,243.448452,1,3.451,3.362,0.023,0.024

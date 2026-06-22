@@ -1,0 +1,28 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/transportation/BerlinCenter_net.tntp.gz --solver copt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+TNTP: net=/home/simon/code/my/mcfcg/data/transportation/BerlinCenter_net.tntp.gz trips=/home/simon/code/my/mcfcg/data/transportation/BerlinCenter_trips.tntp.gz coef=0.5
+Instance: 12981 vertices, 28376 arcs, 49688 commodities, 865 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=49688, capped_arcs=28376)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   2.6118e+07   2.6118e+07  50223  50223     0      0      0    535      0   0.313   0.065   0.008   0.388     0.388
+    2          inf   2.6118e+07   1.2022e+08  83150  50223   535  32927      0      0      0   0.722   0.037   0.003   0.788     1.176
+    3          inf   2.6637e+07   2.7704e+07  95799  50405     0  12467      0    182      0   0.607   0.033   0.009   0.666     1.842
+    4          inf   2.6637e+07   3.2391e+07 110052  50422    56  14236      0     17      0   1.054   0.036   0.008   1.113     2.955
+    5          inf   2.6637e+07   2.8070e+07 115700  50450     2   5620      0     28      0   1.073   0.037   0.011   1.129     4.084
+    6          inf   2.6637e+07   2.8152e+07 119576  50457     7   3869      0      7      0   1.012   0.040   0.009   1.068     5.152
+    7   2.7561e+07   2.6956e+07   2.7561e+07 121219  50457     0   1643      0      0      0   1.151   0.037   0.004   1.199     6.351
+    8   2.7561e+07   2.7502e+07   2.7541e+07 101942  50324     0    864  20008      1    134   1.122   0.032   0.012   1.219     7.569
+    9   2.7561e+07   2.7526e+07   2.7530e+07  93453  50368     0    417   8950    114     70   0.875   0.041   0.010   0.970     8.539
+   10   2.7529e+07   2.7528e+07   2.7529e+07  93453  50368     0    *13      0      0      0   0.902   0.036   0.004   0.942     9.481
+CG optimal after 10 iterations. UB=27529166.546584 LB=27528164.046216 gap=1.003e+03 tol=2.753e+03  t_LP=8.832  t_PR=0.477  t_SP=0.079  t_Tot=9.564
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/transportation/BerlinCenter_net.tntp.gz,path,10,92773,27529166.546584,27528164.046216,1,9.648,8.832,0.477,0.079

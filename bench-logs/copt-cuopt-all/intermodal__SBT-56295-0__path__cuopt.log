@@ -1,0 +1,23 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/intermodal/SBT-56295-0.txt.gz --solver cuopt --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 263559 vertices, 4725174 arcs, 56269 commodities, 56269 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=56269, capped_arcs=4478154)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   1.4398e+06 112538  56382   974      0      0    113      0   0.649   0.000   0.365   1.016     1.016
+    2          inf         -inf   1.4541e+06 114389  56382  1658   1851      0      0      0   0.230   0.871   0.361   1.465     2.481
+    3          inf         -inf   1.4482e+06 114389  56399     6      0      0     17      0   0.230   0.000   0.361   0.593     3.075
+    4          inf         -inf   1.4484e+06 114389  56401    41      0      0      2      0   0.218   0.000   0.358   0.579     3.654
+    5          inf         -inf   1.4484e+06 114441  56401    41     52      0      0      0   0.278   0.152   0.367   0.798     4.452
+    6          inf   1.4445e+06   1.4488e+06 115022  56401    44    581      0      0      0   0.220  14.575   0.372  15.168    19.620
+    7          inf   1.4445e+06   1.4479e+06 115022  56402     0      0      0      1      0   0.220   0.000   0.359   0.582    20.201
+    8   1.4479e+06   1.4445e+06   1.4479e+06 115053  56361     0     31      0      0     41   0.221   0.151   0.361   0.735    20.937
+    9   1.4479e+06   1.4445e+06   1.4479e+06 115053  56367     0      0      0      6      0   0.253   0.000   0.367   0.622    21.558
+   10   1.4479e+06   1.4477e+06   1.4479e+06 115053  56367     0    *30      0      0      0   0.219  14.968   0.365  15.552    37.110
+CG optimal after 10 iterations. UB=1447869.014954 LB=1447747.209183 gap=1.218e+02 tol=1.448e+02  t_LP=2.738  t_PR=45.408  t_SP=3.636  t_Tot=51.807
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/intermodal/SBT-56295-0.txt.gz,path,10,58784,1447869.014954,1447747.209183,1,52.928,2.738,45.408,3.636

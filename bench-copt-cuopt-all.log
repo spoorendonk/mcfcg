@@ -1,0 +1,218 @@
+[grid] grid1 :: path/copt ... PASS obj=827319.000 t=0.8s
+[grid] grid1 :: path/cuopt ... PASS obj=827319.057 t=0.6s
+[grid] grid1 :: tree/copt ... PASS obj=827319.000 t=0.9s
+[grid] grid1 :: tree/cuopt ... PASS obj=827319.969 t=0.6s
+[grid] grid2 :: path/copt ... PASS obj=1705378.000 t=0.7s
+[grid] grid2 :: path/cuopt ... PASS obj=1705378.014 t=0.7s
+[grid] grid2 :: tree/copt ... PASS obj=1705375.000 t=1.1s
+[grid] grid2 :: tree/cuopt ... PASS obj=1705375.828 t=0.8s
+[grid] grid3 :: path/copt ... PASS obj=1524642.001 t=0.7s
+[grid] grid3 :: path/cuopt ... PASS obj=1524642.152 t=0.6s
+[grid] grid3 :: tree/copt ... PASS obj=1524730.000 t=0.8s
+[grid] grid3 :: tree/cuopt ... PASS obj=1524733.209 t=0.6s
+[grid] grid4 :: path/copt ... PASS obj=3031695.002 t=0.7s
+[grid] grid4 :: path/cuopt ... PASS obj=3031695.185 t=0.6s
+[grid] grid4 :: tree/copt ... PASS obj=3031712.000 t=1.0s
+[grid] grid4 :: tree/cuopt ... PASS obj=3031695.207 t=0.8s
+[grid] grid5 :: path/copt ... PASS obj=5049688.500 t=0.9s
+[grid] grid5 :: path/cuopt ... PASS obj=5049688.789 t=0.7s
+[grid] grid5 :: tree/copt ... PASS obj=5049647.023 t=1.1s
+[grid] grid5 :: tree/cuopt ... PASS obj=5049640.824 t=0.8s
+[grid] grid6 :: path/copt ... PASS obj=10402097.330 t=1.4s
+[grid] grid6 :: path/cuopt ... PASS obj=10401707.807 t=1.2s
+[grid] grid6 :: tree/copt ... PASS obj=10401703.152 t=1.8s
+[grid] grid6 :: tree/cuopt ... PASS obj=10401708.409 t=1.3s
+[grid] grid7 :: path/copt ... PASS obj=25864203.139 t=1.2s
+[grid] grid7 :: path/cuopt ... PASS obj=25864739.900 t=1.3s
+[grid] grid7 :: tree/copt ... PASS obj=25864090.632 t=1.6s
+[grid] grid7 :: tree/cuopt ... PASS obj=25865061.671 t=1.2s
+[grid] grid8 :: path/copt ... PASS obj=41711151.173 t=2.6s
+[grid] grid8 :: path/cuopt ... PASS obj=41712439.551 t=2.2s
+[grid] grid8 :: tree/copt ... PASS obj=41710838.981 t=2.8s
+[grid] grid8 :: tree/cuopt ... PASS obj=41711368.799 t=2.4s
+[grid] grid9 :: path/copt ... PASS obj=82652988.574 t=3.5s
+[grid] grid9 :: path/cuopt ... PASS obj=82654133.390 t=2.6s
+[grid] grid9 :: tree/copt ... PASS obj=82652946.679 t=5.1s
+[grid] grid9 :: tree/cuopt ... PASS obj=82654657.792 t=3.3s
+[grid] grid10 :: path/copt ... PASS obj=164110898.273 t=4.0s
+[grid] grid10 :: path/cuopt ... PASS obj=164111361.112 t=3.5s
+[grid] grid10 :: tree/copt ... PASS obj=164110898.013 t=5.7s
+[grid] grid10 :: tree/cuopt ... PASS obj=164117715.341 t=4.3s
+[grid] grid11 :: path/copt ... PASS obj=329258288.882 t=3.8s
+[grid] grid11 :: path/cuopt ... PASS obj=329258298.831 t=3.3s
+[grid] grid11 :: tree/copt ... PASS obj=329262857.033 t=3.8s
+[grid] grid11 :: tree/cuopt ... PASS obj=329264490.657 t=3.1s
+[grid] grid12 :: path/copt ... PASS obj=577186506.664 t=3.5s
+[grid] grid12 :: path/cuopt ... PASS obj=577186870.164 t=2.9s
+[grid] grid12 :: tree/copt ... PASS obj=577186503.902 t=4.2s
+[grid] grid12 :: tree/cuopt ... PASS obj=577193758.391 t=3.2s
+[grid] grid13 :: path/copt ... PASS obj=1159320977.892 t=6.2s
+[grid] grid13 :: path/cuopt ... PASS obj=1159321682.118 t=5.6s
+[grid] grid13 :: tree/copt ... PASS obj=1159327640.772 t=7.3s
+[grid] grid13 :: tree/cuopt ... PASS obj=1159338551.732 t=17.1s
+[grid] grid14 :: path/copt ... PASS obj=1802673131.435 t=4.8s
+[grid] grid14 :: path/cuopt ... PASS obj=1802674817.133 t=4.5s
+[grid] grid14 :: tree/copt ... PASS obj=1802672984.500 t=6.1s
+[grid] grid14 :: tree/cuopt ... PASS obj=1802734976.149 t=3.7s
+[grid] grid15 :: path/copt ... PASS obj=3593521815.953 t=10.6s
+[grid] grid15 :: path/cuopt ... PASS obj=3593521956.901 t=10.8s
+[grid] grid15 :: tree/copt ... PASS obj=3593524417.115 t=9.9s
+[grid] grid15 :: tree/cuopt ... PASS obj=3593690429.387 t=18.0s
+[planar] planar30 :: path/copt ... PASS obj=44350624.000 t=0.7s
+[planar] planar30 :: path/cuopt ... PASS obj=44350631.190 t=0.7s
+[planar] planar30 :: tree/copt ... PASS obj=44350800.800 t=0.9s
+[planar] planar30 :: tree/cuopt ... PASS obj=44350629.395 t=0.6s
+[planar] planar50 :: path/copt ... PASS obj=122199689.000 t=0.8s
+[planar] planar50 :: path/cuopt ... PASS obj=122200079.466 t=0.8s
+[planar] planar50 :: tree/copt ... PASS obj=122199882.037 t=1.4s
+[planar] planar50 :: tree/cuopt ... PASS obj=122199720.423 t=1.1s
+[planar] planar80 :: path/copt ... PASS obj=182438134.000 t=1.2s
+[planar] planar80 :: path/cuopt ... PASS obj=182438137.624 t=1.1s
+[planar] planar80 :: tree/copt ... PASS obj=182438134.018 t=2.4s
+[planar] planar80 :: tree/cuopt ... PASS obj=182436231.403 t=1.8s
+[planar] planar100 :: path/copt ... PASS obj=231340800.000 t=1.1s
+[planar] planar100 :: path/cuopt ... PASS obj=231340014.608 t=1.4s
+[planar] planar100 :: tree/copt ... PASS obj=231344992.214 t=2.1s
+[planar] planar100 :: tree/cuopt ... PASS obj=231340201.477 t=1.7s
+[planar] planar150 :: path/copt ... PASS obj=548091155.657 t=3.2s
+[planar] planar150 :: path/cuopt ... PASS obj=548087605.889 t=3.6s
+[planar] planar150 :: tree/copt ... PASS obj=548087971.289 t=6.9s
+[planar] planar150 :: tree/cuopt ... PASS obj=548089340.682 t=5.7s
+[planar] planar300 :: path/copt ... PASS obj=689979980.667 t=2.0s
+[planar] planar300 :: path/cuopt ... PASS obj=690012015.250 t=2.0s
+[planar] planar300 :: tree/copt ... PASS obj=689995036.771 t=2.9s
+[planar] planar300 :: tree/cuopt ... PASS obj=689981660.257 t=2.5s
+[planar] planar500 :: path/copt ... PASS obj=481985162.109 t=1.4s
+[planar] planar500 :: path/cuopt ... PASS obj=481982718.460 t=1.5s
+[planar] planar500 :: tree/copt ... PASS obj=481987762.305 t=1.5s
+[planar] planar500 :: tree/cuopt ... PASS obj=481983905.456 t=1.3s
+[planar] planar800 :: path/copt ... PASS obj=1167385798.522 t=5.1s
+[planar] planar800 :: path/cuopt ... PASS obj=1167402891.650 t=5.3s
+[planar] planar800 :: tree/copt ... PASS obj=1167373872.738 t=5.5s
+[planar] planar800 :: tree/cuopt ... PASS obj=1167379465.942 t=5.2s
+[planar] planar1000 :: path/copt ... PASS obj=3449618257.587 t=23.3s
+[planar] planar1000 :: path/cuopt ... PASS obj=3449612752.142 t=24.6s
+[planar] planar1000 :: tree/copt ... PASS obj=3449614178.594 t=34.4s
+[planar] planar1000 :: tree/cuopt ... PASS obj=3449637974.552 t=91.3s
+[planar] planar2500 :: path/copt ... PASS obj=12662327987.228 t=584.7s
+[planar] planar2500 :: path/cuopt ... PASS obj=12662365654.766 t=573.5s
+[planar] planar2500 :: tree/copt ... PASS obj=12662368670.030 t=5541.1s
+[planar] planar2500 :: tree/cuopt ... FAIL rel=1.40e-03 obj=12644541955.593 t=1268.2s
+[transportation] Austin :: path/copt ... FAIL rel=6.43e+00 obj=40349876.006 t=233.6s
+[transportation] Austin :: path/cuopt ... FAIL rel=4.38e-02 obj=5195010.671 t=21.6s
+[transportation] Austin :: tree/copt ... FAIL rel=1.08e-03 obj=5438762.782 t=417.1s
+[transportation] Austin :: tree/cuopt ... FAIL rel=1.10e-03 obj=5438831.962 t=964.5s
+[transportation] Barcelona :: path/copt ... PASS obj=243.506 t=3.4s
+[transportation] Barcelona :: path/cuopt ... PASS obj=243.506 t=25.0s
+[transportation] Barcelona :: tree/copt ... PASS obj=243.515 t=4.1s
+[transportation] Barcelona :: tree/cuopt ... PASS obj=243.520 t=2.6s
+[transportation] BerlinCenter :: path/copt ... PASS obj=27529166.547 t=9.6s
+[transportation] BerlinCenter :: path/cuopt ... PASS obj=27529210.456 t=22.2s
+[transportation] BerlinCenter :: tree/copt ... PASS obj=27529599.636 t=11.3s
+[transportation] BerlinCenter :: tree/cuopt ... PASS obj=27529536.616 t=35.0s
+[transportation] Birmingham :: path/copt ... PASS obj=215647.408 t=615.9s
+[transportation] Birmingham :: path/cuopt ... PASS obj=215667.402 t=985.0s
+[transportation] Birmingham :: tree/copt ... PASS obj=215644.846 t=428.4s
+[transportation] Birmingham :: tree/cuopt ... PASS obj=215657.671 t=162.4s
+[transportation] ChicagoRegional :: path/copt ... FAIL rel=8.83e+02 obj=4873700347.266 t=374.0s
+[transportation] ChicagoRegional :: path/cuopt ... FAIL rel=1.12e+00 obj=11704807.913 t=105.1s
+[transportation] ChicagoRegional :: tree/copt ... PASS obj=5513156.290 t=82.3s
+[transportation] ChicagoRegional :: tree/cuopt ... PASS obj=5513222.957 t=102.1s
+[transportation] ChicagoSketch :: path/copt ... PASS obj=6705856.174 t=2.8s
+[transportation] ChicagoSketch :: path/cuopt ... PASS obj=6705866.242 t=6.1s
+[transportation] ChicagoSketch :: tree/copt ... PASS obj=6706062.939 t=1.6s
+[transportation] ChicagoSketch :: tree/cuopt ... PASS obj=6706094.612 t=1.2s
+[transportation] Philadelphia :: path/copt ... FAIL rel=2.32e+04 obj=592886985112.493 t=432.7s
+[transportation] Philadelphia :: path/cuopt ... FAIL rel=7.18e+02 obj=18381479406.605 t=342.2s
+[transportation] Philadelphia :: tree/copt ... PASS obj=25577477.821 t=973.7s
+[transportation] Philadelphia :: tree/cuopt ... PASS obj=25577817.002 t=627.4s
+[transportation] Sydney :: path/copt ... PASS obj=4968208.659 t=4292.2s
+[transportation] Sydney :: path/cuopt ... FAIL rel=1.00e+00 obj=0.000 t=16.5s
+[transportation] Sydney :: tree/copt ... PASS obj=4968208.836 t=69.1s
+[transportation] Sydney :: tree/cuopt ... PASS obj=4968211.838 t=65.8s
+[transportation] Winnipeg :: path/copt ... PASS obj=420.162 t=2.4s
+[transportation] Winnipeg :: path/cuopt ... PASS obj=420.162 t=2.4s
+[transportation] Winnipeg :: tree/copt ... PASS obj=420.166 t=4.8s
+[transportation] Winnipeg :: tree/cuopt ... PASS obj=420.170 t=3.3s
+[intermodal] BUS-13160-0 :: path/copt ... PASS obj=348367.000 t=4.8s
+[intermodal] BUS-13160-0 :: path/cuopt ... PASS obj=348362.013 t=9.3s
+[intermodal] BUS-13160-0 :: tree/copt ... PASS obj=348361.500 t=7.0s
+[intermodal] BUS-13160-0 :: tree/cuopt ... PASS obj=348361.505 t=5.7s
+[intermodal] BUS-18424-0 :: path/copt ... PASS obj=485027.500 t=13.6s
+[intermodal] BUS-18424-0 :: path/cuopt ... PASS obj=485025.545 t=9.6s
+[intermodal] BUS-18424-0 :: tree/copt ... PASS obj=485027.000 t=13.2s
+[intermodal] BUS-18424-0 :: tree/cuopt ... PASS obj=485026.505 t=8.4s
+[intermodal] BUS-23688-0 :: path/copt ... PASS obj=624881.500 t=14.0s
+[intermodal] BUS-23688-0 :: path/cuopt ... PASS obj=624882.020 t=11.9s
+[intermodal] BUS-23688-0 :: tree/copt ... PASS obj=624891.002 t=8.6s
+[intermodal] BUS-23688-0 :: tree/cuopt ... PASS obj=624882.012 t=10.4s
+[intermodal] BUS-2632-0 :: path/copt ... PASS obj=71026.500 t=5.2s
+[intermodal] BUS-2632-0 :: path/cuopt ... PASS obj=71026.501 t=3.0s
+[intermodal] BUS-2632-0 :: tree/copt ... PASS obj=71026.500 t=4.3s
+[intermodal] BUS-2632-0 :: tree/cuopt ... PASS obj=71026.501 t=2.3s
+[intermodal] BUS-7896-0 :: path/copt ... PASS obj=210596.500 t=4.1s
+[intermodal] BUS-7896-0 :: path/cuopt ... PASS obj=210593.005 t=4.3s
+[intermodal] BUS-7896-0 :: tree/copt ... PASS obj=210593.501 t=3.8s
+[intermodal] BUS-7896-0 :: tree/cuopt ... PASS obj=210592.002 t=4.9s
+[intermodal] SBT-18765-0 :: path/copt ... PASS obj=481107.500 t=10.9s
+[intermodal] SBT-18765-0 :: path/cuopt ... PASS obj=481112.022 t=8.6s
+[intermodal] SBT-18765-0 :: tree/copt ... PASS obj=481107.500 t=10.8s
+[intermodal] SBT-18765-0 :: tree/cuopt ... PASS obj=481112.008 t=8.7s
+[intermodal] SBT-31275-0 :: path/copt ... PASS obj=801323.000 t=17.8s
+[intermodal] SBT-31275-0 :: path/cuopt ... PASS obj=801323.076 t=22.7s
+[intermodal] SBT-31275-0 :: tree/copt ... PASS obj=801323.000 t=22.1s
+[intermodal] SBT-31275-0 :: tree/cuopt ... PASS obj=801323.015 t=22.7s
+[intermodal] SBT-43785-0 :: path/copt ... PASS obj=1123600.000 t=31.4s
+[intermodal] SBT-43785-0 :: path/cuopt ... PASS obj=1123600.058 t=32.1s
+[intermodal] SBT-43785-0 :: tree/copt ... PASS obj=1123600.000 t=31.2s
+[intermodal] SBT-43785-0 :: tree/cuopt ... PASS obj=1123600.011 t=31.9s
+[intermodal] SBT-56295-0 :: path/copt ... PASS obj=1447869.000 t=52.3s
+[intermodal] SBT-56295-0 :: path/cuopt ... PASS obj=1447869.015 t=52.9s
+[intermodal] SBT-56295-0 :: tree/copt ... PASS obj=1447869.000 t=52.5s
+[intermodal] SBT-56295-0 :: tree/cuopt ... PASS obj=1447869.012 t=52.9s
+[intermodal] SBT-6255-0 :: path/copt ... PASS obj=160606.000 t=3.4s
+[intermodal] SBT-6255-0 :: path/cuopt ... PASS obj=160606.004 t=2.8s
+[intermodal] SBT-6255-0 :: tree/copt ... PASS obj=160606.000 t=2.7s
+[intermodal] SBT-6255-0 :: tree/cuopt ... PASS obj=160606.006 t=2.7s
+[intermodal] SUBWAY-132-0 :: path/copt ... NOREF obj=3451.000 t=0.4s
+[intermodal] SUBWAY-132-0 :: path/cuopt ... NOREF obj=3451.000 t=0.4s
+[intermodal] SUBWAY-132-0 :: tree/copt ... NOREF obj=3451.000 t=0.4s
+[intermodal] SUBWAY-132-0 :: tree/cuopt ... NOREF obj=3451.113 t=0.4s
+[intermodal] SUBWAY-308-0 :: path/copt ... PASS obj=8835.000 t=0.4s
+[intermodal] SUBWAY-308-0 :: path/cuopt ... PASS obj=8835.001 t=0.4s
+[intermodal] SUBWAY-308-0 :: tree/copt ... PASS obj=8835.000 t=0.4s
+[intermodal] SUBWAY-308-0 :: tree/cuopt ... PASS obj=8835.289 t=0.4s
+[intermodal] SUBWAY-486-0 :: path/copt ... PASS obj=13543.000 t=0.4s
+[intermodal] SUBWAY-486-0 :: path/cuopt ... PASS obj=13543.005 t=0.4s
+[intermodal] SUBWAY-486-0 :: tree/copt ... PASS obj=13543.000 t=0.4s
+[intermodal] SUBWAY-486-0 :: tree/cuopt ... PASS obj=13543.053 t=0.4s
+[intermodal] SUBWAY-662-0 :: path/copt ... NOREF obj=18621.000 t=0.4s
+[intermodal] SUBWAY-662-0 :: path/cuopt ... NOREF obj=18621.008 t=0.5s
+[intermodal] SUBWAY-662-0 :: tree/copt ... NOREF obj=18621.000 t=0.4s
+[intermodal] SUBWAY-662-0 :: tree/cuopt ... NOREF obj=18621.072 t=0.5s
+
+Wrote 192 rows to bench-copt-cuopt-all.csv
+
+solver    pass  fail  error  noref
+copt        88     4      0      4
+cuopt       86     6      0      4
+
+Non-pass runs:
+  cuopt  tree  planar         planar2500       ok       rel=1.40e-03
+  copt   path  transportation Austin           ok       rel=6.43e+00
+  cuopt  path  transportation Austin           ok       rel=4.38e-02
+  copt   tree  transportation Austin           ok       rel=1.08e-03
+  cuopt  tree  transportation Austin           ok       rel=1.10e-03
+  copt   path  transportation ChicagoRegional  ok       rel=8.83e+02
+  cuopt  path  transportation ChicagoRegional  ok       rel=1.12e+00
+  copt   path  transportation Philadelphia     ok       rel=2.32e+04
+  cuopt  path  transportation Philadelphia     ok       rel=7.18e+02
+  cuopt  path  transportation Sydney           ok       rel=1.00e+00
+  copt   path  intermodal     SUBWAY-132-0     ok       no reference in optimal.csv
+  cuopt  path  intermodal     SUBWAY-132-0     ok       no reference in optimal.csv
+  copt   tree  intermodal     SUBWAY-132-0     ok       no reference in optimal.csv
+  cuopt  tree  intermodal     SUBWAY-132-0     ok       no reference in optimal.csv
+  copt   path  intermodal     SUBWAY-662-0     ok       no reference in optimal.csv
+  cuopt  path  intermodal     SUBWAY-662-0     ok       no reference in optimal.csv
+  copt   tree  intermodal     SUBWAY-662-0     ok       no reference in optimal.csv
+  cuopt  tree  intermodal     SUBWAY-662-0     ok       no reference in optimal.csv

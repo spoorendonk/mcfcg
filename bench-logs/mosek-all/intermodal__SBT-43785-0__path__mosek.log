@@ -1,0 +1,19 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/intermodal/SBT-43785-0.txt.gz --solver mosek --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 238529 vertices, 3741246 arcs, 43757 commodities, 43757 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=43757, capped_arcs=3494226)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   1.1175e+06  87514  43829   745      0      0     72      0   0.055   0.000   0.276   0.333     0.333
+    2          inf         -inf   1.1284e+06  89103  43829  1264   1589      0      0      0   0.114   0.600   0.271   0.996     1.329
+    3          inf         -inf   1.1237e+06  89103  43840     0      0      0     11      0   0.153   0.000   0.274   0.429     1.758
+    4          inf         -inf   1.1238e+06  89251  43840    23    148      0      0      0   0.156   0.264   0.279   0.701     2.459
+    5   1.1237e+06   1.1234e+06   1.1237e+06  89482  43840     0    231      0      0      0   0.159   8.957   0.272   9.388    11.847
+    6   1.1236e+06   1.1235e+06   1.1236e+06  89482  43840     0     *1      0      0      0   0.165   9.045   0.280   9.490    21.338
+CG optimal after 6 iterations. UB=1123599.995820 LB=1123517.005544 gap=8.299e+01 tol=1.124e+02  t_LP=0.802  t_PR=27.966  t_SP=1.652  t_Tot=30.438
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/intermodal/SBT-43785-0.txt.gz,path,6,45725,1123599.995820,1123517.005544,1,31.312,0.802,27.966,1.652

@@ -1,0 +1,27 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/grid/grid14 --solver copt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 1225 vertices, 4760 arcs, 16000 commodities, 1225 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=16000, capped_arcs=4760)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   1.7977e+09   1.7977e+09  16217  16217     0      0      0    217      0   0.359   0.023   0.004   0.386     0.386
+    2          inf   1.7977e+09   2.0002e+09  27921  16217   217  11704      0      0      0   0.346   0.009   0.001   0.364     0.750
+    3          inf   1.7977e+09   1.8060e+09  35390  16292     0   7394      0     75      0   0.389   0.010   0.003   0.411     1.161
+    4          inf   1.7977e+09   1.8061e+09  44284  16303     3   8883      0     11      0   0.599   0.008   0.004   0.619     1.780
+    5          inf   1.8013e+09   1.8036e+09  50555  16311     0   6263      0      8      0   0.683   0.010   0.004   0.703     2.483
+    6          inf   1.8021e+09   1.8030e+09  55224  16316     0   4664      0      5      0   0.641   0.012   0.005   0.664     3.147
+    7          inf   1.8024e+09   1.8028e+09  57917  16318     0   2691      0      2      0   0.730   0.010   0.006   0.751     3.897
+    8          inf   1.8026e+09   1.8027e+09  51774  16222     0   1016   7063      2     98   0.657   0.011   0.006   0.707     4.605
+    9          inf   1.8027e+09   1.8027e+09  47049  16195     0    440   5138      2     29   0.591   0.011   0.005   0.630     5.234
+   10   1.8027e+09   1.8027e+09   1.8027e+09  47049  16195     0   *173      0      0      0   0.545   0.010   0.001   0.557     5.791
+CG optimal after 10 iterations. UB=1802673131.435322 LB=1802670185.347070 gap=2.946e+03 tol=1.803e+05  t_LP=5.539  t_PR=0.143  t_SP=0.040  t_Tot=5.819
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/grid/grid14,path,10,46854,1802673131.435322,1802670185.347070,1,5.862,5.539,0.143,0.040

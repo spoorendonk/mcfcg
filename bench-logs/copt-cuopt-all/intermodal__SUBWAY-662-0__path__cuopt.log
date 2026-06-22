@@ -1,0 +1,15 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/intermodal/SUBWAY-662-0.txt.gz --solver cuopt --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 9361 vertices, 60043 arcs, 650 commodities, 650 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=650, capped_arcs=47601)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   1.8620e+04   1.1397e+04   1300    650   570      0      0      0      0   0.356   0.018   0.006   0.380     0.380
+    2   1.8621e+04   1.8620e+04   1.8621e+04   1300    650     0     *0      0      0      0   0.026   0.018   0.006   0.050     0.430
+CG optimal after 2 iterations. UB=18621.007592 LB=18619.975700 gap=1.032e+00 tol=1.862e+00  t_LP=0.382  t_PR=0.046  t_SP=0.012  t_Tot=0.440
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/intermodal/SUBWAY-662-0.txt.gz,path,2,650,18621.007592,18619.975700,1,0.458,0.382,0.046,0.012

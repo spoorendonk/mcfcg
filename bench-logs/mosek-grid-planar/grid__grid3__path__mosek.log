@@ -1,0 +1,21 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/grid/grid3 --solver mosek --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 100 vertices, 360 arcs, 50 commodities, 40 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=50, capped_arcs=360)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   2.8416e+05    100     50    48      0      0      0      0   0.011   0.000   0.000   0.011     0.011
+    2          inf         -inf   1.5065e+06    100     59     4      0      0      9      0   0.000   0.001   0.000   0.001     0.012
+    3          inf         -inf   1.6534e+06    117     65     9     17      0      6      0   0.001   0.000   0.000   0.001     0.013
+    4          inf         -inf   1.7193e+06    130     67     4     13      0      2      0   0.001   0.000   0.000   0.001     0.015
+    5          inf         -inf   1.5250e+06    138     68     0      8      0      1      0   0.001   0.000   0.000   0.001     0.016
+    6          inf         -inf   1.5243e+06    138     69     0      0      0      1      0   0.001   0.000   0.000   0.001     0.017
+    7   1.5247e+06   1.5246e+06   1.5247e+06    140     69     0      2      0      0      0   0.001   0.000   0.000   0.001     0.018
+    8   1.5246e+06   1.5246e+06   1.5246e+06    140     69     0     *0      0      0      0   0.001   0.000   0.000   0.001     0.019
+CG optimal after 8 iterations. UB=1524641.997611 LB=1524640.237373 gap=1.760e+00 tol=1.525e+02  t_LP=0.017  t_PR=0.003  t_SP=0.000  t_Tot=0.020
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/grid/grid3,path,8,90,1524641.997611,1524640.237373,1,0.023,0.017,0.003,0.000

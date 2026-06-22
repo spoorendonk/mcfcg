@@ -1,0 +1,17 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/transportation/ChicagoRegional_net.tntp.gz --solver cuopt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+TNTP: net=/home/simon/code/my/mcfcg/data/transportation/ChicagoRegional_net.tntp.gz trips=/home/simon/code/my/mcfcg/data/transportation/ChicagoRegional_trips.tntp.gz coef=4.1
+Instance: 12982 vertices, 39018 arcs, 2297945 commodities, 1771 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=2297945, capped_arcs=39018)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   5.4984e+06   5.5141e+06 2298237 2298237     0      0      0    292      0   7.770   0.402   0.300   8.502     8.502
+    2          inf   5.4984e+06   6.4563e+06 2348237 2298237   292  50000      0      0      0  32.194   0.391   0.034  32.708    41.210
+    3          inf   5.4984e+06   1.1705e+07 2398249 2298249   239  50000      0     12      0  43.416   0.329   0.055  43.901    85.111
+CG stopped after 3 iterations. UB=11704807.913414 LB=5498380.680423 gap=6.206e+06 tol=1.170e+03  t_LP=99.705  t_PR=4.450  t_SP=0.389  t_Tot=104.767
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/transportation/ChicagoRegional_net.tntp.gz,path,3,2397945,11704807.913414,5498380.680423,0,105.114,99.705,4.450,0.389

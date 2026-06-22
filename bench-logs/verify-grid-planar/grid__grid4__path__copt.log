@@ -1,0 +1,25 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/grid/grid4 --solver copt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 100 vertices, 360 arcs, 100 commodities, 63 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=100, capped_arcs=360)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   3.0156e+06   5.4674e+05    200    100    97      0      0      0      0   0.343   0.000   0.000   0.343     0.343
+    2          inf   3.0156e+06   2.9899e+06    200    120     7      0      0     20      0   0.159   0.000   0.000   0.159     0.502
+    3          inf   3.0156e+06   3.2758e+06    252    126    24     52      0      6      0   0.160   0.000   0.000   0.160     0.662
+    4          inf   3.0156e+06   4.2849e+06    287    130    13     35      0      4      0   0.161   0.000   0.000   0.161     0.823
+    5          inf   3.0156e+06   3.0337e+06    319    134     1     32      0      4      0   0.168   0.000   0.000   0.168     0.991
+    6          inf   3.0305e+06   3.0324e+06    328    138     0      9      0      4      0   0.163   0.000   0.000   0.163     1.154
+    7   3.0319e+06   3.0313e+06   3.0319e+06    337    138     0      9      0      0      0   0.161   0.000   0.000   0.161     1.315
+    8   3.0317e+06   3.0317e+06   3.0317e+06    337    138     0     *0      0      0      0   0.161   0.002   0.000   0.163     1.478
+CG optimal after 8 iterations. UB=3031695.001622 LB=3031691.506784 gap=3.495e+00 tol=3.032e+02  t_LP=1.474  t_PR=0.004  t_SP=0.000  t_Tot=1.479
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/grid/grid4,path,8,237,3031695.001622,3031691.506784,1,1.494,1.474,0.004,0.000

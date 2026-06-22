@@ -1,0 +1,35 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/intermodal/BUS-7896-0.txt.gz --solver copt --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 130395 vertices, 710935 arcs, 7883 commodities, 7883 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=7883, capped_arcs=524037)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   2.0473e+05  15766   7960   475      0      0     77      0   0.276   0.000   0.050   0.327     0.327
+    2          inf         -inf   2.0647e+05  16207   7960   631    441      0      0      0   0.077   0.051   0.053   0.183     0.510
+    3          inf         -inf   2.1096e+05  16207   8035    32      0      0     75      0   0.080   0.000   0.049   0.130     0.640
+    4          inf         -inf   2.1190e+05  16207   8039    99      0      0      4      0   0.083   0.000   0.053   0.136     0.775
+    5          inf         -inf   2.1192e+05  16273   8039   100     66      0      0      0   0.090   0.028   0.058   0.177     0.952
+    6          inf   1.6458e+05   2.1640e+05  16807   8039   103    534      0      0      0   0.080   0.197   0.054   0.332     1.285
+    7          inf   1.6458e+05   2.1075e+05  16807   8048     3      0      0      9      0   0.091   0.000   0.050   0.141     1.426
+    8          inf   1.6458e+05   2.1081e+05  16807   8049     5      0      0      1      0   0.095   0.000   0.053   0.148     1.574
+    9          inf   1.6458e+05   2.1081e+05  16809   7989     5      2      0      0     60   0.096   0.026   0.057   0.180     1.754
+   10          inf   1.6458e+05   2.1130e+05  16809   7990     5      0      0      1      0   0.092   0.000   0.051   0.143     1.897
+   11          inf   1.6458e+05   2.1130e+05  16810   7986     5      1      0      0      4   0.088   0.024   0.054   0.167     2.063
+   12          inf   1.9822e+05   2.1178e+05  17012   7961     4    202      0      0     25   0.085   0.208   0.053   0.347     2.410
+   13          inf   1.9822e+05   2.1060e+05  17012   7974     0      0      0     13      0   0.089   0.000   0.049   0.138     2.549
+   14          inf   1.9822e+05   2.1061e+05  17012   7976     0      0      0      2      0   0.092   0.000   0.051   0.144     2.693
+   15   2.1061e+05   1.9822e+05   2.1061e+05  17014   7974     0      2      0      0      2   0.090   0.024   0.057   0.171     2.863
+   16   2.1061e+05   2.1046e+05   2.1061e+05  17101   7973     0     87      0      0      1   0.089   0.200   0.055   0.345     3.209
+   17   2.1061e+05   2.1046e+05   2.1060e+05  17101   7974     0      0      0      1      0   0.092   0.000   0.049   0.141     3.350
+   18   2.1060e+05   2.1058e+05   2.1060e+05  17101   7974     0     *6      0      0      0   0.091   0.219   0.052   0.362     3.712
+CG optimal after 18 iterations. UB=210596.500000 LB=210576.876083 gap=1.962e+01 tol=2.106e+01  t_LP=1.776  t_PR=1.187  t_SP=0.947  t_Tot=3.922
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/intermodal/BUS-7896-0.txt.gz,path,18,9218,210596.500000,210576.876083,1,4.134,1.776,1.187,0.947

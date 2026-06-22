@@ -1,0 +1,14 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/transportation/Sydney_net.tntp.gz --solver cuopt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+TNTP: net=/home/simon/code/my/mcfcg/data/transportation/Sydney_net.tntp.gz trips=/home/simon/code/my/mcfcg/data/transportation/Sydney_trips.tntp.gz coef=1.9
+Instance: 33113 vertices, 75379 arcs, 3343560 commodities, 3257 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=3343560, capped_arcs=75379)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+CG stopped after 0 iterations. UB=0.000000 LB=-inf gap=inf tol=1.000e-04  t_LP=7.932  t_PR=8.041  t_SP=0.000  t_Tot=15.975
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/transportation/Sydney_net.tntp.gz,path,0,0,0.000000,,0,16.504,7.932,8.041,0.000

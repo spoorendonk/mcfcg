@@ -1,0 +1,15 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/intermodal/SUBWAY-308-0.txt.gz --solver mosek --formulation tree --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 8663 vertices, 36730 arcs, 301 commodities, 301 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=301, capped_arcs=24288)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   8.8345e+03   4.4800e+03    602    301   290      0      0      0      0   0.008   0.008   0.003   0.019     0.019
+    2   8.8350e+03   8.8345e+03   8.8350e+03    602    301     0     *0      0      0      0   0.000   0.007   0.003   0.010     0.029
+CG optimal after 2 iterations. UB=8835.012625 LB=8834.515300 gap=4.973e-01 tol=8.835e-01  t_LP=0.008  t_PR=0.020  t_SP=0.007  t_Tot=0.035
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/intermodal/SUBWAY-308-0.txt.gz,tree,2,301,8835.012625,8834.515300,1,0.047,0.008,0.020,0.007

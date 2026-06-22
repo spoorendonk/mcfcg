@@ -1,0 +1,24 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/planar/planar30 --solver copt --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 30 vertices, 150 arcs, 92 commodities, 29 sources
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=92, capped_arcs=150)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   4.3134e+07   4.3130e+07    184    109     1      0      0     17      0   0.327   0.000   0.000   0.328     0.328
+    2          inf   4.3134e+07   4.8730e+07    235    109    26     51      0      0      0   0.154   0.000   0.000   0.154     0.482
+    3          inf   4.3134e+07   6.6842e+07    273    111    11     38      0      2      0   0.157   0.000   0.000   0.157     0.639
+    4          inf   4.3134e+07   4.4632e+07    286    114     2     13      0      3      0   0.156   0.000   0.000   0.156     0.795
+    5          inf   4.3225e+07   4.4467e+07    300    115     0     14      0      1      0   0.151   0.000   0.000   0.151     0.946
+    6          inf   4.4335e+07   4.4350e+07    302    116     0      2      0      1      0   0.154   0.000   0.000   0.155     1.101
+    7   4.4351e+07   4.4351e+07   4.4351e+07    302    116     0     *0      0      0      0   0.154   0.000   0.000   0.154     1.255
+CG optimal after 7 iterations. UB=44350624.000425 LB=44350623.718525 gap=2.819e-01 tol=4.435e+03  t_LP=1.252  t_PR=0.003  t_SP=0.000  t_Tot=1.256
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/planar/planar30,path,7,210,44350624.000425,44350623.718525,1,1.271,1.252,0.003,0.000

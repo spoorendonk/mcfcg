@@ -1,0 +1,22 @@
+# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/planar/planar50 --solver mosek --formulation path --max-iters 10000 --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# === STDERR (CG iteration log + preamble) ===
+Instance: 50 vertices, 250 arcs, 267 commodities, 50 sources
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=267, capped_arcs=250)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   1.1503e+08   1.1503e+08    301    301     0      0      0     34      0   0.009   0.000   0.000   0.010     0.010
+    2          inf   1.1503e+08   2.4408e+08    513    301    34    212      0      0      0   0.004   0.000   0.000   0.005     0.015
+    3          inf   1.1771e+08   1.2149e+08    624    311     0    101      0     10      0   0.004   0.000   0.000   0.005     0.019
+    4          inf   1.1771e+08   1.2847e+08    752    322     2    117      0     11      0   0.006   0.000   0.000   0.006     0.026
+    5          inf   1.1771e+08   1.2437e+08    856    326     1    100      0      4      0   0.007   0.000   0.000   0.008     0.034
+    6          inf   1.2151e+08   1.2240e+08    904    327     0     47      0      1      0   0.008   0.000   0.000   0.009     0.042
+    7   1.2224e+08   1.2209e+08   1.2224e+08    920    327     0     16      0      0      0   0.008   0.000   0.000   0.008     0.050
+    8   1.2221e+08   1.2217e+08   1.2221e+08    841    322     0     16     90      0      5   0.008   0.000   0.000   0.008     0.058
+    9   1.2220e+08   1.2220e+08   1.2220e+08    841    322     0     *1      0      0      0   0.008   0.000   0.000   0.008     0.066
+CG optimal after 9 iterations. UB=122200074.810203 LB=122198530.142370 gap=1.545e+03 tol=1.222e+04  t_LP=0.063  t_PR=0.002  t_SP=0.001  t_Tot=0.068
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+/home/simon/code/my/mcfcg/data/commalab/planar/planar50,path,9,786,122200074.810203,122198530.142370,1,0.072,0.063,0.002,0.001
