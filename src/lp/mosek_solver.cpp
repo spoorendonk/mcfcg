@@ -65,6 +65,11 @@ class MosekSolver : public LPSolver {
 private:
     MSKenv_t _env = nullptr;
     MSKtask_t _task = nullptr;
+    // Authoritative solution slot the getters read. MOSEK keeps the interior
+    // point in MSK_SOL_ITR; a certify solve (basis identification) writes the
+    // rounded vertex into MSK_SOL_BAS, so solve() switches this to MSK_SOL_BAS
+    // for that solve. Default MSK_SOL_ITR (steady-state, no crossover).
+    MSKsoltypee _sol = MSK_SOL_ITR;
 
 public:
     explicit MosekSolver(bool verbose = false) {
@@ -275,6 +280,10 @@ public:
         check_mosek(
             MSK_putintparam(_task, MSK_IPAR_INTPNT_BASIS, certify ? MSK_BI_ALWAYS : MSK_BI_NEVER),
             "IntpntBasis");
+        // A certify solve rounds the interior point to a vertex in MSK_SOL_BAS;
+        // read that slot so the getters return the crossed-over (slack-cleared)
+        // solution rather than the unchanged interior point in MSK_SOL_ITR.
+        _sol = certify ? MSK_SOL_BAS : MSK_SOL_ITR;
         MSKrescodee trmcode = MSK_RES_OK;
         MSKrescodee res = MSK_optimizetrm(_task, &trmcode);
         if (res != MSK_RES_OK) {
@@ -287,13 +296,13 @@ public:
         // The solution status is the authoritative gate, not trmcode: a
         // non-converged termination (stall / max-iterations / numerical, all of
         // which still return res == MSK_RES_OK with trmcode set) leaves the
-        // MSK_SOL_ITR solsta non-OPTIMAL, so the default branch below maps it to
-        // Error. A trmcode warning that nonetheless reached optimal tolerance
+        // active slot's solsta non-OPTIMAL, so the default branch below maps it
+        // to Error. A trmcode warning that nonetheless reached optimal tolerance
         // yields solsta == OPTIMAL and is a usable solution (cf. COPT's
         // IMPRECISE -> Optimal); gating on trmcode would spuriously fail those.
         // Either way an unconverged barrier can never leak out as Optimal (#33).
         MSKsolstae solsta = MSK_SOL_STA_UNKNOWN;
-        if (MSK_getsolsta(_task, MSK_SOL_ITR, &solsta) != MSK_RES_OK) {
+        if (MSK_getsolsta(_task, _sol, &solsta) != MSK_RES_OK) {
             return LPStatus::Error;
         }
 
@@ -311,14 +320,14 @@ public:
 
     double get_obj() const override {
         double val = 0.0;
-        check_mosek(MSK_getprimalobj(_task, MSK_SOL_ITR, &val), "getprimalobj");
+        check_mosek(MSK_getprimalobj(_task, _sol, &val), "getprimalobj");
         return val;
     }
 
     std::vector<double> get_primals() const override {
         std::vector<double> vals(num_cols());
         if (!vals.empty()) {
-            check_mosek(MSK_getxx(_task, MSK_SOL_ITR, vals.data()), "getxx");
+            check_mosek(MSK_getxx(_task, _sol, vals.data()), "getxx");
         }
         return vals;
     }
@@ -326,7 +335,7 @@ public:
     std::vector<double> get_duals() const override {
         std::vector<double> vals(num_rows());
         if (!vals.empty()) {
-            check_mosek(MSK_gety(_task, MSK_SOL_ITR, vals.data()), "gety");
+            check_mosek(MSK_gety(_task, _sol, vals.data()), "gety");
         }
         return vals;
     }
@@ -337,9 +346,8 @@ public:
         if (n > 0) {
             // MSK_getreducedcosts returns slx - sux = c_j - (A'y)_j, the same
             // reduced-cost convention COPT/HiGHS expose.
-            check_mosek(
-                MSK_getreducedcosts(_task, MSK_SOL_ITR, 0, static_cast<int32_t>(n), vals.data()),
-                "getreducedcosts");
+            check_mosek(MSK_getreducedcosts(_task, _sol, 0, static_cast<int32_t>(n), vals.data()),
+                        "getreducedcosts");
         }
         return vals;
     }

@@ -191,7 +191,8 @@ cmake --build build -j$(nproc)
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `-DMCFCG_USE_CUOPT=ON`   | OFF | Enable the NVIDIA cuOpt GPU LP backend. Always uses cuOpt's incremental delta C API, so it requires the fork below (configure errors if `cuopt_c_delta.h` is absent). |
+| `-DMCFCG_USE_CUOPT=ON`   | OFF | Enable the NVIDIA cuOpt GPU LP backend. Defaults to cuOpt's incremental delta C API (`MCFCG_CUOPT_DELTA_API`, below), which requires the fork. |
+| `-DMCFCG_CUOPT_DELTA_API=OFF` | ON | Opt out of the delta C API for stock (non-fork) cuOpt: falls back to the rebuild-from-scratch path, which recreates the whole LP every CG iteration — a serious performance degradation. Default ON requires the fork's `cuopt_c_delta.h` (configure errors if absent). Only meaningful with `-DMCFCG_USE_CUOPT=ON`. |
 | `-DMCFCG_USE_COPT=ON`    | OFF | Enable the COPT LP backend (requires COPT installed, `COPT_HOME` set) |
 | `-DMCFCG_USE_MOSEK=ON`   | OFF | Enable the MOSEK CPU barrier LP backend (requires MOSEK, `MOSEK_HOME` set) |
 | `-DMCFCG_NATIVE_ARCH=OFF` | ON | Disable `-march=native`. Keep ON for SIMD auto-vectorization of the hot `cost[a] - mu[a]` pricing loop; only turn OFF for portable binaries. |
@@ -199,11 +200,15 @@ cmake --build build -j$(nproc)
 ### cuOpt and the delta-API fork
 
 The cuOpt backend mutates the restricted master incrementally (add/delete
-columns and rows, re-solve), so it always uses cuOpt's incremental delta C API.
-Stock cuOpt has no such API; the backend needs a cuOpt build that ships
-`cuopt_c_delta.h` — the [`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt)
-fork (delta-api branch). **You must build that fork yourself first** (configure
-errors out if the header is missing). Then point the configure at it (an install
+columns and rows, re-solve), so by default it uses cuOpt's incremental delta C
+API (`MCFCG_CUOPT_DELTA_API=ON`). Stock cuOpt has no such API; the default path
+needs a cuOpt build that ships `cuopt_c_delta.h` — the
+[`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt) fork (delta-api
+branch). **Build that fork first** (configure errors out if the header is
+missing), or reconfigure with `-DMCFCG_CUOPT_DELTA_API=OFF` to fall back to the
+rebuild-from-scratch path on stock cuOpt — a serious performance degradation
+(the whole LP is recreated every CG iteration), supported only as a
+compatibility fallback. To use the fork, point the configure at it (an install
 prefix or a source checkout both work):
 
 ```bash
@@ -244,7 +249,9 @@ construction (captured in the CG / benchmark logs), e.g.:
 ```
 
 `threads=auto(N)` reports the backend's effective thread count (`N` = hardware
-concurrency when the backend auto-selects); `exec` is CPU or GPU.
+concurrency when the backend auto-selects); `exec` is CPU or GPU. The banner
+reports the steady-state pins — a stall-recovery certify solve transiently runs
+crossover on the crossover-capable backends (HiGHS/COPT/MOSEK; see below).
 
 **HiGHS crossover-on-certify (stall recovery).** HiGHS uses the HiPO
 interior-point method with crossover **off** per iteration, so the bulk of CG is
