@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cmath>
 #include <cstdint>
 #include <cuopt/linear_programming/constants.h>
 #include <cuopt/linear_programming/cuopt_c.h>
@@ -115,22 +114,13 @@ LPStatus extract_solution(cuOptSolution solution, uint32_t n, uint32_t m, double
     }
     reduced_costs.assign(f_rc.begin(), f_rc.end());
 
-    // Defensive guard for #33: a failed cuOpt GPU barrier (cuDSS device-alloc /
-    // numerical error) deterministically yields CUOPT_TERMINATION_STATUS_
-    // NUMERICAL_ERROR, already rejected above. But cuOpt can also
-    // nondeterministically report OPTIMAL while the failed factorization
-    // collapsed the search direction to NaN and returned a garbage incumbent.
-    // Reject a non-finite "optimal" solution rather than feeding it to the CG
-    // loop. (Finite-but-wrong garbage from a mislabelled OPTIMAL is a
-    // cuOpt-internal bug; see #33 for the upstream report.)
-    auto all_finite = [](const std::vector<double>& vec) {
-        return std::all_of(vec.begin(), vec.end(), [](double val) { return std::isfinite(val); });
-    };
-    if (!std::isfinite(obj) || !all_finite(primals) || !all_finite(duals) ||
-        !all_finite(reduced_costs)) {
-        return LPStatus::Error;
-    }
-
+    // #33: a failed GPU barrier (cuDSS device-alloc / numerical error) used to
+    // throw through cuDSS C frames (UB) and could surface as a mislabelled
+    // OPTIMAL with a NaN-collapsed incumbent. The spoorendonk/cuopt fork
+    // (delta-api, sparse_cholesky.cuh: cuDSS mem handlers return an error code
+    // instead of throwing) propagates the failure as status<0 ->
+    // CUOPT_TERMINATION_STATUS_NUMERICAL_ERROR, already rejected above. No
+    // finite-solution guard is needed against the fork barrier.
     return LPStatus::Optimal;
 }
 
