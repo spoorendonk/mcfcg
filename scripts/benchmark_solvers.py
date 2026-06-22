@@ -3,21 +3,23 @@
 
 Drives the mcfcg CLI (which already exposes --solver / --formulation) over the
 instances in data/, one (instance, solver) run at a time with a per-instance
-timeout, and checks the reported objective against the paper reference in each
-family's optimal.csv. No library or test changes — pure CLI driver.
+CLI-side time budget (--time-limit), and checks the reported objective against
+the paper reference in each family's optimal.csv. No library or test changes —
+pure CLI driver. Every run's full CG log is saved under --logdir.
 
 The CLI prints a 2-line CSV to stdout (header + data row); the preamble goes to
 stderr. See src/main.cpp. Columns:
   instance,formulation,iterations,columns,objective,lower_bound,optimal,
   time,time_lp,time_pricing,time_separation
 
-Outcomes per run: ok (parsed), timeout (exceeded --timeout), error (nonzero
-exit / crash / unparseable output).
+Outcomes per run: ok (parsed) or error (nonzero exit / crash / unparseable
+output). The subprocess is never killed — the CLI's --time-limit is the only
+stopping mechanism, so a run always self-terminates and reports its best UB/LB.
 
 Examples:
   # smoke one instance, both backends
   python3 scripts/benchmark_solvers.py --families grid --instances grid1 \
-      --solvers copt,cuopt --timeout 120
+      --solvers copt,cuopt --time-limit 120
 
   # full cuOpt pass, 2h/instance
   python3 scripts/benchmark_solvers.py --solvers cuopt --out bench-cuopt.csv
@@ -67,23 +69,23 @@ def enumerate_family(family):
         for i in range(1, 16):
             p = os.path.join(d, "commalab/grid", f"grid{i}")
             if os.path.exists(p):
-                yield p, f"grid{i}", "path", []
+                yield p, f"grid{i}", "tree", []
         return
     if family == "planar":
         for n in PLANAR_SIZES:
             p = os.path.join(d, "commalab/planar", f"planar{n}")
             if os.path.exists(p):
-                yield p, f"planar{n}", "path", []
+                yield p, f"planar{n}", "tree", []
         return
     if family == "transportation":
         for net in sorted(glob.glob(os.path.join(d, "transportation", "*_net.tntp.gz"))):
             key = os.path.basename(net)[: -len("_net.tntp.gz")]
-            yield net, key, "path", []
+            yield net, key, "tree", []
         return
     if family == "intermodal":
         for inst in sorted(glob.glob(os.path.join(d, "intermodal", "*.txt.gz"))):
             key = os.path.basename(inst)[: -len(".txt.gz")]
-            # CLAUDE.md: intermodal needs tree formulation + PricerHeavy.
+            # Tree is the default everywhere; intermodal additionally needs PricerHeavy.
             yield inst, key, "tree", ["--strategy", "pricer-heavy"]
         return
     raise ValueError(f"unknown family '{family}'")
@@ -121,8 +123,8 @@ def write_log(log_path, cmd, stdout, stderr, returncode, outcome):
     per-iteration CG log (It/UB/LB/LP_obj/#col/#row/#slk/+col/-col/+cut/-cut,
     timings, t_acc) plus the summary line — enough to reconstruct cut growth,
     slack dynamics, and bound history. stdout carries the final CSV row. We dump
-    both verbatim regardless of outcome (success, error, or killed) so a partial
-    run is never silently lost.
+    both verbatim regardless of outcome (success or error) so a partial run is
+    never silently lost.
     """
     with open(log_path, "w") as f:
         f.write("# cmd: " + " ".join(cmd) + "\n")
@@ -152,14 +154,13 @@ def read_peak_mem_gb(mem_path):
             pass
 
 
-def run_one(binary, instance, solver, formulation, extra, timeout, max_iters, log_path=None,
+def run_one(binary, instance, solver, formulation, extra, max_iters, log_path=None,
             time_limit=None):
     cmd = [binary, instance, "--solver", solver, "--formulation", formulation,
            "--max-iters", str(max_iters)] + extra
-    # Prefer the CLI's own --time-limit: it stops the CG loop at an iteration
-    # boundary and still prints its result, so the run self-terminates cleanly
-    # instead of being SIGKILLed. The subprocess `timeout` below is only a safety
-    # net (set comfortably above time_limit by the caller).
+    # Rely entirely on the CLI's own --time-limit: it stops the CG loop at an
+    # iteration boundary and still prints its result, so the run self-terminates
+    # cleanly. We never kill the subprocess — no wall-clock safety net.
     if time_limit:
         cmd = cmd + ["--time-limit", str(time_limit)]
     # Wrap in GNU time to capture whole-process peak RSS (paper's mem_gb metric).
@@ -172,8 +173,8 @@ def run_one(binary, instance, solver, formulation, extra, timeout, max_iters, lo
         os.close(fd)
         run_cmd = [GNU_TIME, "-o", mem_path, "-f", "%M"] + cmd
     # Stream stdout/stderr straight to temp files rather than buffering in memory,
-    # so a partial run's output survives even if the safety-net timeout kills the
-    # process — the saved log is assembled from these files regardless of outcome.
+    # so a partial run's output survives — the saved log is assembled from these
+    # files regardless of outcome.
     out_fd, out_path = tempfile.mkstemp(prefix="mcfcg_out_", suffix=".txt")
     err_fd, err_path = tempfile.mkstemp(prefix="mcfcg_err_", suffix=".txt")
     os.close(out_fd)
@@ -181,17 +182,13 @@ def run_one(binary, instance, solver, formulation, extra, timeout, max_iters, lo
     # The binary inherits the caller's environment. A cuOpt build embeds an
     # RPATH to libcuopt, so no LD_LIBRARY_PATH is normally needed; set it in your
     # shell only if the cuOpt fork build was moved after configuring.
-    killed = False
     returncode = None
     try:
         with open(out_path, "w") as out_f, open(err_path, "w") as err_f:
             proc = subprocess.Popen(run_cmd, stdout=out_f, stderr=err_f, text=True)
-            try:
-                returncode = proc.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-                killed = True
+            # Never kill the subprocess: wait unconditionally. The CLI's
+            # --time-limit is the only stopping mechanism.
+            returncode = proc.wait()
         with open(out_path) as f:
             stdout = f.read()
         with open(err_path) as f:
@@ -203,11 +200,9 @@ def run_one(binary, instance, solver, formulation, extra, timeout, max_iters, lo
             except OSError:
                 pass
     mem_gb = read_peak_mem_gb(mem_path)
-    outcome = "timeout" if killed else ("ok" if returncode == 0 else "error")
+    outcome = "ok" if returncode == 0 else "error"
     if log_path:
         write_log(log_path, cmd, stdout, stderr, returncode, outcome)
-    if killed:
-        return {"outcome": "timeout", "mem_gb": mem_gb}
     if returncode != 0:
         tail = "\n".join(stderr.strip().splitlines()[-3:])
         return {"outcome": "error", "returncode": returncode, "stderr_tail": tail,
@@ -238,31 +233,28 @@ def main():
     ap.add_argument("--formulations", default=None,
                     help="comma-separated formulations to run for every instance "
                          "(e.g. 'path,tree'). Overrides each family's default. "
-                         "Omit to use the per-family default (path for grid/planar/"
-                         "transportation, tree for intermodal).")
+                         "Omit to use the per-family default (tree for every family; "
+                         "intermodal additionally uses --strategy pricer-heavy).")
     ap.add_argument("--instances", default=None,
                     help="fnmatch glob on the ref key to filter (e.g. 'grid1', 'BUS-*').")
     ap.add_argument("--max-planar", type=int, default=None,
                     help="skip planar instances larger than this vertex count.")
-    ap.add_argument("--timeout", type=float, default=7200.0,
-                    help="hard wall-clock safety net per instance, in seconds (default 2h). The "
-                         "process is killed if it exceeds this. When --time-limit is set, the "
-                         "effective net is max(this, time-limit + 300).")
-    ap.add_argument("--time-limit", type=float, default=None,
-                    help="CLI-side CG wall-clock budget in seconds, passed as --time-limit. The "
-                         "solver stops at the next iteration and still reports its best UB/LB "
-                         "(result marked non-optimal). Preferred over relying on --timeout.")
+    ap.add_argument("--time-limit", type=float, default=7200.0,
+                    help="CLI-side CG wall-clock budget in seconds, passed as --time-limit "
+                         "(default 2h). The solver stops at the next iteration and still reports "
+                         "its best UB/LB (result marked non-optimal). The subprocess is never "
+                         "killed; this is the only stopping mechanism.")
     ap.add_argument("--max-iters", type=int, default=10000)
     ap.add_argument("--tol", type=float, default=1e-3, help="relative objective tolerance for pass.")
     ap.add_argument("--out", default="bench-results.csv")
-    ap.add_argument("--logdir", default=None,
+    ap.add_argument("--logdir", default="bench-logs",
                     help="directory to save each run's full stdout+stderr (the per-iteration "
                          "CG log: cut growth, slack/bound history, timings). One file per run, "
-                         "named <family>__<instance>__<formulation>__<solver>.log.")
+                         "named <family>__<instance>__<formulation>__<solver>.log. "
+                         "Always written (default 'bench-logs').")
     args = ap.parse_args()
 
-    if args.logdir:
-        os.makedirs(args.logdir, exist_ok=True)
+    os.makedirs(args.logdir, exist_ok=True)
 
     if not os.path.exists(args.binary):
         sys.exit(f"binary not found: {args.binary} (build it first)")
@@ -276,7 +268,7 @@ def main():
               "ref", "rel_err", "pass", "optimal", "iterations", "columns", "time", "mem_gb",
               "detail"]
     rows = []
-    summary = {s: {"pass": 0, "fail": 0, "timeout": 0, "error": 0, "noref": 0} for s in solvers}
+    summary = {s: {"pass": 0, "fail": 0, "error": 0, "noref": 0} for s in solvers}
 
     for family in families:
         refs = load_optimal(os.path.join(REPO, "data", FAMILY_OPTIMAL[family]))
@@ -292,15 +284,10 @@ def main():
               for solver in solvers:
                 sys.stderr.write(f"[{family}] {key} :: {formulation}/{solver} ... ")
                 sys.stderr.flush()
-                log_path = (os.path.join(args.logdir,
-                                         f"{family}__{key}__{formulation}__{solver}.log")
-                            if args.logdir else None)
-                # Keep the hard kill comfortably above the CLI budget so the
-                # solver self-terminates and prints before the safety net fires.
-                net = (max(args.timeout, args.time_limit + 300.0)
-                       if args.time_limit else args.timeout)
+                log_path = os.path.join(args.logdir,
+                                        f"{family}__{key}__{formulation}__{solver}.log")
                 r = run_one(args.binary, instance, solver, formulation, extra,
-                            net, args.max_iters, log_path=log_path,
+                            args.max_iters, log_path=log_path,
                             time_limit=args.time_limit)
                 ref = refs.get(key)
                 rec = {"family": family, "instance": key, "solver": solver,
@@ -335,10 +322,10 @@ def main():
         w.writerows(rows)
 
     print(f"\nWrote {len(rows)} rows to {args.out}\n")
-    print(f"{'solver':<8} {'pass':>5} {'fail':>5} {'timeout':>8} {'error':>6} {'noref':>6}")
+    print(f"{'solver':<8} {'pass':>5} {'fail':>5} {'error':>6} {'noref':>6}")
     for s in solvers:
         c = summary[s]
-        print(f"{s:<8} {c['pass']:>5} {c['fail']:>5} {c['timeout']:>8} {c['error']:>6} {c['noref']:>6}")
+        print(f"{s:<8} {c['pass']:>5} {c['fail']:>5} {c['error']:>6} {c['noref']:>6}")
     nonpass = [r for r in rows if r["pass"] is not True]
     if nonpass:
         print("\nNon-pass runs:")
