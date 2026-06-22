@@ -14,7 +14,9 @@ stderr. See src/main.cpp. Columns:
 
 Outcomes per run: ok (parsed) or error (nonzero exit / crash / unparseable
 output). The subprocess is never killed — the CLI's --time-limit is the only
-stopping mechanism, so a run always self-terminates and reports its best UB/LB.
+stopping mechanism. It is enforced at CG iteration boundaries, so a run
+self-terminates and reports its best UB/LB once it reaches one; a backend stuck
+inside a single LP solve (e.g. a barrier pathology) is not interrupted.
 
 Examples:
   # smoke one instance, both backends
@@ -243,7 +245,8 @@ def main():
                     help="CLI-side CG wall-clock budget in seconds, passed as --time-limit "
                          "(default 2h). The solver stops at the next iteration and still reports "
                          "its best UB/LB (result marked non-optimal). The subprocess is never "
-                         "killed; this is the only stopping mechanism.")
+                         "killed; this is the only stopping mechanism, enforced at iteration "
+                         "boundaries (a barrier stuck mid-solve is not interrupted).")
     ap.add_argument("--max-iters", type=int, default=10000)
     ap.add_argument("--tol", type=float, default=1e-3, help="relative objective tolerance for pass.")
     ap.add_argument("--out", default="bench-results.csv")

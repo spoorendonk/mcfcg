@@ -37,11 +37,18 @@ public:
         // GPUMode 2 requests the GPU barrier; COPT falls back to CPU when no GPU
         // is present, so this is safe on a GPU-less host (it does not crash).
         // Override via MCFCG_COPT_GPUMODE (0=CPU, 1=GPU mode 1, 2=GPU mode 2).
+        // Garbage or out-of-range input keeps the default rather than silently
+        // forcing CPU (which atoi would do for non-numeric strings).
         int gpu_mode = 2;
-        if (const char* gm = std::getenv("MCFCG_COPT_GPUMODE")) {
-            gpu_mode = std::atoi(gm);
+        if (const char* gpu_env = std::getenv("MCFCG_COPT_GPUMODE")) {
+            char* end = nullptr;
+            long parsed = std::strtol(gpu_env, &end, 10);
+            if (end != gpu_env && *end == '\0' && parsed >= 0 && parsed <= 2) {
+                gpu_mode = static_cast<int>(parsed);
+            }
         }
-        check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_GPUMODE, gpu_mode), "GPUMode");
+        check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_GPUMODE, gpu_mode),
+                   ("GPUMode=" + std::to_string(gpu_mode)).c_str());
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_PRESOLVE, 0), "Presolve=off");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_CROSSOVER, 0), "Crossover=off");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_LOGGING, verbose ? 1 : 0), "Logging");
