@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <cuopt/linear_programming/constants.h>
 #include <cuopt/linear_programming/cuopt_c.h>
@@ -54,17 +55,20 @@ void check_cuopt(cuopt_int_t status, const char* msg) {
 // that passes a finite infinity sentinel.
 constexpr double CUOPT_BOUND_INF_THRESHOLD = 1e19;
 cuopt_float_t to_cuopt_bound(double v) {
-    if (v >= CUOPT_BOUND_INF_THRESHOLD)
+    if (v >= CUOPT_BOUND_INF_THRESHOLD) {
         return CUOPT_INFINITY;
-    if (v <= -CUOPT_BOUND_INF_THRESHOLD)
+    }
+    if (v <= -CUOPT_BOUND_INF_THRESHOLD) {
         return -CUOPT_INFINITY;
+    }
     return static_cast<cuopt_float_t>(v);
 }
 std::vector<cuopt_float_t> to_cuopt_bounds(const std::vector<double>& v) {
     std::vector<cuopt_float_t> out;
     out.reserve(v.size());
-    for (double x : v)
+    for (double x : v) {
         out.push_back(to_cuopt_bound(x));
+    }
     return out;
 }
 
@@ -77,32 +81,55 @@ LPStatus extract_solution(cuOptSolution solution, uint32_t n, uint32_t m, double
     if (cuOptGetTerminationStatus(solution, &term_status) != CUOPT_SUCCESS) {
         return LPStatus::Error;
     }
-    if (term_status == CUOPT_TERMINATION_STATUS_INFEASIBLE)
+    if (term_status == CUOPT_TERMINATION_STATUS_INFEASIBLE) {
         return LPStatus::Infeasible;
-    if (term_status == CUOPT_TERMINATION_STATUS_UNBOUNDED)
+    }
+    if (term_status == CUOPT_TERMINATION_STATUS_UNBOUNDED) {
         return LPStatus::Unbounded;
-    if (term_status != CUOPT_TERMINATION_STATUS_OPTIMAL)
+    }
+    if (term_status != CUOPT_TERMINATION_STATUS_OPTIMAL) {
         return LPStatus::Error;
+    }
 
     cuopt_float_t obj_val = 0;
-    if (cuOptGetObjectiveValue(solution, &obj_val) != CUOPT_SUCCESS)
+    if (cuOptGetObjectiveValue(solution, &obj_val) != CUOPT_SUCCESS) {
         return LPStatus::Error;
+    }
     obj = static_cast<double>(obj_val);
 
     std::vector<cuopt_float_t> f_primals(n);
-    if (cuOptGetPrimalSolution(solution, f_primals.data()) != CUOPT_SUCCESS)
+    if (cuOptGetPrimalSolution(solution, f_primals.data()) != CUOPT_SUCCESS) {
         return LPStatus::Error;
+    }
     primals.assign(f_primals.begin(), f_primals.end());
 
     std::vector<cuopt_float_t> f_duals(m);
-    if (cuOptGetDualSolution(solution, f_duals.data()) != CUOPT_SUCCESS)
+    if (cuOptGetDualSolution(solution, f_duals.data()) != CUOPT_SUCCESS) {
         return LPStatus::Error;
+    }
     duals.assign(f_duals.begin(), f_duals.end());
 
     std::vector<cuopt_float_t> f_rc(n);
-    if (cuOptGetReducedCosts(solution, f_rc.data()) != CUOPT_SUCCESS)
+    if (cuOptGetReducedCosts(solution, f_rc.data()) != CUOPT_SUCCESS) {
         return LPStatus::Error;
+    }
     reduced_costs.assign(f_rc.begin(), f_rc.end());
+
+    // Defensive guard for #33: a failed cuOpt GPU barrier (cuDSS device-alloc /
+    // numerical error) deterministically yields CUOPT_TERMINATION_STATUS_
+    // NUMERICAL_ERROR, already rejected above. But cuOpt can also
+    // nondeterministically report OPTIMAL while the failed factorization
+    // collapsed the search direction to NaN and returned a garbage incumbent.
+    // Reject a non-finite "optimal" solution rather than feeding it to the CG
+    // loop. (Finite-but-wrong garbage from a mislabelled OPTIMAL is a
+    // cuOpt-internal bug; see #33 for the upstream report.)
+    auto all_finite = [](const std::vector<double>& vec) {
+        return std::all_of(vec.begin(), vec.end(), [](double val) { return std::isfinite(val); });
+    };
+    if (!std::isfinite(obj) || !all_finite(primals) || !all_finite(duals) ||
+        !all_finite(reduced_costs)) {
+        return LPStatus::Error;
+    }
 
     return LPStatus::Optimal;
 }
