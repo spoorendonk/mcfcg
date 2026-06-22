@@ -61,11 +61,6 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     // violation).  Never reset to INF once established — a later iter
     // can only tighten it.
     double best_ub = INF;
-    // Last successful LP obj — informative fallback for result.objective
-    // if the loop exits with no MCF-feasible iter (best_ub stays INF).
-    // NOT a valid MCF bound (carries slack penalty / infeasible flow),
-    // but keeps result.objective a real number for log / CSV parsers.
-    double last_lp_obj = 0.0;
     // Monotonically non-decreasing π-free capacity-relaxation Lagrangian LB.
     // LB_iter = cap_dual_term + pricer.lagrangian_path_sum() −
     // pricer.lb_error_bound(), taken when pricer.priced_all() (every source
@@ -168,7 +163,6 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         solved = true;
 
         double obj = master.get_obj();
-        last_lp_obj = obj;
 
         // --- All LP reads here, BEFORE any mutation.  Some backends
         // (COPT barrier) drop the ability to return duals once the LP
@@ -331,14 +325,17 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
     timer.stop(TimerCat::Total);
 
-    // Report the best UB captured inside the loop.  If the loop exited
-    // (e.g. max_iterations) with no MCF-feasible iteration ever seen,
-    // best_ub stays INF — fall back to the last LP obj so
-    // result.objective is a real number for log / CSV parsers.  Callers
-    // should consult result.optimal to know whether the objective is a
-    // certified UB or just an informative LP value.
+    // Report the best UB captured inside the loop.  best_ub is a certified
+    // MCF-feasible UB (set only on a slack-free iteration).  If the loop exited
+    // non-optimally (max_iterations / time limit / LP solve failure) with no
+    // MCF-feasible iteration ever seen, best_ub stays INF.  In that case the
+    // last LP objective is a feasibility-penalty value (slacks basic), NOT a
+    // routing cost — it can be orders of magnitude wrong (#35) — so do not
+    // report it.  Fall back to the valid Lagrangian lower bound instead, which
+    // is the only trustworthy quantity here.  result.optimal stays false so
+    // callers know the objective is not a certified optimum.
     if (solved) {
-        result.objective = best_ub < INF ? best_ub : last_lp_obj;
+        result.objective = best_ub < INF ? best_ub : best_lb;
         result.lower_bound = best_lb;
     }
     populate_timing();

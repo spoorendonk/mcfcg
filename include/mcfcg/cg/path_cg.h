@@ -13,7 +13,10 @@
 namespace mcfcg {
 
 struct CGResult {
-    double objective;
+    // -INF = no objective established (e.g. the first LP solve failed before any
+    // bound was recorded). Matches `lower_bound`'s "no info" sentinel; combine
+    // with `optimal` to know whether it is a certified optimum.
+    double objective = -INF;
     // Best Lagrangian/Farley lower bound seen during solve.  -INF means
     // LB tracking never fired (no MCF-feasible iter where pricer
     // visited every source).  Combine with `objective` to report a
@@ -25,9 +28,9 @@ struct CGResult {
     // CGStrategy::PricerHeavy (iterations that only added lazy capacity
     // rows; the next iteration's single solve picks them up).  Under
     // CGStrategy::PricerLight every counted iteration also priced.
-    uint32_t iterations;
-    uint32_t total_columns;
-    bool optimal;
+    uint32_t iterations = 0;
+    uint32_t total_columns = 0;
+    bool optimal = false;
     double time_lp = 0;
     double time_pricing = 0;
     double time_separation = 0;
