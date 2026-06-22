@@ -265,9 +265,16 @@ public:
         check_mosek(MSK_putcj(_task, static_cast<int32_t>(col), cost), "putcj(set_col_cost)");
     }
 
-    LPStatus solve(bool /*certify*/) override {
-        // MOSEK's interior-point already clears slacks at BARRIER_TOL; no
-        // certify cleanup needed.
+    bool certify_runs_crossover() const override { return true; }
+
+    LPStatus solve(bool certify) override {
+        // Steady state runs no basis identification (MSK_BI_NEVER, pinned). The
+        // CG loop requests certify=true only on a stall: turn basis
+        // identification on (MOSEK's crossover) so the interior point is rounded
+        // to a vertex and basic slacks collapse to 0 — same recovery as HiGHS.
+        check_mosek(
+            MSK_putintparam(_task, MSK_IPAR_INTPNT_BASIS, certify ? MSK_BI_ALWAYS : MSK_BI_NEVER),
+            "IntpntBasis");
         MSKrescodee trmcode = MSK_RES_OK;
         MSKrescodee res = MSK_optimizetrm(_task, &trmcode);
         if (res != MSK_RES_OK) {

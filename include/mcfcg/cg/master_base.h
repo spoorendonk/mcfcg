@@ -478,8 +478,13 @@ public:
     }
 
     // certify forwards the CG loop's stall-recovery request to the backend
-    // (HiGHS runs crossover for a vertex solution; other barriers ignore it).
+    // (HiGHS/COPT/MOSEK run crossover for a vertex solution; cuOpt ignores it).
     LPStatus solve(bool certify = false) { return _lp->solve(certify); }
+
+    // True if a certify solve actually runs crossover on this backend; the CG
+    // loop skips its stall-recovery certify on backends where it is a no-op
+    // (cuOpt GPU barrier), avoiding a redundant re-solve.
+    bool certify_runs_crossover() const { return _lp->certify_runs_crossover(); }
 
     double get_obj() const { return _lp->get_obj(); }
     std::vector<double> get_primals() const { return _lp->get_primals(); }

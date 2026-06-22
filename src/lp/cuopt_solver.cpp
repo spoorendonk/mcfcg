@@ -134,17 +134,19 @@ LPStatus extract_solution(cuOptSolution solution, uint32_t n, uint32_t m, double
 // cuOptAddColumns / cuOptAddRows / cuOptDeleteColumns / cuOptDeleteRows /
 // cuOptSetObjectiveCoefficients / cuOptResolve.
 //
-// The cuOpt backend ALWAYS uses the delta path: CMake unconditionally defines
-// MCFCG_CUOPT_DELTA_API whenever MCFCG_USE_CUOPT is on (and requires the fork's
-// cuopt_c_delta.h to exist), so the macro is effectively just an internal guard
-// here, not a build-time choice. Two code shapes still live behind the
-// `#ifdef MCFCG_CUOPT_DELTA_API` / `#else` for clarity and ease of A/B testing:
+// The cuOpt backend defaults to the delta path, the supported configuration:
+// CMake defines MCFCG_CUOPT_DELTA_API by default whenever MCFCG_USE_CUOPT is on
+// (and requires the fork's cuopt_c_delta.h). Building with
+// -DMCFCG_CUOPT_DELTA_API=OFF selects the rebuild-from-scratch path for stock
+// (non-fork) cuOpt — a serious performance degradation (it recreates the whole
+// LP every solve), kept only as a compatibility fallback. Two shapes behind
+// `#ifdef MCFCG_CUOPT_DELTA_API` / `#else`:
 //
-//   * delta path (compiled): mutators forward to the fork's delta API after the
+//   * delta path (default): mutators forward to the fork's delta API after the
 //     first solve, solve() uses cuOptResolve on a persistent handle.
-//   * rebuild path (`#else`, currently unreachable): mutators buffer into host
-//     vectors, solve() creates + destroys a cuOptOptimizationProblem every call.
-//     Kept only as a reference fallback; no supported build selects it.
+//   * rebuild path (`#else`, -DMCFCG_CUOPT_DELTA_API=OFF): mutators buffer into
+//     host vectors, solve() creates + destroys a cuOptOptimizationProblem every
+//     call.
 class CuOptSolver : public LPSolver {
 private:
     // Column data

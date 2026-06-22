@@ -44,6 +44,8 @@ public:
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_GPUMODE, gpu_mode),
                    ("GPUMode=" + std::to_string(gpu_mode)).c_str());
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_PRESOLVE, 0), "Presolve=off");
+        // Crossover off by default; solve(certify=true) flips it on for that one
+        // solve (the CG loop's stall recovery), like HiGHS.
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_CROSSOVER, 0), "Crossover=off");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_LOGGING, verbose ? 1 : 0), "Logging");
         // Barrier feasibility/optimality tolerance, pinned to BARRIER_TOL
@@ -193,9 +195,14 @@ public:
         check_copt(COPT_SetColObj(_prob, 1, &idx, &cost), "SetColObj");
     }
 
-    LPStatus solve(bool /*certify*/) override {
-        // COPT's barrier already converges to a near-vertex solution that
-        // clears slacks at BARRIER_TOL, so no certify cleanup is needed.
+    bool certify_runs_crossover() const override { return true; }
+
+    LPStatus solve(bool certify) override {
+        // Steady state runs crossover off (pinned, fast). The CG loop requests
+        // certify=true only on a stall, where crossover rounds the barrier point
+        // to a vertex so basic slacks collapse to 0 and a slack-free UB can be
+        // recorded — same recovery as HiGHS.
+        check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_CROSSOVER, certify ? 1 : 0), "Crossover");
         int status = COPT_SolveLp(_prob);
         if (status != COPT_RETCODE_OK) {
             return LPStatus::Error;

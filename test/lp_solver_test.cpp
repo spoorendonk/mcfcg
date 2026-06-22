@@ -95,11 +95,12 @@ TEST(LPSolver, IncrementalColumns) {
 #ifdef MCFCG_USE_CUOPT
 // Single cuOpt correctness test: drive the backend (barrier — the only method
 // this repo exposes) through a sequence of incremental mutations interleaved
-// with solves, checking the objective after each step. The cuOpt backend always
-// uses the persistent-handle delta C API (cuOptAddColumns / cuOptAddRows /
+// with solves, checking the objective after each step. The cuOpt backend uses
+// the persistent-handle delta C API by default (cuOptAddColumns / cuOptAddRows /
 // cuOptDeleteRows / cuOptDeleteColumns / cuOptSetObjectiveCoefficients /
-// cuOptResolve), so this exercises it directly. The optimum after each mutation
-// is known in closed
+// cuOptResolve), so this exercises it directly; a build with
+// -DMCFCG_CUOPT_DELTA_API=OFF exercises the rebuild path instead. The optimum
+// after each mutation is known in closed
 // form, so a delta bug that corrupts the warm-started problem — a stale
 // coefficient, a botched index remap after delete, an ignored cost update —
 // surfaces as a wrong objective. This is the isolated counterpart to the CG

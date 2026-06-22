@@ -170,8 +170,10 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // report infeasible on a master that is feasible at a vertex — e.g.
         // after separation adds capacity rows in EdgeRows mode. Retry once with
         // a certified (crossover) solve before giving up, so a non-vertex
-        // numerical artifact does not abort an otherwise-feasible CG run.
-        if (status != LPStatus::Optimal && !did_certify) {
+        // numerical artifact does not abort an otherwise-feasible CG run. Only
+        // when certify actually runs crossover on this backend — otherwise the
+        // retry would just repeat the identical solve (cuOpt has no crossover).
+        if (status != LPStatus::Optimal && !did_certify && master.certify_runs_crossover()) {
             status = master.solve(true);
             did_certify = true;
         }
@@ -331,8 +333,9 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             // iter — crossover rounds the interior point to a vertex, yielding
             // discriminating duals (so pricing can resume) and exact slacks (so
             // a slack-free UB can be recorded).  Latched so we crossover at most
-            // once per stable column set; reset on add_columns below.
-            if (!tried_certify) {
+            // once per stable column set; reset on add_columns below. Skipped on
+            // backends where certify is a no-op (no crossover, e.g. cuOpt).
+            if (!tried_certify && master.certify_runs_crossover()) {
                 tried_certify = true;
                 certify_next = true;
             }

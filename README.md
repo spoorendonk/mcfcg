@@ -255,11 +255,14 @@ CG loop cannot certify a slack-free upper bound. When the loop detects this stal
 (pricing exhausted but not optimal, or an interior solve spuriously reporting
 infeasible after cuts), it re-requests that one solve as a **certify** solve via
 `LPSolver::solve(certify=true)` — HiGHS then runs crossover to round the interior
-point to a vertex (discriminating duals, slacks exactly 0). The other barriers
-already converge to a clean enough solution and treat `certify` as a no-op. This
-keeps "crossover off" honest for the common case (tree, and the commercial
-barriers on path) while letting HiGHS certify the cases that need a vertex —
-crossover fires only on the stalled solves, not every iteration.
+point to a vertex (discriminating duals, slacks exactly 0). COPT and MOSEK
+likewise run crossover (basis identification) only on a certify solve; the cuOpt
+GPU barrier has no crossover and treats `certify` as a no-op (the loop skips its
+stall recovery there, via `certify_runs_crossover()`). This keeps "crossover off"
+honest for the common case (every backend runs crossover-off steady-state, and
+in practice only HiGHS ever stalls) while letting any crossover-capable backend
+certify the cases that need a vertex — crossover fires only on the stalled
+solves, not every iteration.
 
 ## Test
 

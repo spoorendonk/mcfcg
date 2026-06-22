@@ -748,8 +748,9 @@ static void check_small_grid_and_planar(Factory factory) {
 #ifdef MCFCG_USE_CUOPT
 // Single cuOpt correctness test (barrier — the only method this repo exposes).
 // Drives the full path-CG loop, whose incremental column/row add+delete calls
-// go through the cuOpt delta C API (always used by the cuOpt backend), and
-// checks the LP objective against the paper
+// go through the cuOpt delta C API (the cuOpt backend's default; a build with
+// -DMCFCG_CUOPT_DELTA_API=OFF takes the rebuild path), and checks the LP
+// objective against the paper
 // reference on grid index < 10 and planar index < 300. This is the under-load
 // companion to lp_solver_test's CuOptSolver test, which exercises the same
 // delta calls in isolation. Barrier reaches CG optimality within 0.1% on every

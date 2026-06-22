@@ -7,6 +7,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(MCFCG_USE_CUOPT "Enable cuOpt LP solver backend" OFF)
+option(MCFCG_CUOPT_DELTA_API
+       "Use cuOpt's incremental delta C API (needs the spoorendonk/cuopt fork's cuopt_c_delta.h). ON by default; set OFF only for stock non-fork cuOpt, which falls back to the rebuild-from-scratch path — a serious performance degradation."
+       ON)
 option(MCFCG_USE_COPT "Enable COPT LP solver backend" OFF)
 option(MCFCG_USE_MOSEK "Enable MOSEK LP solver backend" OFF)
 option(MCFCG_NATIVE_ARCH "Build with -march=native (host CPU tuning, non-portable binary)" ON)
@@ -87,16 +90,29 @@ if(MCFCG_USE_CUOPT)
     # LD_LIBRARY_PATH (e.g. /usr/local/cuopt/lib64) lacks the delta symbols, so
     # it must not win over the fork build pinned here.
     add_link_options(-Wl,--disable-new-dtags)
-    # The cuOpt backend always uses the incremental delta C API: the CG master
+    # The cuOpt backend defaults to the incremental delta C API: the CG master
     # mutates one persistent LP handle (add/delete rows & columns, resolve) every
-    # iteration, so the rebuild-from-scratch path is never the right choice. This
-    # requires the fork that exports cuopt_c_delta.h (spoorendonk/cuopt, epic #20).
-    if(NOT EXISTS "${CUOPT_INCLUDE_DIR}/cuopt/linear_programming/cuopt_c_delta.h")
-        message(FATAL_ERROR "cuOpt backend requires the delta C API header "
-            "cuopt_c_delta.h, not found under ${CUOPT_INCLUDE_DIR}. Build against the "
-            "spoorendonk/cuopt fork (delta-api branch); see mcfcg epic #20.")
+    # iteration. It needs the fork that exports cuopt_c_delta.h (spoorendonk/cuopt,
+    # epic #20). For stock (non-fork) cuOpt, set -DMCFCG_CUOPT_DELTA_API=OFF to
+    # fall back to the rebuild-from-scratch path.
+    if(MCFCG_CUOPT_DELTA_API)
+        if(NOT EXISTS "${CUOPT_INCLUDE_DIR}/cuopt/linear_programming/cuopt_c_delta.h")
+            message(FATAL_ERROR
+                "MCFCG_CUOPT_DELTA_API is ON (default) but cuopt_c_delta.h was not found "
+                "under ${CUOPT_INCLUDE_DIR} — this looks like a stock (non-fork) cuOpt. "
+                "Build the spoorendonk/cuopt fork (delta-api branch, see epic #20), or "
+                "reconfigure with -DMCFCG_CUOPT_DELTA_API=OFF to use the rebuild path. "
+                "NOTE: the rebuild path recreates the entire LP every CG iteration — a "
+                "SERIOUS performance degradation; the delta API is strongly recommended.")
+        endif()
+        target_compile_definitions(mcfcg PRIVATE MCFCG_CUOPT_DELTA_API)
+    else()
+        message(WARNING
+            "MCFCG_CUOPT_DELTA_API=OFF: using the cuOpt rebuild-from-scratch path, which "
+            "recreates the entire LP every CG iteration — SERIOUS performance degradation. "
+            "Use only for stock (non-fork) cuOpt; prefer the spoorendonk/cuopt fork with the "
+            "delta API left ON.")
     endif()
-    target_compile_definitions(mcfcg PRIVATE MCFCG_CUOPT_DELTA_API)
 endif()
 
 if(MCFCG_USE_COPT)

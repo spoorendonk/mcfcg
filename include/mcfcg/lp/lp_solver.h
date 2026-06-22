@@ -81,11 +81,17 @@ public:
     // it can trust the objective as an MCF upper bound.  The CG loop sets it
     // only when it has stalled (pricing exhausted but slacks still basic),
     // which on a pure interior-point solution can be an artifact of the
-    // non-vertex solution rather than true infeasibility.  Backends whose
-    // barrier already yields a clean enough solution ignore it (no-op);
-    // HiGHS (HiPO) enables crossover for that one solve.  Default false
-    // preserves the fast per-iteration path.
+    // non-vertex solution rather than true infeasibility.  HiGHS/COPT/MOSEK
+    // enable crossover for that one solve; the cuOpt GPU barrier has no
+    // crossover and ignores it (no-op) — see certify_runs_crossover().  Default
+    // false preserves the fast per-iteration path.
     virtual LPStatus solve(bool certify = false) = 0;
+
+    // True if solve(certify=true) actually does something (runs crossover to a
+    // vertex). HiGHS/COPT/MOSEK override to true; the cuOpt GPU barrier has no
+    // crossover so it stays false. The CG loop uses this to avoid a redundant
+    // re-solve on backends where a certify retry would change nothing.
+    virtual bool certify_runs_crossover() const { return false; }
 
     // Get solution info (valid after solve returns Optimal)
     virtual double get_obj() const = 0;

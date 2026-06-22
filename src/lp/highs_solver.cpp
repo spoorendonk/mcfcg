@@ -161,6 +161,8 @@ public:
         _num_rows = surviving;
     }
 
+    bool certify_runs_crossover() const override { return true; }
+
     LPStatus solve(bool certify) override {
         // Crossover is requested only on a certify solve (the CG loop's stall
         // recovery): round the interior point to a vertex so basic slacks

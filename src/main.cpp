@@ -250,6 +250,15 @@ int main(int argc, char* argv[]) {
                  inst.graph.num_vertices(), inst.graph.num_arcs(), inst.commodities.size(),
                  inst.sources.size());
 
+    // Echo the selected backend + formulation up front (the backend also prints
+    // its own [lp-config] banner at construction once the solve starts).
+    if (solver == "copt") {
+        std::fprintf(stderr, "Solver: copt (gpu-mode %d), formulation: %s\n",
+                     copt_gpu_mode < 0 ? 2 : copt_gpu_mode, formulation.c_str());
+    } else {
+        std::fprintf(stderr, "Solver: %s, formulation: %s\n", solver.c_str(), formulation.c_str());
+    }
+
     // --stats-only short-circuits: report the instance cost scale and the
     // slack-cost ceiling (the headroom diagnostic) and exit before any solve.
     // Builds the chosen master via init() so the reported ceiling /
