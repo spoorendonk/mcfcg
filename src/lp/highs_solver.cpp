@@ -2,6 +2,7 @@
 #include "mcfcg/util/tolerances.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <Highs.h>
 
 namespace mcfcg {
@@ -17,6 +18,13 @@ public:
         _highs.setOptionValue("output_flag", verbose);
         _highs.setOptionValue("primal_feasibility_tolerance", LP_FEAS_TOL);
         _highs.setOptionValue("dual_feasibility_tolerance", LP_FEAS_TOL);
+        // LP method: default to the HiPO interior-point solver. On these
+        // column-generation masters HiPO is ~2x faster than HiGHS' simplex
+        // default (grid15 tree: HiPO 70s vs simplex 148s) and matches the
+        // MOSEK/COPT barrier objectives. Override via
+        // MCFCG_HIGHS_SOLVER = simplex | ipm | hipo | pdlp.
+        const char* highs_method = std::getenv("MCFCG_HIGHS_SOLVER");
+        _highs.setOptionValue("solver", highs_method != nullptr ? highs_method : "hipo");
         HighsModel model;
         model.lp_.sense_ = ObjSense::kMinimize;
         model.lp_.offset_ = 0.0;
@@ -120,7 +128,6 @@ public:
         if (status != HighsStatus::kOk) {
             return LPStatus::Error;
         }
-
         auto model_status = _highs.getModelStatus();
         switch (model_status) {
             case HighsModelStatus::kOptimal:

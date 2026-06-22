@@ -20,10 +20,16 @@ option(MCFCG_NATIVE_ARCH "Build with -march=native (host CPU tuning, non-portabl
 
 # HiGHS — always available as default fallback
 include(FetchContent)
+# HiPO (HiGHS interior-point) discards a near-optimal solution as an "internal
+# error" when its optional IPX refinement step fails on ill-conditioned masters
+# (wide objective range from slack penalty costs). Patched locally; needs
+# upstreaming — see gh issue #36. Idempotent: skip if already applied.
+set(HIGHS_HIPO_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/highs-hipo-refine-status.patch")
 FetchContent_Declare(
     highs
     GIT_REPOSITORY https://github.com/ERGO-Code/HiGHS.git
     GIT_TAG v1.14.0
+    PATCH_COMMAND bash -c "git apply --reverse --check '${HIGHS_HIPO_PATCH}' 2>/dev/null || git apply '${HIGHS_HIPO_PATCH}'"
 )
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(HIGHS_BUILD_CXX ON CACHE BOOL "" FORCE)

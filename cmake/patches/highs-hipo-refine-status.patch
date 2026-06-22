@@ -1,0 +1,36 @@
+diff --git a/highs/ipm/hipo/ipm/Solver.cpp b/highs/ipm/hipo/ipm/Solver.cpp
+index f159e042e1..8e4afc3aac 100644
+--- a/highs/ipm/hipo/ipm/Solver.cpp
++++ b/highs/ipm/hipo/ipm/Solver.cpp
+@@ -274,6 +274,10 @@ bool Solver::prepareIpx() {
+ void Solver::refineWithIpx() {
+   if (checkInterrupt()) return;
+ 
++  // Pre-refinement HiPO status. If the optional IPX refinement step fails, we
++  // fall back to this rather than discarding a usable HiPO result.
++  const Status pre_refine_status = info_.status;
++
+   if (statusNeedsRefinement() && refinementIsOn()) {
+     logH_.print("\nRestarting with IPX\n");
+   } else if (statusAllowsCrossover() && crossoverIsOn()) {
+@@ -292,6 +296,20 @@ void Solver::refineWithIpx() {
+   // Convert between ipx and hipo status
+   info_.status = IpxToHipoStatus(info_.ipx_info.status_ipm);
+ 
++  // A failed IPX refinement must not turn a usable HiPO result into a hard
++  // error: when IPX's IPM fails but HiPO already stopped with a non-failed
++  // status (e.g. kStatusNoProgress / kStatusImprecise, which downstream
++  // returns as an imprecise solution), keep the HiPO status instead of the
++  // IPX failure. Without this, a near-optimal HiPO point is reported as
++  // "internal error" / Solve error.
++  const bool ipx_failed = info_.status >= kStatusFailed &&
++                          info_.status < kStatusSolved;
++  const bool hipo_was_usable = pre_refine_status < kStatusFailed ||
++                               pre_refine_status >= kStatusSolved;
++  if (ipx_failed && hipo_was_usable) {
++    info_.status = pre_refine_status;
++  }
++
+   std::stringstream log_stream;
+   log_stream << "IPX reports: ipm "
+              << ipx::StatusString(info_.ipx_info.status_ipm);
