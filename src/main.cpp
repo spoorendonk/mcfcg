@@ -69,6 +69,8 @@ static void print_usage(std::FILE* out) {
         "  --threads N              Number of pricing threads (default: 0=auto, 1=serial)\n"
         "  --batch-size N           Pricing batch size (0=all)\n"
         "  --solver NAME            LP solver: highs (default), copt, cuopt, mosek\n"
+        "  --copt-gpu-mode N        COPT barrier execution: 0=CPU, 1/2=GPU (default: 2).\n"
+        "                           Only affects --solver copt.\n"
         "  --write-mps PATH         Write the compact source-based LP as MPS to\n"
         "                           PATH (gz if .gz) and exit; does not solve.\n"
         "  --verbose-solver         Enable LP solver's own log output\n"
@@ -87,7 +89,7 @@ static void print_usage(std::FILE* out) {
 // diagnostic) if the name is unknown or the requested backend was not compiled
 // in. Extracted from main() so the argument-parsing loop stays within the
 // clang-tidy cognitive-complexity budget — solver selection is its own concern.
-static bool configure_solver(const std::string& solver, bool verbose_solver,
+static bool configure_solver(const std::string& solver, bool verbose_solver, int copt_gpu_mode,
                              mcfcg::CGParams& params) {
     if (solver == "cuopt") {
 #ifdef MCFCG_USE_CUOPT
@@ -100,10 +102,11 @@ static bool configure_solver(const std::string& solver, bool verbose_solver,
 #endif
     } else if (solver == "copt") {
 #ifdef MCFCG_USE_COPT
-        params.solver_factory = [verbose_solver] {
-            return mcfcg::create_copt_solver(verbose_solver);
+        params.solver_factory = [verbose_solver, copt_gpu_mode] {
+            return mcfcg::create_copt_solver(verbose_solver, copt_gpu_mode);
         };
 #else
+        (void)copt_gpu_mode;
         std::fprintf(stderr, "COPT not available. Rebuild with -DMCFCG_USE_COPT=ON.\n");
         return false;
 #endif
@@ -140,6 +143,7 @@ int main(int argc, char* argv[]) {
     uint32_t num_threads = 0;
     uint32_t batch_size = 0;
     std::string solver = "highs";
+    int copt_gpu_mode = -1;  // -1 = COPT default (GPU barrier, mode 2)
     std::string trips_path;
     std::string write_mps_path;
     double coef = 0.0;
@@ -184,6 +188,13 @@ int main(int argc, char* argv[]) {
             batch_size = static_cast<uint32_t>(std::atoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--solver") == 0) {
             solver = argv[++i];
+        } else if (std::strcmp(argv[i], "--copt-gpu-mode") == 0) {
+            copt_gpu_mode = std::atoi(argv[++i]);
+            if (copt_gpu_mode < 0 || copt_gpu_mode > 2) {
+                std::fprintf(stderr, "Invalid --copt-gpu-mode '%s'. Valid: 0 (CPU), 1, 2 (GPU).\n",
+                             argv[i]);
+                return EXIT_FAILURE;
+            }
         } else if (std::strcmp(argv[i], "--col-age-limit") == 0) {
             params.col_age_limit = static_cast<uint32_t>(std::atoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--row-inactivity") == 0) {
@@ -249,7 +260,7 @@ int main(int argc, char* argv[]) {
     // it never optimizes — but creating a non-HiGHS backend still needs its
     // license/GPU; the default (HiGHS) needs neither.
     if (stats_only) {
-        if (!configure_solver(solver, verbose_solver, params)) {
+        if (!configure_solver(solver, verbose_solver, copt_gpu_mode, params)) {
             return EXIT_FAILURE;
         }
         double sum_arc_costs = 0.0;
@@ -329,7 +340,7 @@ int main(int argc, char* argv[]) {
     params.pricing_batch_size = batch_size;
     params.verbosity = mcfcg::Verbosity::Iteration;
 
-    if (!configure_solver(solver, verbose_solver, params)) {
+    if (!configure_solver(solver, verbose_solver, copt_gpu_mode, params)) {
         return EXIT_FAILURE;
     }
 

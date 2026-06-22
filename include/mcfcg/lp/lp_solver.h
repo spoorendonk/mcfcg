@@ -76,8 +76,16 @@ public:
     // bump-to-fixed-point slack-cost loop.
     virtual void set_col_cost(uint32_t col, double cost) = 0;
 
-    // Solve the LP
-    virtual LPStatus solve() = 0;
+    // Solve the LP.  When `certify` is true the caller needs a *certified*
+    // (vertex-quality) primal — slacks driven to exactly 0 where feasible — so
+    // it can trust the objective as an MCF upper bound.  The CG loop sets it
+    // only when it has stalled (pricing exhausted but slacks still basic),
+    // which on a pure interior-point solution can be an artifact of the
+    // non-vertex solution rather than true infeasibility.  Backends whose
+    // barrier already yields a clean enough solution ignore it (no-op);
+    // HiGHS (HiPO) enables crossover for that one solve.  Default false
+    // preserves the fast per-iteration path.
+    virtual LPStatus solve(bool certify = false) = 0;
 
     // Get solution info (valid after solve returns Optimal)
     virtual double get_obj() const = 0;
@@ -109,6 +117,13 @@ public:
     virtual double max_slack_cost() const { return 1e7; }
 };
 
+// Emit a one-line provenance banner to stderr at solver construction (captured
+// in CG / benchmark logs). Reports the pinned barrier settings (presolve off,
+// crossover off, tol = BARRIER_TOL) plus the effective execution mode and
+// thread count, so every run is self-documenting. `threads <= 0` is reported as
+// "auto(<hardware_concurrency>)"; `gpu` selects the CPU/GPU execution label.
+void log_solver_config(const char* backend, const char* method, bool gpu, int threads);
+
 std::unique_ptr<LPSolver> create_lp_solver(bool verbose = false);
 
 #ifdef MCFCG_USE_CUOPT
@@ -119,7 +134,9 @@ std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose = false);
 #endif
 
 #ifdef MCFCG_USE_COPT
-std::unique_ptr<LPSolver> create_copt_solver(bool verbose = false);
+// gpu_mode selects COPT's barrier execution: 0 = CPU, 1 = GPU mode 1, 2 = GPU
+// mode 2. The default -1 (and any out-of-range value) means "GPU barrier (2)".
+std::unique_ptr<LPSolver> create_copt_solver(bool verbose = false, int gpu_mode = -1);
 #endif
 
 #ifdef MCFCG_USE_MOSEK

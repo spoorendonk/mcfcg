@@ -191,25 +191,26 @@ cmake --build build -j$(nproc)
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `-DMCFCG_USE_CUOPT=ON`   | OFF | Enable the NVIDIA cuOpt GPU LP backend (requires cuOpt — see below) |
-| `-DMCFCG_CUOPT_DELTA_API=ON` | OFF | Use cuOpt's incremental delta C API (needs the fork below); requires `MCFCG_USE_CUOPT=ON` |
+| `-DMCFCG_USE_CUOPT=ON`   | OFF | Enable the NVIDIA cuOpt GPU LP backend. Always uses cuOpt's incremental delta C API, so it requires the fork below (configure errors if `cuopt_c_delta.h` is absent). |
 | `-DMCFCG_USE_COPT=ON`    | OFF | Enable the COPT LP backend (requires COPT installed, `COPT_HOME` set) |
+| `-DMCFCG_USE_MOSEK=ON`   | OFF | Enable the MOSEK CPU barrier LP backend (requires MOSEK, `MOSEK_HOME` set) |
 | `-DMCFCG_NATIVE_ARCH=OFF` | ON | Disable `-march=native`. Keep ON for SIMD auto-vectorization of the hot `cost[a] - mu[a]` pricing loop; only turn OFF for portable binaries. |
 
 ### cuOpt and the delta-API fork
 
 The cuOpt backend mutates the restricted master incrementally (add/delete
-columns and rows, re-solve). Stock cuOpt has no incremental C API, so the
-delta path (`-DMCFCG_CUOPT_DELTA_API=ON`) needs a cuOpt build that ships
+columns and rows, re-solve), so it always uses cuOpt's incremental delta C API.
+Stock cuOpt has no such API; the backend needs a cuOpt build that ships
 `cuopt_c_delta.h` — the [`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt)
-fork. **You must build that fork yourself first.** Then point the configure at
-it (an install prefix or a source checkout both work):
+fork (delta-api branch). **You must build that fork yourself first** (configure
+errors out if the header is missing). Then point the configure at it (an install
+prefix or a source checkout both work):
 
 ```bash
 # one combined build with both COPT and the cuOpt delta fork
 cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY \
   -DMCFCG_USE_COPT=ON \
-  -DMCFCG_USE_CUOPT=ON -DMCFCG_CUOPT_DELTA_API=ON \
+  -DMCFCG_USE_CUOPT=ON \
   -DCUOPT_INCLUDE_DIR=/path/to/cuopt/cpp/include \
   -DCUOPT_LIBRARY=/path/to/cuopt/cpp/build/libcuopt.so
 cmake --build build -j$(nproc)
@@ -225,6 +226,40 @@ new location on `LD_LIBRARY_PATH`:
 ```bash
 export LD_LIBRARY_PATH=/path/to/cuopt/cpp/build:$LD_LIBRARY_PATH
 ```
+
+## LP backends
+
+Four LP backends implement a common interface: **HiGHS** (default, FetchContent,
+no license/GPU), **cuOpt** (GPU barrier), **COPT** (CPU/GPU barrier), and
+**MOSEK** (CPU barrier). Select at run time with `--solver`.
+
+**Pinned barrier configuration.** For fair cross-solver comparison every backend
+runs the same regime: **presolve off, crossover off, convergence tolerance 1e-4**
+(the MCF feasibility design target; see `include/mcfcg/util/tolerances.h`
+`BARRIER_TOL`). Each solver prints a one-line provenance banner to stderr at
+construction (captured in the CG / benchmark logs), e.g.:
+
+```
+[lp-config] backend=mosek method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+```
+
+`threads=auto(N)` reports the backend's effective thread count (`N` = hardware
+concurrency when the backend auto-selects); `exec` is CPU or GPU.
+
+**HiGHS crossover-on-certify (stall recovery).** HiGHS uses the HiPO
+interior-point method with crossover **off** per iteration, so the bulk of CG is
+fast. But a pure interior-point solution is not a vertex: on the **path**
+formulation of large instances its central duals can fail to price an improving
+column, and demand-row slacks settle at O(tol) > 0 rather than exactly 0, so the
+CG loop cannot certify a slack-free upper bound. When the loop detects this stall
+(pricing exhausted but not optimal, or an interior solve spuriously reporting
+infeasible after cuts), it re-requests that one solve as a **certify** solve via
+`LPSolver::solve(certify=true)` — HiGHS then runs crossover to round the interior
+point to a vertex (discriminating duals, slacks exactly 0). The other barriers
+already converge to a clean enough solution and treat `certify` as a no-op. This
+keeps "crossover off" honest for the common case (tree, and the commercial
+barriers on path) while letting HiGHS certify the cases that need a vertex —
+crossover fires only on the stalled solves, not every iteration.
 
 ## Test
 
@@ -253,7 +288,8 @@ A single test:
 | `--coef N`                | auto  | TNTP demand coefficient (auto per city) |
 | `--threads N`             | 0     | Pricing threads (`0` = hardware concurrency, `1` = serial) |
 | `--batch-size N`          | 0     | Sources priced per batch (`0` = all) |
-| `--solver NAME`           | highs | LP backend: `highs`, `cuopt`, `copt` |
+| `--solver NAME`           | highs | LP backend: `highs`, `cuopt`, `copt`, `mosek` |
+| `--copt-gpu-mode N`       | 2     | COPT barrier execution: `0` = CPU, `1`/`2` = GPU (default 2). Only affects `--solver copt`. |
 | `--verbose-solver`        | off   | Enable the LP backend's own log output |
 | `--col-age-limit N`       | 5     | Purge columns after N idle iters (`0` disables) |
 | `--row-inactivity N`      | 5     | Purge cap rows after N idle iters (`0` disables) |

@@ -134,14 +134,17 @@ LPStatus extract_solution(cuOptSolution solution, uint32_t n, uint32_t m, double
 // cuOptAddColumns / cuOptAddRows / cuOptDeleteColumns / cuOptDeleteRows /
 // cuOptSetObjectiveCoefficients / cuOptResolve.
 //
-// This file compiles two shapes, selected at build time:
+// The cuOpt backend ALWAYS uses the delta path: CMake unconditionally defines
+// MCFCG_CUOPT_DELTA_API whenever MCFCG_USE_CUOPT is on (and requires the fork's
+// cuopt_c_delta.h to exist), so the macro is effectively just an internal guard
+// here, not a build-time choice. Two code shapes still live behind the
+// `#ifdef MCFCG_CUOPT_DELTA_API` / `#else` for clarity and ease of A/B testing:
 //
-//   * default (MCFCG_CUOPT_DELTA_API undefined): rebuild path — mutators buffer
-//     into host vectors, solve() creates + destroys a cuOptOptimizationProblem
-//     every call. No dependency on the fork.
-//   * opt-in (MCFCG_CUOPT_DELTA_API defined): delta path — mutators forward to
-//     the fork's delta API after the first solve, solve() uses cuOptResolve on
-//     a persistent handle. Requires a cuOpt build that ships cuopt_c_delta.h.
+//   * delta path (compiled): mutators forward to the fork's delta API after the
+//     first solve, solve() uses cuOptResolve on a persistent handle.
+//   * rebuild path (`#else`, currently unreachable): mutators buffer into host
+//     vectors, solve() creates + destroys a cuOptOptimizationProblem every call.
+//     Kept only as a reference fallback; no supported build selects it.
 class CuOptSolver : public LPSolver {
 private:
     // Column data
@@ -179,7 +182,11 @@ private:
 
 public:
     CuOptSolver() = default;
-    explicit CuOptSolver(bool verbose) : _verbose(verbose) {}
+    explicit CuOptSolver(bool verbose) : _verbose(verbose) {
+        // GPU barrier; no CPU thread count applies. Logged once per solver
+        // (i.e. once per CG solve) for run provenance, like the other backends.
+        log_solver_config("cuopt", "barrier", /*gpu=*/true, /*threads=*/-1);
+    }
 
     CuOptSolver(const CuOptSolver&) = delete;
     CuOptSolver& operator=(const CuOptSolver&) = delete;
@@ -188,12 +195,15 @@ public:
 
     ~CuOptSolver() override {
 #ifdef MCFCG_CUOPT_DELTA_API
-        if (_solution)
+        if (_solution) {
             cuOptDestroySolution(&_solution);
-        if (_settings)
+        }
+        if (_settings) {
             cuOptDestroySolverSettings(&_settings);
-        if (_problem)
+        }
+        if (_problem) {
             cuOptDestroyProblem(&_problem);
+        }
 #endif
     }
 
@@ -445,7 +455,9 @@ public:
 #endif
     }
 
-    LPStatus solve() override {
+    LPStatus solve(bool /*certify*/) override {
+        // cuOpt's GPU barrier has no crossover; it clears slacks at BARRIER_TOL,
+        // so the certify flag is a no-op here.
         uint32_t n = num_cols();
         uint32_t m = num_rows();
 
@@ -459,8 +471,9 @@ public:
             // solution handle; pass the previous pointer so the implementation
             // can reuse or free it.
             auto status = cuOptResolve(_problem, _settings, &_solution);
-            if (status != CUOPT_SUCCESS)
+            if (status != CUOPT_SUCCESS) {
                 return LPStatus::Error;
+            }
             return extract_solution(_solution, n, m, _cached_obj, _cached_primals, _cached_duals,
                                     _cached_reduced_costs);
         }
@@ -531,7 +544,8 @@ public:
         // repeatedly-resolved warm-started LPs. _settings is created once and
         // reused by cuOptResolve, so setting this here covers the delta path too.
         cuOptSetParameter(settings, CUOPT_PRESOLVE, std::to_string(CUOPT_PRESOLVE_OFF).c_str());
-        auto tol_str = std::to_string(LP_FEAS_TOL);
+        // Pinned to BARRIER_TOL identically across backends (see tolerances.h).
+        auto tol_str = std::to_string(BARRIER_TOL);
         cuOptSetParameter(settings, CUOPT_RELATIVE_GAP_TOLERANCE, tol_str.c_str());
         cuOptSetParameter(settings, CUOPT_RELATIVE_PRIMAL_TOLERANCE, tol_str.c_str());
         cuOptSetParameter(settings, CUOPT_RELATIVE_DUAL_TOLERANCE, tol_str.c_str());

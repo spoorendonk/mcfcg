@@ -7,15 +7,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(MCFCG_USE_CUOPT "Enable cuOpt LP solver backend" OFF)
-option(MCFCG_CUOPT_DELTA_API
-       "Use incremental delta C API on cuOpt backend. Requires a cuOpt build that exports cuopt_c_delta.h (see spoorendonk/cuopt fork and mcfcg epic #20 / sub-issue #21)."
-       OFF)
 option(MCFCG_USE_COPT "Enable COPT LP solver backend" OFF)
 option(MCFCG_USE_MOSEK "Enable MOSEK LP solver backend" OFF)
-
-if(MCFCG_CUOPT_DELTA_API AND NOT MCFCG_USE_CUOPT)
-    message(FATAL_ERROR "MCFCG_CUOPT_DELTA_API=ON requires MCFCG_USE_CUOPT=ON.")
-endif()
 option(MCFCG_NATIVE_ARCH "Build with -march=native (host CPU tuning, non-portable binary)" ON)
 
 # HiGHS — always available as default fallback
@@ -94,12 +87,16 @@ if(MCFCG_USE_CUOPT)
     # LD_LIBRARY_PATH (e.g. /usr/local/cuopt/lib64) lacks the delta symbols, so
     # it must not win over the fork build pinned here.
     add_link_options(-Wl,--disable-new-dtags)
-    if(EXISTS "${CUOPT_INCLUDE_DIR}/cuopt/linear_programming/cuopt_c_delta.h")
-        message(STATUS "cuOpt delta API header detected at ${CUOPT_INCLUDE_DIR}. Enable with -DMCFCG_CUOPT_DELTA_API=ON.")
+    # The cuOpt backend always uses the incremental delta C API: the CG master
+    # mutates one persistent LP handle (add/delete rows & columns, resolve) every
+    # iteration, so the rebuild-from-scratch path is never the right choice. This
+    # requires the fork that exports cuopt_c_delta.h (spoorendonk/cuopt, epic #20).
+    if(NOT EXISTS "${CUOPT_INCLUDE_DIR}/cuopt/linear_programming/cuopt_c_delta.h")
+        message(FATAL_ERROR "cuOpt backend requires the delta C API header "
+            "cuopt_c_delta.h, not found under ${CUOPT_INCLUDE_DIR}. Build against the "
+            "spoorendonk/cuopt fork (delta-api branch); see mcfcg epic #20.")
     endif()
-    if(MCFCG_CUOPT_DELTA_API)
-        target_compile_definitions(mcfcg PRIVATE MCFCG_CUOPT_DELTA_API)
-    endif()
+    target_compile_definitions(mcfcg PRIVATE MCFCG_CUOPT_DELTA_API)
 endif()
 
 if(MCFCG_USE_COPT)

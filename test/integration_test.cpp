@@ -748,8 +748,8 @@ static void check_small_grid_and_planar(Factory factory) {
 #ifdef MCFCG_USE_CUOPT
 // Single cuOpt correctness test (barrier — the only method this repo exposes).
 // Drives the full path-CG loop, whose incremental column/row add+delete calls
-// go through the cuOpt delta C API when built with -DMCFCG_CUOPT_DELTA_API=ON
-// (otherwise the rebuild path), and checks the LP objective against the paper
+// go through the cuOpt delta C API (always used by the cuOpt backend), and
+// checks the LP objective against the paper
 // reference on grid index < 10 and planar index < 300. This is the under-load
 // companion to lp_solver_test's CuOptSolver test, which exercises the same
 // delta calls in isolation. Barrier reaches CG optimality within 0.1% on every
@@ -763,12 +763,18 @@ TEST(CuOptCorrectness, DISABLED_SmallGridAndPlanar) {
 #endif  // MCFCG_USE_CUOPT
 
 #ifdef MCFCG_USE_COPT
-// Single COPT correctness test (barrier — COPT's fixed method here). Same
-// path-CG correctness sweep as the cuOpt test, over grid index < 10 and planar
-// index < 300. Slow (GPU barrier per LP solve) — disabled by default. Run with:
-//   --gtest_also_run_disabled_tests --gtest_filter='CoptCorrectness.*'
+// COPT correctness sweep (barrier), over grid index < 10 and planar index < 300.
+// Two variants pin the GPU mode explicitly so both execution paths are covered:
+// CoptCorrectness uses the GPU barrier (gpu_mode=2), CoptCpuCorrectness the CPU
+// barrier (gpu_mode=0). Both must reach the same paper reference — same solver,
+// GPU toggled, which is also the cleanest isolation of the GPU effect for the
+// benchmark. Slow (a barrier solve per LP) — disabled by default. Run with:
+//   --gtest_also_run_disabled_tests --gtest_filter='Copt*Correctness.*'
 TEST(CoptCorrectness, DISABLED_SmallGridAndPlanar) {
-    check_small_grid_and_planar([] { return mcfcg::create_copt_solver(); });
+    check_small_grid_and_planar([] { return mcfcg::create_copt_solver(false, /*gpu_mode=*/2); });
+}
+TEST(CoptCpuCorrectness, DISABLED_SmallGridAndPlanar) {
+    check_small_grid_and_planar([] { return mcfcg::create_copt_solver(false, /*gpu_mode=*/0); });
 }
 #endif  // MCFCG_USE_COPT
 

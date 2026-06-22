@@ -2,10 +2,32 @@
 #include "mcfcg/util/tolerances.h"
 
 #include <cassert>
+#include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <Highs.h>
+#include <thread>
 
 namespace mcfcg {
+
+// Shared across every backend (declared in lp_solver.h, defined once here in the
+// always-compiled HiGHS TU). One concise provenance line per solver
+// construction — i.e. once per CG solve, since the loop builds one solver.
+void log_solver_config(const char* backend, const char* method, bool gpu, int threads) {
+    char threads_buf[32];
+    if (gpu) {
+        std::snprintf(threads_buf, sizeof(threads_buf), "n/a(GPU)");
+    } else if (threads > 0) {
+        std::snprintf(threads_buf, sizeof(threads_buf), "%d", threads);
+    } else {
+        std::snprintf(threads_buf, sizeof(threads_buf), "auto(%u)",
+                      std::thread::hardware_concurrency());
+    }
+    std::fprintf(stderr,
+                 "[lp-config] backend=%s method=%s exec=%s presolve=off crossover=off "
+                 "tol=%g threads=%s\n",
+                 backend, method, gpu ? "GPU" : "CPU", BARRIER_TOL, threads_buf);
+}
 
 class HiGHSSolver : public LPSolver {
 private:
@@ -16,19 +38,35 @@ private:
 public:
     explicit HiGHSSolver(bool verbose = false) {
         _highs.setOptionValue("output_flag", verbose);
-        _highs.setOptionValue("primal_feasibility_tolerance", LP_FEAS_TOL);
-        _highs.setOptionValue("dual_feasibility_tolerance", LP_FEAS_TOL);
+        // Pinned identically across all backends (presolve off, crossover off,
+        // tol = BARRIER_TOL) so cross-solver timings compare like for like.
+        // Crossover off yields a pure interior-point solution (no basis); the
+        // column-aging path falls back to the COL_ACTIVE_EPS primal threshold.
+        _highs.setOptionValue("presolve", "off");
+        // Crossover off by default (pure interior-point, fast per CG iter); the
+        // CG loop re-requests it via solve(certify=true) only when it stalls
+        // with basic slacks. HiPO's interior solution is then non-vertex and
+        // leaves the demand-row slacks at O(tol) > 0, which the path-CG
+        // feasibility gate can't certify; crossover rounds it to a vertex
+        // (slacks exactly 0) so a slack-free UB can be recorded. See README.
+        _highs.setOptionValue("run_crossover", "off");
+        _highs.setOptionValue("primal_feasibility_tolerance", BARRIER_TOL);
+        _highs.setOptionValue("dual_feasibility_tolerance", BARRIER_TOL);
         // LP method: default to the HiPO interior-point solver. On these
         // column-generation masters HiPO is ~2x faster than HiGHS' simplex
         // default (grid15 tree: HiPO 70s vs simplex 148s) and matches the
         // MOSEK/COPT barrier objectives. Override via
         // MCFCG_HIGHS_SOLVER = simplex | ipm | hipo | pdlp.
         const char* highs_method = std::getenv("MCFCG_HIGHS_SOLVER");
-        _highs.setOptionValue("solver", highs_method != nullptr ? highs_method : "hipo");
+        const char* method = highs_method != nullptr ? highs_method : "hipo";
+        _highs.setOptionValue("solver", method);
         HighsModel model;
         model.lp_.sense_ = ObjSense::kMinimize;
         model.lp_.offset_ = 0.0;
         _highs.passModel(std::move(model));
+        HighsInt threads = 0;
+        _highs.getOptionValue("threads", threads);
+        log_solver_config("highs", method, /*gpu=*/false, static_cast<int>(threads));
     }
 
     uint32_t add_cols(const std::vector<double>& obj, const std::vector<double>& lb,
@@ -123,7 +161,11 @@ public:
         _num_rows = surviving;
     }
 
-    LPStatus solve() override {
+    LPStatus solve(bool certify) override {
+        // Crossover is requested only on a certify solve (the CG loop's stall
+        // recovery): round the interior point to a vertex so basic slacks
+        // collapse to exactly 0 and a slack-free UB can be certified.
+        _highs.setOptionValue("run_crossover", certify ? "on" : "off");
         auto status = _highs.run();
         if (status != HighsStatus::kOk) {
             return LPStatus::Error;

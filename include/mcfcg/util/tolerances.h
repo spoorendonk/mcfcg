@@ -41,6 +41,17 @@ inline constexpr double RELATIVE_FEAS_TOL = 1e-4;
 // deliver solutions at least as tight as what we promise downstream.
 inline constexpr double LP_FEAS_TOL = RELATIVE_FEAS_TOL;  // 1e-4
 
+// ── Barrier convergence tolerance (pinned identically per backend) ──
+// Single convergence tolerance applied to every LP backend's barrier so
+// cross-solver timing comparisons are not confounded by different
+// stopping criteria: COPT FEASTOL/DUALTOL, MOSEK INTPNT_TOL_{PFEAS,
+// DFEAS,REL_GAP}, cuOpt RELATIVE_{GAP,PRIMAL,DUAL}_TOLERANCE, HiGHS
+// primal/dual feasibility.  Every backend additionally runs with
+// presolve OFF and crossover OFF (pure interior-point solution).  Set to
+// the 1e-4 feasibility design target — looser than a backend's own tuned
+// default but identical everywhere, which is what a fair benchmark needs.
+inline constexpr double BARRIER_TOL = LP_FEAS_TOL;  // 1e-4
+
 // ── Column / slack activity ────────────────────────────────────────
 // A column (or slack) is considered genuinely basic / active when its
 // LP primal exceeds this threshold.  Must be > LP_FEAS_TOL so that

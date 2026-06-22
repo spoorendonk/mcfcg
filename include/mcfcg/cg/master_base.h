@@ -477,7 +477,9 @@ public:
         return n;
     }
 
-    LPStatus solve() { return _lp->solve(); }
+    // certify forwards the CG loop's stall-recovery request to the backend
+    // (HiGHS runs crossover for a vertex solution; other barriers ignore it).
+    LPStatus solve(bool certify = false) { return _lp->solve(certify); }
 
     double get_obj() const { return _lp->get_obj(); }
     std::vector<double> get_primals() const { return _lp->get_primals(); }

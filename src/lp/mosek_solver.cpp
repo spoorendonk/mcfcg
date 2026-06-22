@@ -29,10 +29,6 @@ void check_mosek(MSKrescodee res, const char* msg) {
 // the numeric value handed to MOSEK for an infinite side is ignored by the key.
 constexpr double MOSEK_BOUND_INF_THRESHOLD = 1e19;
 
-// Barrier (interior-point) primal/dual feasibility and relative-gap tolerance.
-// Tunable knob for the "tighter tol → better-centered → fewer CG iters" experiment.
-constexpr double MOSEK_INTPNT_TOL = 1e-6;
-
 // Derive a MOSEK bound key + clamped (lb, ub) pair from a generic (lb, ub).
 struct BoundKey {
     MSKboundkeye bk;
@@ -95,19 +91,14 @@ public:
                     "IntpntBasis=never");
         check_mosek(MSK_putobjsense(_task, MSK_OBJECTIVE_SENSE_MINIMIZE), "ObjSense=min");
 
-        // Barrier convergence tolerances.  Tighter than LP_FEAS_TOL so the
-        // interior-point duals are precise enough for the pricer's NEG_RC_TOL
-        // (same rationale as the COPT backend's FEASTOL/DUALTOL).  Set to 1e-6
-        // (vs the prior LP_FEAS_TOL/10 = 1e-5): a more tightly centered barrier
-        // solution can converge in fewer outer CG iterations on the large
-        // transportation/planar instances, and yields objectives that agree
-        // with the paper reference to better than the 1e-3 comparison tol.
-        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_PFEAS, MOSEK_INTPNT_TOL),
-                    "TolPfeas");
-        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_DFEAS, MOSEK_INTPNT_TOL),
-                    "TolDfeas");
-        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_REL_GAP, MOSEK_INTPNT_TOL),
-                    "TolRelGap");
+        // Barrier convergence tolerances, pinned to BARRIER_TOL identically
+        // across backends so cross-solver timings compare like for like.
+        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_PFEAS, BARRIER_TOL), "TolPfeas");
+        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_DFEAS, BARRIER_TOL), "TolDfeas");
+        check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_REL_GAP, BARRIER_TOL), "TolRelGap");
+        int threads = 0;
+        check_mosek(MSK_getintparam(_task, MSK_IPAR_NUM_THREADS, &threads), "GetNumThreads");
+        log_solver_config("mosek", "barrier", /*gpu=*/false, threads);
     }
 
     ~MosekSolver() override {
@@ -274,7 +265,9 @@ public:
         check_mosek(MSK_putcj(_task, static_cast<int32_t>(col), cost), "putcj(set_col_cost)");
     }
 
-    LPStatus solve() override {
+    LPStatus solve(bool /*certify*/) override {
+        // MOSEK's interior-point already clears slacks at BARRIER_TOL; no
+        // certify cleanup needed.
         MSKrescodee trmcode = MSK_RES_OK;
         MSKrescodee res = MSK_optimizetrm(_task, &trmcode);
         if (res != MSK_RES_OK) {

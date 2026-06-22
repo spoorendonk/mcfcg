@@ -1,11 +1,23 @@
 #!/usr/bin/env python3
-"""Benchmark mcfcg LP backends (COPT, cuOpt) over the instance suite.
+"""Benchmark mcfcg LP backends over the instance suite.
 
-Drives the mcfcg CLI (which already exposes --solver / --formulation) over the
-instances in data/, one (instance, solver) run at a time with a per-instance
-CLI-side time budget (--time-limit), and checks the reported objective against
-the paper reference in each family's optimal.csv. No library or test changes —
-pure CLI driver. Every run's full CG log is saved under --logdir.
+Drives the mcfcg CLI over the instances in data/, one (instance, solver-config)
+run at a time with a per-instance CLI-side time budget (--time-limit), and checks
+the reported objective against the paper reference in each family's optimal.csv.
+Pure CLI driver. Every run's full CG log is saved under --logdir.
+
+Backends are selected by config label (see SOLVER_CONFIGS), forming a
+{CPU,GPU} x {OSS,commercial} matrix plus a same-solver GPU-off control:
+
+                 CPU            GPU
+    OSS          highs          cuopt
+    commercial   mosek          copt-gpu     (+ copt-cpu = COPT GPUMODE 0 control)
+
+All backends run the same pinned barrier regime (presolve off, crossover off,
+tol 1e-4); each run's [lp-config] provenance banner is captured into the CSV
+`config` column. A run that reports optimal=1 but whose objective is off the
+reference is flagged WRONG-OPTIMAL (a correctness bug, counted separately from
+honest time-limited fails), so a fast-but-wrong result is never credited.
 
 The CLI prints a 2-line CSV to stdout (header + data row); the preamble goes to
 stderr. See src/main.cpp. Columns:
@@ -19,12 +31,12 @@ self-terminates and reports its best UB/LB once it reaches one; a backend stuck
 inside a single LP solve (e.g. a barrier pathology) is not interrupted.
 
 Examples:
-  # smoke one instance, both backends
+  # smoke one instance across the full backend matrix
   python3 scripts/benchmark_solvers.py --families grid --instances grid1 \
-      --solvers copt,cuopt --time-limit 120
+      --time-limit 120
 
-  # full cuOpt pass, 2h/instance
-  python3 scripts/benchmark_solvers.py --solvers cuopt --out bench-cuopt.csv
+  # COPT GPU-on vs GPU-off control on planar
+  python3 scripts/benchmark_solvers.py --families planar --solvers copt-cpu,copt-gpu
 
   # both formulations on every family (override per-family default)
   python3 scripts/benchmark_solvers.py --formulations path,tree
@@ -48,6 +60,25 @@ GNU_TIME = "/usr/bin/time"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PLANAR_SIZES = [30, 50, 80, 100, 150, 300, 500, 800, 1000, 2500]
+
+# Named backend configs. The label is the comparison unit (the CSV `solver`
+# column); the value is the extra CLI args that select that backend/mode. COPT
+# is split into a CPU and a GPU config so GPUMODE 0 vs 2 is a clean same-solver
+# control for the GPU-speedup question. Every backend runs the same pinned
+# barrier regime (presolve off, crossover off, tol 1e-4) — see the C++ side;
+# the [lp-config] banner each run prints is captured into the `config` column.
+#
+#                CPU            GPU
+#   OSS          highs          cuopt
+#   commercial   mosek          copt-gpu     (+ copt-cpu = GPU-off control)
+SOLVER_CONFIGS = {
+    "highs": ["--solver", "highs"],
+    "mosek": ["--solver", "mosek"],
+    "cuopt": ["--solver", "cuopt"],
+    "copt": ["--solver", "copt"],  # COPT default (GPU mode 2)
+    "copt-cpu": ["--solver", "copt", "--copt-gpu-mode", "0"],
+    "copt-gpu": ["--solver", "copt", "--copt-gpu-mode", "2"],
+}
 
 
 def load_optimal(path):
@@ -156,9 +187,21 @@ def read_peak_mem_gb(mem_path):
             pass
 
 
+def parse_lp_config(stderr):
+    """Return the backend's [lp-config] provenance line (sans prefix), or ''."""
+    for line in stderr.splitlines():
+        line = line.strip()
+        if line.startswith("[lp-config]"):
+            return line[len("[lp-config]"):].strip()
+    return ""
+
+
 def run_one(binary, instance, solver, formulation, extra, max_iters, log_path=None,
             time_limit=None):
-    cmd = [binary, instance, "--solver", solver, "--formulation", formulation,
+    # `solver` is a config label (see SOLVER_CONFIGS): maps to the --solver flag
+    # plus any mode args (e.g. copt-cpu -> --solver copt --copt-gpu-mode 0).
+    solver_args = SOLVER_CONFIGS.get(solver, ["--solver", solver])
+    cmd = [binary, instance] + solver_args + ["--formulation", formulation,
            "--max-iters", str(max_iters)] + extra
     # Rely entirely on the CLI's own --time-limit: it stops the CG loop at an
     # iteration boundary and still prints its result, so the run self-terminates
@@ -202,18 +245,19 @@ def run_one(binary, instance, solver, formulation, extra, max_iters, log_path=No
             except OSError:
                 pass
     mem_gb = read_peak_mem_gb(mem_path)
+    config = parse_lp_config(stderr)
     outcome = "ok" if returncode == 0 else "error"
     if log_path:
         write_log(log_path, cmd, stdout, stderr, returncode, outcome)
     if returncode != 0:
         tail = "\n".join(stderr.strip().splitlines()[-3:])
         return {"outcome": "error", "returncode": returncode, "stderr_tail": tail,
-                "mem_gb": mem_gb}
+                "mem_gb": mem_gb, "config": config}
     row = parse_csv_row(stdout)
     if row is None:
         tail = "\n".join(stderr.strip().splitlines()[-3:])
         return {"outcome": "error", "returncode": 0, "stderr_tail": "no CSV row; " + tail,
-                "mem_gb": mem_gb}
+                "mem_gb": mem_gb, "config": config}
     return {
         "outcome": "ok",
         "objective": float(row["objective"]),
@@ -223,6 +267,7 @@ def run_one(binary, instance, solver, formulation, extra, max_iters, log_path=No
         "columns": int(row["columns"]),
         "time": float(row["time"]),
         "mem_gb": mem_gb,
+        "config": config,
     }
 
 
@@ -230,7 +275,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--binary", default=os.path.join(REPO, "build/mcfcg_cli"))
-    ap.add_argument("--solvers", default="copt,cuopt")
+    ap.add_argument("--solvers", default="highs,mosek,cuopt,copt-cpu,copt-gpu",
+                    help="comma-separated backend config labels (see SOLVER_CONFIGS): "
+                         "highs, mosek, cuopt, copt (GPU default), copt-cpu (GPUMODE 0), "
+                         "copt-gpu (GPUMODE 2). A label whose backend was not compiled in "
+                         "reports as an error row (informative, not silent).")
     ap.add_argument("--families", default="grid,planar,transportation,intermodal")
     ap.add_argument("--formulations", default=None,
                     help="comma-separated formulations to run for every instance "
@@ -269,9 +318,9 @@ def main():
 
     fields = ["family", "instance", "solver", "formulation", "outcome", "objective",
               "ref", "rel_err", "pass", "optimal", "iterations", "columns", "time", "mem_gb",
-              "detail"]
+              "config", "detail"]
     rows = []
-    summary = {s: {"pass": 0, "fail": 0, "error": 0, "noref": 0} for s in solvers}
+    summary = {s: {"pass": 0, "fail": 0, "wrong": 0, "error": 0, "noref": 0} for s in solvers}
 
     for family in families:
         refs = load_optimal(os.path.join(REPO, "data", FAMILY_OPTIMAL[family]))
@@ -297,7 +346,8 @@ def main():
                        "formulation": formulation, "outcome": r["outcome"],
                        "objective": "", "ref": "" if ref is None else ref,
                        "rel_err": "", "pass": "", "optimal": "", "iterations": "",
-                       "columns": "", "time": "", "mem_gb": r.get("mem_gb", ""), "detail": ""}
+                       "columns": "", "time": "", "mem_gb": r.get("mem_gb", ""),
+                       "config": r.get("config", ""), "detail": ""}
                 if r["outcome"] == "ok":
                     rec.update(objective=r["objective"], optimal=r["optimal"],
                                iterations=r["iterations"], columns=r["columns"], time=r["time"])
@@ -310,8 +360,20 @@ def main():
                         ok = rel < args.tol
                         rec["rel_err"] = rel
                         rec["pass"] = ok
-                        summary[solver]["pass" if ok else "fail"] += 1
-                        verdict = "PASS" if ok else f"FAIL rel={rel:.2e}"
+                        if ok:
+                            summary[solver]["pass"] += 1
+                            verdict = "PASS"
+                        elif r["optimal"] == 1:
+                            # Claimed optimality but the objective is wrong: a
+                            # correctness bug (e.g. a swallowed barrier failure),
+                            # not a time-limited near-miss. Flag it loudly and
+                            # count it separately from honest non-optimal fails.
+                            summary[solver]["wrong"] += 1
+                            rec["detail"] = f"WRONG-OPTIMAL: claimed optimal, rel={rel:.2e}"
+                            verdict = f"WRONG-OPTIMAL rel={rel:.2e}"
+                        else:
+                            summary[solver]["fail"] += 1
+                            verdict = f"FAIL rel={rel:.2e}"
                     sys.stderr.write(f"{verdict} obj={r['objective']:.3f} t={r['time']:.1f}s\n")
                 else:
                     rec["detail"] = r.get("stderr_tail", "") or f"rc={r.get('returncode','')}"
@@ -325,10 +387,15 @@ def main():
         w.writerows(rows)
 
     print(f"\nWrote {len(rows)} rows to {args.out}\n")
-    print(f"{'solver':<8} {'pass':>5} {'fail':>5} {'error':>6} {'noref':>6}")
+    print(f"{'solver':<10} {'pass':>5} {'fail':>5} {'wrong':>6} {'error':>6} {'noref':>6}")
     for s in solvers:
         c = summary[s]
-        print(f"{s:<8} {c['pass']:>5} {c['fail']:>5} {c['error']:>6} {c['noref']:>6}")
+        print(f"{s:<10} {c['pass']:>5} {c['fail']:>5} {c['wrong']:>6} {c['error']:>6} "
+              f"{c['noref']:>6}")
+    total_wrong = sum(c["wrong"] for c in summary.values())
+    if total_wrong:
+        print(f"\n*** {total_wrong} WRONG-OPTIMAL run(s): a backend reported optimal with a "
+              f"wrong objective. Treat as a correctness bug, not a benchmark miss. ***")
     nonpass = [r for r in rows if r["pass"] is not True]
     if nonpass:
         print("\nNon-pass runs:")

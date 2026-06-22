@@ -75,6 +75,13 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
     double obj = 0;
     for (uint32_t iter = 0; iter < 10000; ++iter) {
         auto status = master.solve();
+        // Mirror solve_cg's stall recovery: an interior-point solve (HiGHS
+        // HiPO, crossover off) can spuriously report infeasible on a master
+        // feasible at a vertex (e.g. after EdgeRows cuts). Retry once with a
+        // certified (crossover) solve before asserting.
+        if (status != LPStatus::Optimal) {
+            status = master.solve(/*certify=*/true);
+        }
         ASSERT_EQ(status, LPStatus::Optimal) << "LP not optimal at iter " << iter;
 
         obj = master.get_obj();
@@ -176,6 +183,13 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj,
     double obj = 0;
     for (uint32_t iter = 0; iter < 10000; ++iter) {
         auto status = master.solve();
+        // Mirror solve_cg's stall recovery: an interior-point solve (HiGHS
+        // HiPO, crossover off) can spuriously report infeasible on a master
+        // feasible at a vertex (e.g. after EdgeRows cuts). Retry once with a
+        // certified (crossover) solve before asserting.
+        if (status != LPStatus::Optimal) {
+            status = master.solve(/*certify=*/true);
+        }
         ASSERT_EQ(status, LPStatus::Optimal) << "LP not optimal at iter " << iter;
 
         obj = master.get_obj();

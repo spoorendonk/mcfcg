@@ -68,6 +68,15 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     // independent of slack/feasibility state — so slacks basic or fresh
     // capacity rows do NOT invalidate it.  See the LB block below.
     double best_lb = -INF;
+    // Stall-recovery state.  When pricing is exhausted (no improving column)
+    // but slacks are still basic, the next LP solve is requested as a *certify*
+    // solve (HiGHS runs crossover; other barriers no-op) to rule out a basic
+    // slack that is merely an artifact of a non-vertex interior-point solution.
+    // tried_certify latches the attempt so we crossover at most once per stable
+    // column set — it is reset whenever new columns are added (a fresh column
+    // set is a new situation worth re-certifying), bounding the extra solves.
+    bool certify_next = false;
+    bool tried_certify = false;
 
     auto populate_timing = [&] {
         result.time_lp = timer.elapsed(TimerCat::LP);
@@ -154,7 +163,18 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // --- LP solve (exactly one per iter) ---
         timer.start(TimerCat::LP);
         iter_timer.start(TimerCat::LP);
-        auto status = master.solve();
+        bool did_certify = certify_next;
+        auto status = master.solve(certify_next);
+        certify_next = false;
+        // An interior-point solve (HiGHS HiPO, crossover off) can spuriously
+        // report infeasible on a master that is feasible at a vertex — e.g.
+        // after separation adds capacity rows in EdgeRows mode. Retry once with
+        // a certified (crossover) solve before giving up, so a non-vertex
+        // numerical artifact does not abort an otherwise-feasible CG run.
+        if (status != LPStatus::Optimal && !did_certify) {
+            status = master.solve(true);
+            did_certify = true;
+        }
         iter_timer.stop(TimerCat::LP);
         timer.stop(TimerCat::LP);
 
@@ -303,6 +323,19 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                 set_optimal(obj, iter);
                 return result;
             }
+            // Pricing is exhausted but we are NOT optimal — slacks are still
+            // basic and/or separation just added cuts.  On a pure interior-point
+            // backend (HiGHS HiPO) this can be a non-vertex artifact: the
+            // central duals fail to expose an improving column, or basic slacks
+            // never collapse to 0.  Ask for one certified (vertex) solve next
+            // iter — crossover rounds the interior point to a vertex, yielding
+            // discriminating duals (so pricing can resume) and exact slacks (so
+            // a slack-free UB can be recorded).  Latched so we crossover at most
+            // once per stable column set; reset on add_columns below.
+            if (!tried_certify) {
+                tried_certify = true;
+                certify_next = true;
+            }
             if (num_active_slacks > 0) {
                 (void)master.bump_active_slacks(primals, SLACK_BUMP_FACTOR);
             }
@@ -318,6 +351,9 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             master.purge_nonbinding_capacity_rows(iter, params.row_inactivity_threshold);
 
         uint32_t added = master.add_columns(std::move(new_cols));
+        // Column set changed: a future stall is a new situation, so re-arm the
+        // certify attempt latched in the pricing-exhausted branch above.
+        tried_certify = false;
 
         result.total_columns = master.num_columns();
         finish_iter(obj, num_new_caps, num_active_slacks, added, false, purged, num_purged);

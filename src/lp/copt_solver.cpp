@@ -5,7 +5,6 @@
 
 #include <cassert>
 #include <copt.h>
-#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -29,37 +28,33 @@ private:
     copt_prob* _prob = nullptr;
 
 public:
-    explicit CoptSolver(bool verbose = false) {
+    explicit CoptSolver(bool verbose = false, int gpu_mode = -1) {
         check_copt(COPT_CreateEnv(&_env), "CreateEnv");
         check_copt(COPT_CreateProb(_env, &_prob), "CreateProb");
 
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_LPMETHOD, 2), "LpMethod=barrier");
         // GPUMode 2 requests the GPU barrier; COPT falls back to CPU when no GPU
         // is present, so this is safe on a GPU-less host (it does not crash).
-        // Override via MCFCG_COPT_GPUMODE (0=CPU, 1=GPU mode 1, 2=GPU mode 2).
-        // Garbage or out-of-range input keeps the default rather than silently
-        // forcing CPU (which atoi would do for non-numeric strings).
-        int gpu_mode = 2;
-        if (const char* gpu_env = std::getenv("MCFCG_COPT_GPUMODE")) {
-            char* end = nullptr;
-            long parsed = std::strtol(gpu_env, &end, 10);
-            if (end != gpu_env && *end == '\0' && parsed >= 0 && parsed <= 2) {
-                gpu_mode = static_cast<int>(parsed);
-            }
+        // gpu_mode comes from --copt-gpu-mode (0=CPU, 1=GPU mode 1, 2=GPU mode
+        // 2); the -1 sentinel (flag absent) and any out-of-range value default
+        // to the GPU barrier (2).
+        if (gpu_mode < 0 || gpu_mode > 2) {
+            gpu_mode = 2;
         }
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_GPUMODE, gpu_mode),
                    ("GPUMode=" + std::to_string(gpu_mode)).c_str());
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_PRESOLVE, 0), "Presolve=off");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_CROSSOVER, 0), "Crossover=off");
         check_copt(COPT_SetIntParam(_prob, COPT_INTPARAM_LOGGING, verbose ? 1 : 0), "Logging");
-        // COPT barrier without crossover: keep feastol one order
-        // tighter than LP_FEAS_TOL so that barrier duals are precise
-        // enough for the pricer's NEG_RC_TOL.  The 0.06% obj gap on
-        // small tree instances (e.g. planar30) is inherent to barrier
-        // interior-point convergence, not feastol — only crossover or
-        // simplex eliminates it.
-        check_copt(COPT_SetDblParam(_prob, COPT_DBLPARAM_FEASTOL, LP_FEAS_TOL / 10), "FeasTol");
-        check_copt(COPT_SetDblParam(_prob, COPT_DBLPARAM_DUALTOL, LP_FEAS_TOL / 10), "DualTol");
+        // Barrier feasibility/optimality tolerance, pinned to BARRIER_TOL
+        // identically across backends. The small obj gap on tiny tree
+        // instances (e.g. planar30) is inherent to barrier interior-point
+        // convergence without crossover, not feastol.
+        check_copt(COPT_SetDblParam(_prob, COPT_DBLPARAM_FEASTOL, BARRIER_TOL), "FeasTol");
+        check_copt(COPT_SetDblParam(_prob, COPT_DBLPARAM_DUALTOL, BARRIER_TOL), "DualTol");
+        int threads = 0;
+        check_copt(COPT_GetIntParam(_prob, COPT_INTPARAM_THREADS, &threads), "GetThreads");
+        log_solver_config("copt", "barrier", /*gpu=*/gpu_mode != 0, threads);
     }
 
     ~CoptSolver() override {
@@ -198,7 +193,9 @@ public:
         check_copt(COPT_SetColObj(_prob, 1, &idx, &cost), "SetColObj");
     }
 
-    LPStatus solve() override {
+    LPStatus solve(bool /*certify*/) override {
+        // COPT's barrier already converges to a near-vertex solution that
+        // clears slacks at BARRIER_TOL, so no certify cleanup is needed.
         int status = COPT_SolveLp(_prob);
         if (status != COPT_RETCODE_OK) {
             return LPStatus::Error;
@@ -267,8 +264,8 @@ public:
     double max_slack_cost() const override { return 1e9; }
 };
 
-std::unique_ptr<LPSolver> create_copt_solver(bool verbose) {
-    return std::make_unique<CoptSolver>(verbose);
+std::unique_ptr<LPSolver> create_copt_solver(bool verbose, int gpu_mode) {
+    return std::make_unique<CoptSolver>(verbose, gpu_mode);
 }
 
 }  // namespace mcfcg
