@@ -73,27 +73,40 @@ public:
             added_cut, removed_cut, t_lp, t_pr, t_sp, t_tot, _t_acc);
     }
 
-    void print_summary(uint32_t iters, double obj, bool optimal, double lb, double gap_tol,
-                       double t_lp, double t_pr, double t_sp, double t_tot) const {
+    // `upper_bound` is the certified MCF-feasible upper bound; it is +INF when
+    // the run exited without ever finding a slack-free feasible incumbent (e.g.
+    // an LP backend that stalls or spuriously reports infeasible on a large
+    // master).  `lower_bound` is the Lagrangian lower bound, -INF until the
+    // pricer first sweeps every source.  Format each side independently and
+    // only show a numeric gap when BOTH bounds are finite — otherwise print
+    // UB/LB=inf and gap=inf rather than letting an INF fallback masquerade as a
+    // zero-gap optimum.
+    // NOLINTBEGIN(bugprone-easily-swappable-parameters)
+    void print_summary(uint32_t iters, double upper_bound, bool optimal, double lower_bound,
+                       double gap_tol, double t_lp, double t_pr, double t_sp, double t_tot) const {
+        // NOLINTEND(bugprone-easily-swappable-parameters)
         if (_verbosity < Verbosity::Summary) {
             return;
         }
-        // When no MCF-feasible iter was ever reached, lb stays at -INF
-        // (never tightened).  Print that explicitly rather than
-        // letting the %.6f format produce "-inf" and gap=inf.
-        if (lb == -INF) {
-            std::fprintf(stderr,
-                         "CG %s after %u iterations. UB=%.6f LB=-inf gap=inf tol=%.3e  "
-                         "t_LP=%.3f  t_PR=%.3f  t_SP=%.3f  t_Tot=%.3f\n",
-                         optimal ? "optimal" : "stopped", iters, obj, gap_tol, t_lp, t_pr, t_sp,
-                         t_tot);
-            return;
+        const bool ub_inf = std::isinf(upper_bound);
+        const bool lb_inf = (lower_bound == -INF) || std::isinf(lower_bound);
+
+        char ub_buf[24];
+        std::snprintf(ub_buf, sizeof(ub_buf), ub_inf ? "inf" : "%.6f", upper_bound);
+        char lb_buf[24];
+        std::snprintf(lb_buf, sizeof(lb_buf), lb_inf ? "-inf" : "%.6f", lower_bound);
+        char gap_buf[24];
+        if (ub_inf || lb_inf) {
+            std::snprintf(gap_buf, sizeof(gap_buf), "inf");
+        } else {
+            std::snprintf(gap_buf, sizeof(gap_buf), "%.3e", upper_bound - lower_bound);
         }
+
         std::fprintf(stderr,
-                     "CG %s after %u iterations. UB=%.6f LB=%.6f gap=%.3e tol=%.3e  "
+                     "CG %s after %u iterations. UB=%s LB=%s gap=%s tol=%.3e  "
                      "t_LP=%.3f  t_PR=%.3f  t_SP=%.3f  t_Tot=%.3f\n",
-                     optimal ? "optimal" : "stopped", iters, obj, lb, obj - lb, gap_tol, t_lp, t_pr,
-                     t_sp, t_tot);
+                     optimal ? "optimal" : "stopped", iters, ub_buf, lb_buf, gap_buf, gap_tol, t_lp,
+                     t_pr, t_sp, t_tot);
     }
 };
 

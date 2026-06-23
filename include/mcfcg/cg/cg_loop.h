@@ -379,7 +379,11 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     }
     populate_timing();
     double gap_tol = RELATIVE_FEAS_TOL * std::max(1.0, std::abs(result.objective));
-    logger.print_summary(result.iterations, result.objective, result.optimal, best_lb, gap_tol,
+    // Report the true bounds: best_ub (INF when no slack-free incumbent was
+    // ever found) and best_lb.  result.objective falls back to best_lb for the
+    // CSV (#35), but the human summary must not present that LB as a zero-gap
+    // UB — passing best_ub here makes the no-incumbent case print UB=inf.
+    logger.print_summary(result.iterations, best_ub, result.optimal, best_lb, gap_tol,
                          result.time_lp, result.time_pricing, result.time_separation,
                          result.time_total);
     return result;
