@@ -1,5 +1,6 @@
 build*/
 .cache/
+__pycache__/
 data/intermodal-repo/
 data/intermodal/raw/
 
@@ -7,5 +8,11 @@ data/intermodal/raw/
 *.mps.gz
 *.mps
 # Benchmark outputs (scripts/benchmark_solvers.py).
-bench-*.csv
+# Per-run CG logs are bulky and regenerable — never tracked.
+bench-logs/
+bench_runs/
+bench-*.log
 Highs.log
+# Ad-hoc result CSVs stay local; the canonical full-suite result is committed.
+bench-*.csv
+!bench-results.csv

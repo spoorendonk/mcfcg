@@ -1,5 +1,0 @@
-# cmd: /home/simon/code/my/mcfcg/build/mcfcg_cli /home/simon/code/my/mcfcg/data/commalab/planar/planar2500 --solver mosek --formulation tree --max-iters 10000
-# outcome: timeout
-# === STDERR (CG iteration log + preamble) ===
-
-# === STDOUT (result CSV) ===
