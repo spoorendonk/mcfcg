@@ -116,7 +116,11 @@ def enumerate_family(family):
             yield net, key, "tree", []
         return
     if family == "intermodal":
-        for inst in sorted(glob.glob(os.path.join(d, "intermodal", "*.txt.gz"))):
+        # Only BUS and SBT are benchmark instances. SUBWAY instances exist for
+        # unit tests only (no paper reference in optimal.csv) and are excluded.
+        insts = sorted(glob.glob(os.path.join(d, "intermodal", "BUS-*.txt.gz")) +
+                       glob.glob(os.path.join(d, "intermodal", "SBT-*.txt.gz")))
+        for inst in insts:
             key = os.path.basename(inst)[: -len(".txt.gz")]
             # Tree is the default everywhere; intermodal additionally needs PricerHeavy.
             yield inst, key, "tree", ["--strategy", "pricer-heavy"]
