@@ -24,7 +24,7 @@ set(HIGHS_HIPO_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/highs-hipo-refin
 FetchContent_Declare(
     highs
     GIT_REPOSITORY https://github.com/ERGO-Code/HiGHS.git
-    GIT_TAG v1.14.0
+    GIT_TAG v1.15.1
     PATCH_COMMAND bash -c "git apply --reverse --check '${HIGHS_HIPO_PATCH}' 2>/dev/null || git apply '${HIGHS_HIPO_PATCH}'"
 )
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
