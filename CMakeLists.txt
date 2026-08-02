@@ -30,6 +30,17 @@ FetchContent_Declare(
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(HIGHS_BUILD_CXX ON CACHE BOOL "" FORCE)
 set(HIPO ON CACHE BOOL "" FORCE)
+# HiPO's numerical backend (SuiteSparse AMD, METIS, SPARSEPAK/RCM, BLAS) ships in
+# a separate "extras" library. HiGHS defaults BUILD_SHARED_EXTRAS_LIB=ON, which
+# builds it as libhighs_extras.so and #defines HIGHS_SHARED_EXTRAS_LIBRARY so the
+# feature set is resolved by loading that .so at runtime. Because we link HiGHS
+# statically (BUILD_SHARED_LIBS OFF) and never ship/find that .so, the extras go
+# unresolved at runtime: HiGHS prints "features unavailable: amd, blas, metis,
+# rcm" and SILENTLY falls back to dual simplex while the solver is still nominally
+# "hipo". Forcing the extras static compiles them into libhighs so HiPO is
+# actually available in the CLI/tests. Verify with `mcfcg_cli --verbose-solver`:
+# the HiGHS log must show HiPO/IPX, not "Using dual simplex solver".
+set(BUILD_SHARED_EXTRAS_LIB OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTING_ORIG ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
