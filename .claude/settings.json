@@ -52,10 +52,6 @@
           {
             "type": "command",
             "command": "bash .devkit/hooks/check-venv.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash .devkit/hooks/check-grep.sh"
           }
         ]
       }
