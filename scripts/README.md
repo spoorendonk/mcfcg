@@ -128,8 +128,21 @@ Everything a benchmark writes lands under the gitignored `bench_runs/` tree
 (per-run CG/solver logs, `*.stdout`, incremental/partial CSVs) — bulky and fully
 regenerable, so it is never tracked. The **committed "one truth" is a single
 consolidated results CSV per experiment under the tracked `results/` folder**
-(compact, diff-friendly). For the CG suite, promote a finalized full run's
-`bench_runs/cg/results.csv` to `results/` when you want it committed.
+(compact, diff-friendly), rebuilt from the logs by a consolidator that re-parses,
+never re-solves:
+
+```
+# CG suite: per-run logs -> results/cg_benchmark.csv
+python3 scripts/consolidate_cg_logs.py                       # default logdir bench_runs/cg/logs
+# MPS baseline: per-cell logs -> results/mps_compact_baseline.csv
+python3 scripts/consolidate_mps_logs.py
+```
+
+`consolidate_cg_logs.py` takes one or more `--logdir`s in priority order (a later
+dir overrides an earlier one for the same cell), so a multi-pass historical log set
+— e.g. an authoritative HiGHS-1.15.1 HiPO ablation layered over an earlier run —
+consolidates correctly; a single fresh `benchmark_solvers.py` run needs just the
+one default dir.
 
 ## Compact-Model Baseline (`benchmark_mps.py`)
 
