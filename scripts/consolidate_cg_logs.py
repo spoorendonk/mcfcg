@@ -96,21 +96,50 @@ def main():
             # (no result row) still contributes its memory — the OOM cells are
             # precisely the ones the memory comparison turns on.
             kb, mem_source = bs.parse_peak_rss(text)
+            # Per-iteration aggregates: `columns` from the result row is the
+            # FINAL master size, which reconciles to neither the generated count
+            # (aging purges) nor the seed. Carry all three so the paper's table
+            # can say which is which. extract_iterations.py owns the trace.
+            iters = bs.parse_iteration_table(text)
+            slack_mode = bs.parse_slack_mode(text)
             # Full dir, not basename: bench_runs/logs and
             # bench_runs/highs_hipo_ablation/logs both basename to "logs", which
             # left `source` unable to say which logdir actually won a cell — it
             # named the superseded dir for the 88 ablation rows.
-            cells[keyparts] = (row, os.path.join(logdir, fn), kb, mem_source)
+            cells[keyparts] = (row, os.path.join(logdir, fn), kb, mem_source, iters,
+                               slack_mode)
 
-    fields = ["family", "instance", "formulation", "solver", "objective", "ref",
-              "rel_err", "pass", "optimal", "time", "mem_gb", "mem_source", "source"]
+    # Columns carried straight through from the CLI's result row. `columns` is
+    # master.num_columns() at TERMINATION (cg_loop.h) — the final master size,
+    # not the number of columns generated, which differs whenever aging purges
+    # (--col-age-limit). The generated count is a per-iteration sum of `+col`;
+    # extract_iterations.py produces it. Both quantities are wanted (gh #38).
+    PASSTHROUGH = ["iterations", "columns", "lower_bound", "time_lp",
+                   "time_pricing", "time_separation"]
+
+    # Derived from the iteration trace, not the result row. `columns_seeded` is
+    # the warm-start pool that `+col` never counts. These do NOT reconcile into
+    # an identity with `columns` — see summarize_iterations for the measurements
+    # and the open question about where the extra columns come from.
+    DERIVED = ["columns_generated", "columns_seeded", "columns_purged",
+               "slack_columns", "cuts_added", "cuts_removed"]
+
+    fields = (["family", "instance", "formulation", "solver", "objective", "ref",
+               "rel_err", "pass", "optimal", "time"] + PASSTHROUGH + DERIVED
+              + ["mem_gb", "mem_source", "source"])
     out_rows = []
-    for (family, inst, form, solver), (row, source, kb, mem_source) in sorted(cells.items()):
+    for (family, inst, form, solver), (row, source, kb, mem_source, iters, smode) in \
+            sorted(cells.items()):
         rec = {"family": family, "instance": inst, "formulation": form,
                "solver": solver, "objective": "", "ref": "", "rel_err": "",
                "pass": "", "optimal": "", "time": "",
                "mem_gb": bs.mem_gb_from_kb(kb), "mem_source": mem_source,
                "source": source}
+        rec.update({f: "" for f in PASSTHROUGH})
+        # The trace exists even when the run errored before printing a result
+        # row, so these are filled before the row is None early-out below.
+        rec.update({f: "" for f in DERIVED})
+        rec.update(bs.summarize_iterations(iters, smode))
         ref = refs.get(inst)
         if ref is not None:
             rec["ref"] = ref
@@ -127,6 +156,7 @@ def main():
         rec["objective"] = obj
         rec["optimal"] = row.get("optimal", "")
         rec["time"] = row.get("time", "")
+        rec.update({f: row.get(f, "") for f in PASSTHROUGH})
         if ref is not None:
             rel = abs(obj - ref) / max(1.0, abs(ref))
             rec["rel_err"] = rel

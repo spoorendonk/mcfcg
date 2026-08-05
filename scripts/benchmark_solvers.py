@@ -255,6 +255,112 @@ def parse_peak_rss(log_text):
     return (kb, source) if kb is not None else (None, "")
 
 
+# Iteration-table header -> tidy column name. The CLI prints this table on stderr
+# at Verbosity::Iteration; write_log captures it verbatim, so it is the only
+# record of per-iteration behaviour (gh #38).
+ITER_COLUMNS = {
+    "It": "iteration", "UB": "ub", "LB": "lb", "LP_obj": "lp_obj",
+    "#col": "n_col", "#row": "n_row", "#slk": "n_slk",
+    "+col": "added_col", "-col": "removed_col",
+    "+cut": "added_cut", "-cut": "removed_cut",
+    "t_LP": "t_lp", "t_PR": "t_pricing", "t_SP": "t_separation",
+    "t_Tot": "t_iter", "t_acc": "t_acc",
+}
+
+
+def parse_iteration_table(log_text):
+    """Parse the per-iteration CG table into a list of dicts, [] if absent.
+
+    Numeric fields become float/int; `inf` stays a float inf. The `+col` count
+    may carry a leading '*' meaning the columns were priced but NOT added — the
+    loop hit the optimality gap and returned without calling add_columns
+    (cg_loop.h). Those are reported as `added_col` with `col_committed=False`,
+    so a "columns generated" total can exclude them instead of overcounting.
+    """
+    lines = log_text.splitlines()
+    header_idx, names = None, None
+    for i, line in enumerate(lines):
+        toks = line.split()
+        if toks[:1] == ["It"] and "LP_obj" in toks:
+            header_idx, names = i, [ITER_COLUMNS.get(t, t) for t in toks]
+            break
+    if header_idx is None:
+        return []
+
+    rows = []
+    for line in lines[header_idx + 1:]:
+        toks = line.split()
+        if len(toks) != len(names) or not toks[0].isdigit():
+            break  # end of table (summary line, blank, or the STDOUT marker)
+        rec, committed = {}, True
+        for name, tok in zip(names, toks):
+            if name == "added_col" and tok.startswith("*"):
+                committed, tok = False, tok[1:]
+            try:
+                rec[name] = int(tok) if name.startswith(("n_", "iteration")) \
+                    or name.startswith(("added_", "removed_")) else float(tok)
+            except ValueError:
+                rec[name] = tok
+        rec["col_committed"] = committed
+        rows.append(rec)
+    return rows
+
+
+def parse_slack_mode(log_text):
+    """Read the preamble's `Slack mode:` line -> (mode, struct_rows), or (None, 0).
+
+    MasterBase::init picks the placement (master_base.h): CommodityRows puts one
+    slack on every structural row up front; EdgeRows pairs one with each lazily
+    added capacity row. That choice determines how many of the master's columns
+    are slacks, which the iteration trace counts and the result row does not.
+    """
+    for line in log_text.splitlines():
+        m = re.search(r"Slack mode: (\w+) \(struct=(\d+), capped_arcs=(\d+)\)", line)
+        if m:
+            return m.group(1), int(m.group(2))
+    return None, 0
+
+
+def summarize_iterations(rows, slack_mode=(None, 0)):
+    """Per-run aggregates derivable only from the iteration trace.
+
+    `columns_seeded` is the warm-start pool the pricer never reports: added
+    before the loop, so iteration 1 shows them in `#col` with `+col = 0`.
+    Uncommitted (`*N`) counts are excluded from `columns_generated`.
+
+    `slack_columns` is how many of the master's columns are slacks, implied by
+    the slack mode rather than counted: CommodityRows places one per structural
+    row at init, EdgeRows one per lazily added capacity row. At termination it
+    accounts for the gap between the trace's `#col` (which counts slacks) and
+    the result row's `columns` (which does not) in 436 of the 438 runs having
+    both; the 2 exceptions report `columns=0`.
+
+    CAUTION: these do NOT close into a per-iteration identity. `#col` grows by
+    more than `+col` reports on many runs (e.g. grid11/path/highs iter 3: `+col`
+    2282, `#col` +2406), and adding the `+cut` slack term does not fix it — 292
+    of 437 runs still violate it. Treat each figure as the quantity it names;
+    do not publish a derived reconciliation without first establishing where the
+    extra columns come from.
+    """
+    if not rows:
+        return {}
+    mode, struct = slack_mode
+    if mode == "CommodityRows":
+        slack_cols = struct              # one per structural row, placed at init
+    elif mode == "EdgeRows":
+        slack_cols = rows[-1]["n_row"] - struct   # one per lazily added cap row
+    else:
+        slack_cols = ""
+    return {
+        "columns_generated": sum(r["added_col"] for r in rows if r["col_committed"]),
+        "columns_seeded": rows[0]["n_col"] - rows[0]["added_col"],
+        "columns_purged": sum(r["removed_col"] for r in rows),
+        "slack_columns": slack_cols,
+        "cuts_added": sum(r["added_cut"] for r in rows),
+        "cuts_removed": sum(r["removed_cut"] for r in rows),
+    }
+
+
 def parse_lp_config(stderr):
     """Return the backend's [lp-config] provenance line (sans prefix), or ''."""
     for line in stderr.splitlines():

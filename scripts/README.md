@@ -134,9 +134,38 @@ never re-solves:
 ```
 # CG suite: per-run logs -> results/cg_benchmark.csv
 python3 scripts/consolidate_cg_logs.py                       # default logdir bench_runs/cg/logs
+# CG per-iteration trace -> results/cg_iterations.csv
+python3 scripts/extract_iterations.py                        # same --logdir set
 # MPS baseline: per-cell logs -> results/mps_compact_baseline.csv
 python3 scripts/consolidate_mps_logs.py
 ```
+
+### Counting columns: three different numbers
+
+`results/cg_benchmark.csv` carries `columns` (final master size, from the CLI's
+result row) alongside `columns_generated`, `columns_seeded` and `columns_purged`
+(summed from the iteration trace). They are genuinely different quantities and
+the paper must say which it quotes:
+
+- **`columns`** — `master.num_columns()` at termination. Shrinks with
+  `--col-age-limit` purging, and **excludes slack columns**.
+- **`columns_generated`** — Σ `+col`, what the pricer actually produced. A `+col`
+  printed as `*N` was priced but never added (the loop hit the gap and returned
+  without `add_columns`, `cg_loop.h`) and is excluded.
+- **`columns_seeded`** — the warm-start pool, added *before* the loop and so
+  never counted by `+col`. On path masters it dominates: Austin path starts at
+  1,082,300 columns for 1,081,717 commodities — one per commodity.
+
+That last point matters. Quoting the final master size as "columns generated"
+credits the path formulation's warm start to its pricer:
+
+| Austin, copt-cpu | iters | seeded | generated | final master | converged |
+|---|---|---|---|---|---|
+| tree | 223 | 2,234 | 228,464 | 23,262 | yes |
+| path | 8 | 1,082,300 | 350,000 | 1,414,271 | no (timed out) |
+
+These figures do **not** close into an identity — the trace's `#col` grows by
+more than `+col` reports on most runs. Quote each for what it names.
 
 `consolidate_cg_logs.py` takes one or more `--logdir`s in priority order (a later
 dir overrides an earlier one for the same cell), so a multi-pass historical log set
