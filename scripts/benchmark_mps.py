@@ -1,0 +1,617 @@
+#!/usr/bin/env python3
+"""Benchmark the monolithic compact-source LP (MPS files) across native solver binaries.
+
+This is the *direct-solve baseline* that the column-generation method
+(scripts/benchmark_solvers.py) is compared against: each `.mps.gz` is the full
+compact source LP (one variable f^s_e per source/edge, |S|*|V| conservation rows
++ one capacity row per arc) handed to a barrier in a single shot — no CG. The
+compact source LP corresponds to the TREE formulation's LP (same optimum), so
+the natural head-to-head is `direct-X` here vs `tree-CG-X` in benchmark_solvers.py
+for the same backend X.
+
+Unlike benchmark_solvers.py (which drives the mcfcg CLI), this driver invokes the
+vendors' *native* command-line solvers directly, because the mcfcg CLI does not
+read external MPS. Barrier regime: interior point, **presolve left at each solver's
+default** (let the solver decide), crossover OFF, relative tol = 1e-4 (tolerances.h
+BARRIER_TOL). Presolve is deliberately NOT forced (unlike the CG masters, which pin
+it OFF): a direct monolith solve normally benefits a lot from presolve, and forcing
+it off would handicap the baseline and flatter CG, so we give the monolith each
+vendor's natural setting. (Caveat: most solvers default to presolve on/auto, but
+cuOpt's LP default is presolve OFF — "let the solver decide" means it stays off
+there unless you pass --presolve 1.) Only presolve is left free; crossover-off +
+tol 1e-4 keep the solution type and stopping tolerance identical for a fair
+objective comparison. Each run's full log is saved.
+
+Intermodal has no row here on purpose: its compact source LP is |S|*|E| with
+|S| ~ |K| (unique-source), which is intractable to even build/store — the mcfcg
+MPS exporter throws by design (see src/source/source_lp.cpp). That asymmetry is a
+result, not a gap.
+
+Solver binaries (paths overridable via env or the BINARIES table below):
+  highs     build/bin/highs                              (built by this repo)
+  mosek     $MOSEK_HOME/bin/mosek
+  copt-cpu  $COPT_HOME/bin/copt_cmd  (GPUMode 0)
+  copt-gpu  $COPT_HOME/bin/copt_cmd  (GPUMode 2)
+  cuopt     $CUOPT_BIN or /usr/local/cuopt/bin/cuopt_cli (GPU)
+
+NOTE: the per-solver parameter names below are the first-cut mapping from each
+CLI's --help. Validate objective/time parsing on one small instance (e.g. grid1)
+when the machine is free before trusting a full sweep; parsing regexes are
+centralized in PARSERS for easy adjustment.
+
+CSV columns:
+  instance,solver,gpu,outcome,objective,ref,rel_err,pass,time_wall,time_solve,
+  status,detail
+"""
+
+import argparse
+import csv
+import os
+import re
+import signal
+import subprocess
+import sys
+import time
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _default(path_env, fallback):
+    v = os.environ.get(path_env)
+    return v if v else fallback
+
+
+MOSEK_HOME = _default("MOSEK_HOME", "/opt/mosek/11.0/tools/platform/linux64x86")
+COPT_HOME = _default("COPT_HOME", "/opt/copt80")
+
+
+def _first_existing(*paths):
+    for p in paths:
+        if p and os.path.exists(p):
+            return p
+    return paths[-1]  # report the preferred default even if missing (warns later)
+
+
+# HiPO-capable standalone HiGHS v1.15.1 (matches CMakeLists' GIT_TAG). The stock
+# system /usr/local/bin/highs at v1.15.1 CANNOT run HiPO from the CLI — it aborts
+#   "The HiPO solver ... features are unavailable: amd, blas, metis, rcm" (rc 255)
+# because the 1.15 standalone resolves its numerical extras by dlopen'ing
+# libhighs_extras.so at runtime and that .so is not shipped/linked (even placing it
+# on LD_LIBRARY_PATH does not fix the standalone). We build a fixed 1.15.1 `highs`
+# from the SAME patched source the repo fetches (build/_deps/highs-src) with
+# BUILD_SHARED_EXTRAS_LIB=OFF + BUILD_SHARED_LIBS=OFF, so the extras (AMD/METIS/
+# RCM/BLAS) are compiled into a static libhighs and baked into a self-contained
+# exe (only dynamic dep is system BLAS). Validated: "Running HiPO" -> Optimal,
+# objectives match MOSEK/COPT/cuOpt. Install it over /usr/local/bin/highs (sudo) to
+# fix the box globally; until then the harness prefers the known-good build output.
+# Override with HIGHS_BIN. run_one asserts HiPO actually ran (guards a silent
+# dual-simplex/other fallback slipping into the results).
+HIGHS_BIN = _first_existing(
+    os.environ.get("HIGHS_BIN"),
+    "/home/simon/opt/highs-1.15.1/bin/highs",         # our fixed 1.15.1 (HiPO works)
+    "/home/simon/opt/highs-1.15.1-build/bin/highs",   # build-tree copy
+    "/usr/local/bin/highs",                           # after sudo reinstall, this too
+)
+
+BINARIES = {
+    "highs": HIGHS_BIN,
+    "mosek": os.path.join(MOSEK_HOME, "bin/mosek"),
+    "copt": os.path.join(COPT_HOME, "bin/copt_cmd"),
+    "cuopt": _default("CUOPT_BIN", "/usr/local/cuopt/bin/cuopt_cli"),
+}
+
+# Pinned barrier regime shared with the CG experiments (tolerances.h BARRIER_TOL).
+BARRIER_TOL = 1e-4
+
+# Optional per-solve memory cgroup guard (set from CLI in main()). Wrapping each
+# solver in a transient systemd scope with MemoryMax + MemorySwapMax=0 means a
+# runaway barrier (the giants can need >100 GB to form the normal equations) is
+# OOM-killed cleanly at the cap instead of dragging the whole box into a swap
+# death-spiral. Empty list => no guard.
+MEM_GUARD = []
+
+# Reference optima per family (same files benchmark_solvers.py checks against).
+FAMILY_OPTIMAL = {
+    "grid": "data/commalab/grid/optimal.csv",
+    "planar": "data/commalab/planar/optimal.csv",
+    "transportation": "data/transportation/optimal.csv",
+}
+
+
+def load_refs():
+    refs = {}
+    for fam, rel in FAMILY_OPTIMAL.items():
+        p = os.path.join(REPO, rel)
+        if not os.path.exists(p):
+            continue
+        with open(p, newline="") as f:
+            r = csv.reader(f)
+            next(r, None)
+            for row in r:
+                if len(row) >= 2 and row[0]:
+                    refs[row[0]] = float(row[1])
+    return refs
+
+
+# --- Per-config command builders --------------------------------------------
+# Each returns argv (list) plus an optional dict of extra files to write first
+# (path -> contents), e.g. a HiGHS options file or a MOSEK parameter file.
+
+
+def cmd_highs(mps, time_limit, logdir, tag):
+    opts = os.path.join(logdir, f"{tag}.highs-opts")
+    # Match the CG HiGHS backend exactly (src/lp/highs_solver.cpp): the HiPO
+    # interior-point solver, crossover off, primal/dual feasibility tol = 1e-4.
+    # Presolve is left at HiGHS' default (not forced) per the monolith regime.
+    contents = (
+        "solver = hipo\n"
+        "run_crossover = off\n"
+        f"primal_feasibility_tolerance = {BARRIER_TOL}\n"
+        f"dual_feasibility_tolerance = {BARRIER_TOL}\n"
+        f"time_limit = {time_limit}\n"
+    )
+    argv = [BINARIES["highs"], "--model_file", mps, "--options_file", opts]
+    return argv, {opts: contents}
+
+
+def cmd_mosek(mps, time_limit, logdir, tag):
+    # -itro /dev/null: MOSEK writes the interior solution to <input>.sol next to
+    # the input by default (would land in data/mps and be multi-GB on the giants);
+    # redirect it to the bit bucket. Barrier tol pinned on all three components to
+    # match the CG backend (src/lp/mosek_solver.cpp). Presolve left at MOSEK's
+    # default (MSK_PRESOLVE_MODE_FREE) per the monolith regime.
+    argv = [
+        BINARIES["mosek"],
+        "-d", "MSK_IPAR_OPTIMIZER", "MSK_OPTIMIZER_INTPNT",
+        "-d", "MSK_IPAR_INTPNT_BASIS", "MSK_BI_NEVER",  # crossover/basis off
+        "-d", "MSK_DPAR_INTPNT_TOL_PFEAS", str(BARRIER_TOL),
+        "-d", "MSK_DPAR_INTPNT_TOL_DFEAS", str(BARRIER_TOL),
+        "-d", "MSK_DPAR_INTPNT_TOL_REL_GAP", str(BARRIER_TOL),
+        "-d", "MSK_DPAR_OPTIMIZER_MAX_TIME", str(time_limit),
+        "-itro", "/dev/null",
+        mps,
+    ]
+    return argv, {}
+
+
+def cmd_copt(mps, time_limit, logdir, tag, gpu_mode):
+    # readmps reads .mps and .mps.gz. FeasTol+DualTol are the barrier stopping
+    # tolerances used by the CG backend (src/lp/copt_solver.cpp); COPT 8.0 has NO
+    # "BarConvTol" parameter (it errors "Unknown COPT parameter"). Presolve left at
+    # COPT's default (auto) per the monolith regime. The trailing "quit" is
+    # REQUIRED: `copt_cmd -c <script>` drops into an interactive prompt after the
+    # script and would otherwise block on stdin until the subprocess timeout
+    # (run_one also passes stdin=DEVNULL as a belt-and-suspenders).
+    script = (
+        f"readmps {mps}; "
+        "set LpMethod 2; "        # barrier
+        "set Crossover 0; "
+        f"set GPUMode {gpu_mode}; "
+        f"set FeasTol {BARRIER_TOL}; "
+        f"set DualTol {BARRIER_TOL}; "
+        f"set TimeLimit {time_limit}; "
+        "optimize; "
+        "quit"
+    )
+    return [BINARIES["copt"], "-c", script], {}
+
+
+def cmd_cuopt(mps, time_limit, logdir, tag):
+    # Discard the primal solution: on the giant instances a converged solution has
+    # tens of millions of entries (multi-GB per file), and we only ever read the
+    # objective/time from stdout. Mirrors MOSEK's `-itro /dev/null`.
+    sol = "/dev/null"
+    # --method 3 = CUOPT_METHOD_BARRIER (0=concurrent, 1=PDLP, 2=dual-simplex,
+    # 3=barrier). WITHOUT it cuOpt runs the default concurrent/PDLP path, NOT the
+    # GPU barrier the CG backend uses (src/lp/cuopt_solver.cpp pins
+    # CUOPT_METHOD_BARRIER). Presolve left at cuOpt's LP default (off).
+    argv = [
+        BINARIES["cuopt"], mps,
+        "--method", "3",
+        "--crossover", "0",
+        "--relative-gap-tolerance", str(BARRIER_TOL),
+        "--relative-primal-tolerance", str(BARRIER_TOL),
+        "--relative-dual-tolerance", str(BARRIER_TOL),
+        "--time-limit", str(time_limit),
+        "--solution-file", sol,
+    ]
+    return argv, {}
+
+
+# Config label -> (command builder, gpu annotation).
+CONFIGS = {
+    "highs": (lambda m, t, d, g: cmd_highs(m, t, d, g), "cpu"),
+    "mosek": (lambda m, t, d, g: cmd_mosek(m, t, d, g), "cpu"),
+    "copt-cpu": (lambda m, t, d, g: cmd_copt(m, t, d, g, 0), "cpu"),
+    "copt-gpu": (lambda m, t, d, g: cmd_copt(m, t, d, g, 2), "gpu"),
+    "cuopt": (lambda m, t, d, g: cmd_cuopt(m, t, d, g), "gpu"),
+}
+
+# Objective + solver-reported solve-time parsers (best-effort; centralized so a
+# single validation run can correct any that drift from the installed versions).
+PARSERS = {
+    # HiGHS CLI: "Objective value     :  1.2345678900e+04"
+    "highs": {
+        "obj": re.compile(r"Objective value\s*:\s*([-\d.eE+]+)"),
+        "time": re.compile(r"(?:Solve|HiGHS run) time\s*:?\s*([\d.]+)"),
+        "status": re.compile(r"Model status\s*:\s*(.+)"),
+    },
+    # MOSEK: "Primal.  obj: 1.23e4" / "Optimizer terminated. Time: 65.32"
+    "mosek": {
+        "obj": re.compile(r"Primal\.\s*obj:\s*([-\d.eE+]+)"),
+        "time": re.compile(r"Optimizer terminated\. Time:\s*([\d.]+)"),
+        "status": re.compile(r"(Interior-point solution summary|Optimizer terminated)"),
+    },
+    # COPT. `obj` is an ordered list: the FIRST regex that matches anywhere wins
+    # (its last match is taken). We prefer the barrier's "Primal objective:" line
+    # because on a TIME_LIMIT stop COPT's summary line prints "Objective:
+    # 0.0000000000e+00" (no certified solution) even though the barrier reached a
+    # near-optimal primal iterate -- taking that 0.0 would misreport a near-solved
+    # giant as a 100% FAIL. On a clean Optimal solve both lines agree. The
+    # Status-line "Objective:" is kept only as a fallback (e.g. a solve that
+    # printed no barrier block). "Time:\s*([\d.]+)s" matches the summary line, not
+    # the per-iteration time column.
+    "copt": {
+        "obj": [
+            re.compile(r"Primal objective:\s*([-\d.eE+]+)"),
+            re.compile(r"Objective:\s*([-\d.eE+]+)"),
+        ],
+        "time": re.compile(r"Time:\s*([\d.]+)s"),
+        "status": re.compile(r"Status:\s*(\w+)"),
+    },
+    # cuOpt CLI. On convergence it prints "Objective +8.27e5"; on a
+    # "Barrier time limit exceeded" stop there is NO such line, so we fall back to
+    # the primal objective of the last barrier iteration row
+    # ("  609   +1.80e+09  +1.80e+09  ..."). timing from "... iterations and 0.21s"
+    # and "Barrier finished in 0.21 seconds".
+    "cuopt": {
+        "obj": [
+            # [^\S\n]* (not \s*) keeps the match on the same line as "Objective",
+            # so a bare "Objective" header can't grab a number off the next line.
+            re.compile(r"Objective[^\S\n]*[:=]?[^\S\n]*([-\d.eE+]+)"),
+            # last barrier-iteration primal; "-" is in the class so a negative
+            # exponent (e.g. +1.80e-05) parses rather than truncating at the 'e'.
+            re.compile(r"(?m)^\s*\d+\s+([-+][\d.][\d.eE+-]*)\s+[-+]"),
+        ],
+        "time": re.compile(r"(?:finished in|iterations and)\s+([\d.]+)"),
+        "status": re.compile(r"(Optimal|TimeLimit|time limit|Infeasible|termination)", re.I),
+    },
+}
+
+
+def parser_key(solver):
+    return "copt" if solver.startswith("copt") else solver
+
+
+# cuOpt (#33): the GPU barrier can hit a cuDSS device-alloc / numerical error and
+# still exit rc=0, returning a non-optimal incumbent as if solved. On the giants
+# this VRAM OOM is expected. Any of these markers in the log means the barrier did
+# NOT produce a trustworthy solution -> we force an error and discard the objective
+# so a swallowed failure never masquerades as a (possibly garbage) optimum.
+CUOPT_FAIL_MARKERS = (
+    "numerical error", "Out of memory in barrier", "bad_alloc",
+    "cudaErrorMemoryAllocation", "out_of_memory",
+)
+
+
+def cuopt_solve_failed(text):
+    return any(m in text for m in CUOPT_FAIL_MARKERS)
+
+
+# COPT can hit "GPU memory issue" and print "[ERROR] Fail to solve" yet still exit
+# rc=0. If COPT actually recovered (e.g. GPU->CPU fallback) it prints a valid
+# "Primal objective:" and no "Fail to solve", so keying on this marker only trips
+# on a genuine non-solve.
+def copt_solve_failed(text):
+    return "Fail to solve" in text
+
+
+def parse_output(solver, text):
+    pk = parser_key(solver)
+    pats = PARSERS[pk]
+    obj = tlast = status = None
+    # obj may be a single regex or an ordered priority list. Try each pattern in
+    # order and take the LAST match that parses as a float; a pattern whose match
+    # is a non-numeric fragment (the permissive char classes can capture a bare
+    # sign/exponent) falls THROUGH to the next pattern instead of poisoning the
+    # result to None -- so e.g. cuOpt's final-objective regex can't suppress the
+    # iteration-primal fallback.
+    obj_pats = pats["obj"]
+    if not isinstance(obj_pats, (list, tuple)):
+        obj_pats = [obj_pats]
+    for pat in obj_pats:
+        cand = None
+        for m in pat.finditer(text):
+            try:
+                cand = float(m.group(1))
+            except ValueError:
+                continue
+        if cand is not None:
+            obj = cand
+            break
+    for m in pats["time"].finditer(text):
+        tlast = m.group(1)
+    for m in pats["status"].finditer(text):  # last match = terminal status
+        status = m.group(0)
+    try:
+        tlast = float(tlast) if tlast is not None else None
+    except ValueError:
+        tlast = None
+    return obj, tlast, status
+
+
+def run_one(solver, mps, key, time_limit, logdir):
+    builder, gpu = CONFIGS[solver]
+    tag = f"{key}__{solver}"
+    argv, extra_files = builder(mps, time_limit, logdir, tag)
+    for path, contents in extra_files.items():
+        with open(path, "w") as f:
+            f.write(contents)
+    log_path = os.path.join(logdir, f"{tag}.log")
+    # Prepend the memory-cgroup guard (if configured). systemd-run --scope runs the
+    # child synchronously and propagates its exit status; a MemoryMax kill surfaces
+    # as rc 137 (SIGKILL) which we record as an OOM error rather than a crash.
+    run_argv = MEM_GUARD + argv
+    t0 = time.monotonic()
+    # start_new_session=True puts the child in its own process group so a timeout
+    # can killpg the WHOLE tree -- subprocess.run would SIGKILL only its immediate
+    # child, orphaning the actual solver (under the systemd guard the solver is a
+    # reparented grandchild; the guard's RuntimeMaxSec is the primary teardown, and
+    # this is belt-and-suspenders for the unguarded path). Popen+communicate also
+    # returns decodable str on timeout, sidestepping subprocess.run's
+    # TimeoutExpired.stdout-as-bytes quirk that would TypeError and crash the whole
+    # sweep on the exact hang path it is meant to survive. stdin=/dev/null feeds
+    # copt_cmd's post-`quit` interactive prompt an EOF so it exits.
+    try:
+        proc = subprocess.Popen(
+            run_argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL, text=True, start_new_session=True)
+    except OSError as e:
+        # Missing/unexecutable binary (or absent systemd-run guard): record this
+        # cell as an error and let the rest of the multi-hour sweep continue rather
+        # than aborting the whole run.
+        out = f"[harness] failed to launch: {e}\n"
+        rc, outcome = 127, "error"
+    else:
+        try:
+            # The solver's own --time-limit is the real stopping mechanism; this
+            # generous subprocess timeout only guards a true hang.
+            stdout, stderr = proc.communicate(timeout=time_limit + 1800)
+            rc = proc.returncode
+            outcome = "ok" if rc == 0 else "error"
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+            stdout, stderr = proc.communicate()
+            rc, outcome = -1, "timeout"
+        out = (stdout or "") + "\n" + (stderr or "")
+    wall = time.monotonic() - t0
+    # Guard against a silent HiGHS solver fallback: if we asked for HiPO but the
+    # log shows the extras-unavailable abort (or never reports "Running HiPO"),
+    # flag it so a dual-simplex/other result never masquerades as the HiPO baseline.
+    note = ""
+    if solver == "highs" and outcome == "ok":
+        if "features are unavailable" in out or "Running HiPO" not in out:
+            outcome = "error"
+            note = "HiPO did not run (extras unavailable / fallback)"
+    if solver == "cuopt" and outcome == "ok" and cuopt_solve_failed(out):
+        outcome = "error"
+        note = "cuOpt barrier numerical error / VRAM OOM (#33) -- objective discarded"
+    if solver.startswith("copt") and outcome == "ok" and copt_solve_failed(out):
+        outcome = "error"
+        note = "COPT failed to solve (GPU memory issue / infeasible) -- objective discarded"
+    # Write atomically (temp + os.replace) so an interrupted driver can never leave
+    # a truncated log carrying an intact "outcome=ok" header -- the consolidator
+    # would otherwise re-parse the partial body and score a mid-barrier iterate as
+    # the final objective. A log is now either absent or complete.
+    tmp_path = log_path + ".partial"
+    with open(tmp_path, "w") as f:
+        f.write("# cmd: " + " ".join(run_argv) + "\n")
+        f.write(f"# wall={wall:.3f}s rc={rc} outcome={outcome}\n")
+        if note:
+            f.write(f"# WARN {note}\n")
+        f.write("# === solver output ===\n")
+        f.write(out)
+    os.replace(tmp_path, log_path)
+    obj, tsolve, status = parse_output(solver, out)
+    if outcome == "error" and note:
+        obj = None      # never surface an objective from a guarded failure
+        status = note
+    return {
+        "outcome": outcome, "objective": obj, "time_wall": wall,
+        "time_solve": tsolve, "status": status, "gpu": gpu, "rc": rc,
+    }
+
+
+def enumerate_mps(mps_dir, glob_filter, max_gz_bytes=None, min_gz_bytes=None):
+    # Yield (path, key) ordered by compressed file SIZE ascending (cheapest first),
+    # NOT alphabetically -- an alpha sort would front-load the giant transportation
+    # cities (Austin, BerlinCenter, Birmingham, ChicagoRegional, Philadelphia)
+    # before the tiny grids, exactly the wrong order for a memory-cautious sweep.
+    # max_gz_bytes, if set, SKIPS (and logs) instances whose .mps.gz exceeds it, so
+    # the risky monsters can be deferred to a dedicated pass -- no silent drop.
+    import glob as _glob
+    import fnmatch
+    paths = _glob.glob(os.path.join(mps_dir, "*.mps.gz")) + \
+        _glob.glob(os.path.join(mps_dir, "*.mps"))
+    for p in sorted(paths, key=lambda q: os.path.getsize(q)):
+        key = os.path.basename(p)
+        key = key[:-7] if key.endswith(".mps.gz") else key[:-4]
+        if glob_filter and not fnmatch.fnmatch(key, glob_filter):
+            continue
+        sz = os.path.getsize(p)
+        if max_gz_bytes is not None and sz > max_gz_bytes:
+            sys.stderr.write(
+                f"[mps] SKIP {key}: {sz/1e6:.0f} MB gz exceeds "
+                f"--max-gz-bytes {max_gz_bytes/1e6:.0f} MB\n")
+            continue
+        if min_gz_bytes is not None and sz < min_gz_bytes:
+            sys.stderr.write(
+                f"[mps] SKIP {key}: {sz/1e6:.0f} MB gz below "
+                f"--min-gz-bytes {min_gz_bytes/1e6:.0f} MB\n")
+            continue
+        yield p, key
+
+
+def verify_mem_guard(guard_args):
+    """Probe that the memory cap is actually ENFORCED, not just requested.
+
+    If the cgroup-v2 memory controller isn't delegated to the user manager, a
+    `systemd-run --user --scope -p MemoryMax=...` still succeeds (rc 0) but the
+    limit is silently ignored (memory.max == "max") -- i.e. solvers run UNGUARDED
+    and a 100+ GB barrier can swap-kill the box. Create a throwaway scope with the
+    real guard params and read back its effective memory.max. Returns (ok, detail).
+    """
+    probe = guard_args + [
+        "bash", "-c",
+        "cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.max 2>/dev/null",
+    ]
+    try:
+        r = subprocess.run(probe, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, f"probe failed to launch ({e})"
+    if r.returncode != 0:
+        return False, f"probe rc={r.returncode}: {r.stderr.strip()[:160]}"
+    val = r.stdout.strip()
+    if not val.isdigit():
+        return False, f"memory.max not enforced (got {val!r}); controller not delegated?"
+    return True, f"memory.max={int(val)} bytes"
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--mps-dir", default=os.path.join(REPO, "data/mps"))
+    ap.add_argument("--solvers", default="highs,mosek,cuopt,copt-cpu,copt-gpu")
+    ap.add_argument("--instances", default=None,
+                    help="fnmatch glob on the instance key (e.g. 'grid1', 'planar*').")
+    ap.add_argument("--time-limit", type=float, default=7200.0,
+                    help="solver-side wall-clock budget in seconds (default 2h).")
+    ap.add_argument("--tol", type=float, default=1e-3,
+                    help="relative objective tolerance for pass.")
+    ap.add_argument("--out", default="bench_runs/mps/results.csv",
+                    help="results CSV; default lives under the gitignored "
+                         "bench_runs/ tree, not repo root.")
+    ap.add_argument("--logdir", default="bench_runs/mps/logs",
+                    help="per-cell solver logs; default under gitignored "
+                         "bench_runs/, not repo root.")
+    ap.add_argument("--mem-max", default="105G",
+                    help="per-solve RSS cap enforced via `systemd-run --user "
+                         "--scope -p MemoryMax=... -p MemorySwapMax=0` so a runaway "
+                         "is OOM-killed cleanly. Empty string or 'off' disables it.")
+    ap.add_argument("--max-gz-bytes", type=float, default=None,
+                    help="skip (and log) instances whose .mps.gz exceeds this many "
+                         "bytes; use e.g. 4e8 to defer the giant cities to a "
+                         "separate pass. Suffix-free integer bytes.")
+    ap.add_argument("--min-gz-bytes", type=float, default=None,
+                    help="skip (and log) instances whose .mps.gz is below this many "
+                         "bytes; pair with --max-gz-bytes to run only a size band "
+                         "(e.g. re-run just the large tail without redoing the "
+                         "already-converged small instances).")
+    args = ap.parse_args()
+
+    if not os.path.isdir(args.mps_dir):
+        sys.exit(f"[mps] ABORT: --mps-dir is not a directory: {args.mps_dir}")
+
+    global MEM_GUARD
+    if args.mem_max and args.mem_max.lower() != "off":
+        # RuntimeMaxSec makes systemd tear down the ENTIRE scope (every process in
+        # its cgroup) if a solve hangs past the subprocess timeout, so a runaway
+        # barrier can't be orphaned and accumulate RSS against the box across the
+        # sweep. Set to the subprocess timeout (solver's own limit + 30 min grace),
+        # well beyond any legitimate solve.
+        runtime_max = int(args.time_limit + 1800)
+        MEM_GUARD = [
+            "systemd-run", "--user", "--scope", "--quiet",
+            "-p", f"MemoryMax={args.mem_max}", "-p", "MemorySwapMax=0",
+            "-p", f"RuntimeMaxSec={runtime_max}",
+        ]
+        ok, detail = verify_mem_guard(MEM_GUARD)
+        if not ok:
+            sys.exit(
+                f"[mps] ABORT: memory guard is NOT effective ({detail}). The "
+                "cgroup memory controller may not be delegated to the user "
+                "manager -- solvers would run UNGUARDED and a big barrier could "
+                "swap-kill the machine. Fix delegation, or re-run with "
+                "`--mem-max off` to proceed deliberately unguarded.")
+        sys.stderr.write(
+            f"[mps] memory guard: MemoryMax={args.mem_max}, MemorySwapMax=0, "
+            f"RuntimeMaxSec={runtime_max}s per solve; verified ({detail})\n")
+    else:
+        sys.stderr.write("[mps] memory guard DISABLED (--mem-max off)\n")
+
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+    os.makedirs(args.logdir, exist_ok=True)
+    solvers = [s.strip() for s in args.solvers.split(",") if s.strip()]
+    unknown = [s for s in solvers if s not in CONFIGS]
+    if unknown:
+        sys.exit(f"unknown solver config(s): {unknown}; known: {list(CONFIGS)}")
+    for s in solvers:
+        binkey = parser_key(s)
+        b = BINARIES[binkey]
+        if not os.path.exists(b):
+            sys.stderr.write(f"WARNING: binary for {s} not found at {b}\n")
+
+    refs = load_refs()
+    rows = []
+    fields = ["instance", "solver", "gpu", "outcome", "objective", "ref",
+              "rel_err", "pass", "time_wall", "time_solve", "status", "detail"]
+    summary = {s: {"pass": 0, "fail": 0, "error": 0, "noref": 0} for s in solvers}
+
+    # Write the CSV INCREMENTALLY (header first, then flush after every cell) so a
+    # kill / OOM / power loss mid-sweep never discards completed rows -- essential
+    # for the multi-hour giant pass where a single HiPO solve can run for 2h. Each
+    # per-cell solver log is also already persisted by run_one, so results survive
+    # independently of this CSV too.
+    out_f = open(args.out, "w", newline="")
+    writer = csv.DictWriter(out_f, fieldnames=fields)
+    writer.writeheader()
+    out_f.flush()
+
+    for mps, key in enumerate_mps(args.mps_dir, args.instances, args.max_gz_bytes,
+                                  args.min_gz_bytes):
+        ref = refs.get(key)
+        for solver in solvers:
+            sys.stderr.write(f"[mps] {key} :: {solver} ... ")
+            sys.stderr.flush()
+            r = run_one(solver, mps, key, args.time_limit, args.logdir)
+            rec = {"instance": key, "solver": solver, "gpu": r["gpu"],
+                   "outcome": r["outcome"], "objective": r["objective"],
+                   "ref": "" if ref is None else ref, "rel_err": "", "pass": "",
+                   "time_wall": f"{r['time_wall']:.3f}", "time_solve": r["time_solve"],
+                   "status": r["status"], "detail": ""}
+            if r["outcome"] != "ok" or r["objective"] is None:
+                summary[solver]["error"] += 1
+                rec["detail"] = f"rc={r['rc']} status={r['status']}"
+                verdict = (r["outcome"] or "error").upper()
+            elif ref is None:
+                summary[solver]["noref"] += 1
+                rec["detail"] = "no reference in optimal.csv"
+                verdict = "NOREF"
+            else:
+                rel = abs(r["objective"] - ref) / max(1.0, abs(ref))
+                rec["rel_err"] = rel
+                ok = rel < args.tol
+                rec["pass"] = ok
+                summary[solver]["pass" if ok else "fail"] += 1
+                verdict = "PASS" if ok else f"FAIL rel={rel:.2e}"
+            ow = r["objective"]
+            sys.stderr.write(
+                f"{verdict} obj={ow if ow is not None else 'NA'} "
+                f"t={r['time_wall']:.1f}s\n")
+            writer.writerow(rec)
+            out_f.flush()
+            rows.append(rec)
+    out_f.close()
+
+    print(f"\nWrote {len(rows)} rows to {args.out} (flushed incrementally)\n")
+    print(f"{'solver':<10}{'pass':>5}{'fail':>5}{'error':>6}{'noref':>6}")
+    for s in solvers:
+        c = summary[s]
+        print(f"{s:<10}{c['pass']:>5}{c['fail']:>5}{c['error']:>6}{c['noref']:>6}")
+
+
+if __name__ == "__main__":
+    main()

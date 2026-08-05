@@ -127,3 +127,54 @@ The **result CSV is the reproducibility artifact** — compact and diff-friendly
 commit it. The per-run CG logs under `bench-logs/` are bulky and fully
 regenerable, so they are not tracked by default; keep a specific log only when
 it documents a notable run.
+
+## Compact-Model Baseline (`benchmark_mps.py`)
+
+The column-generation numbers above are compared against a **direct** solve of the
+compact *source* LP — one variable `f^s_e` per source/edge, `|S|·|V|` conservation
+rows plus one capacity row per arc — handed to each vendor's native barrier in a
+single shot (no CG). This compact LP corresponds to the tree formulation's LP
+(same optimum), so the head-to-head is `direct-X` here vs `tree-CG-X` in
+`benchmark_solvers.py` for the same backend `X`.
+
+`benchmark_mps.py` drives the vendors' **native** command-line barriers directly
+(the mcfcg CLI does not read external MPS) over `data/mps/*.mps.gz`:
+
+```
+python3 scripts/benchmark_mps.py                 # full sweep, all 5 backends, 2 h/solve
+python3 scripts/benchmark_mps.py --max-gz-bytes 4e8   # skip the 6 giant instances
+python3 scripts/benchmark_mps.py --min-gz-bytes 4e8   # ONLY the giants (separate pass)
+```
+
+Prerequisites:
+
+- The `.mps.gz` dumps must exist — regenerable via `scripts/write_mps.sh`; they are
+  gitignored (`*.mps.gz`, ~5.6 GB) as derived/downloadable data, not committed.
+- Native solver binaries on the expected paths, overridable via env: **HiGHS 1.15.1
+  built with working HiPO** (`-DBUILD_SHARED_EXTRAS_LIB=OFF`; the stock 1.15.1 CLI
+  aborts HiPO with `features unavailable: amd, blas, metis, rcm`) via `HIGHS_BIN`;
+  `$MOSEK_HOME/bin/mosek`; `$COPT_HOME/bin/copt_cmd`; `cuopt_cli` via `CUOPT_BIN`.
+
+| default | value |
+|---------|-------|
+| `--solvers` | `highs,mosek,cuopt,copt-cpu,copt-gpu` (COPT twice: GPUMode 0 vs 2) |
+| `--time-limit` | `7200` (barrier wall-clock per solve) |
+| `--mem-max` | `105G` — per-solve RSS cap via `systemd-run --user --scope` (`MemoryMax`, `MemorySwapMax=0`, `RuntimeMaxSec`); a runaway is OOM-killed cleanly instead of swap-thrashing the box. A preflight aborts if the cap isn't actually enforced; `--mem-max off` to disable. |
+| barrier regime | crossover off, tol `1e-4`, presolve at **each solver's default** (a direct monolith benefits from presolve; forcing it off would handicap the baseline) |
+
+Instances run size-ordered (small→large) so a memory-cautious sweep hits the risky
+giants last; `--min/--max-gz-bytes` select a size band. Each solve writes one raw
+per-cell log `<instance>__<solver>.log` and one incremental CSV row — both default
+under the gitignored `bench_runs/mps/` tree (never repo root).
+
+`consolidate_mps_logs.py` rebuilds the results CSV from those per-cell logs — it
+**re-parses, never re-solves**, so partial / interrupted / multi-pass sweeps merge
+into one clean table (and parser fixes apply retroactively):
+
+```
+python3 scripts/consolidate_mps_logs.py    # bench_runs/mps/logs -> bench_runs/mps/results_all.csv
+```
+
+As with the CG benchmark, the consolidated **result CSV is the artifact to commit**
+(the bulky per-cell logs stay local/regenerable) — copy `results_all.csv` to the
+repo's canonical committed results path when finalizing a run.
