@@ -13,6 +13,6 @@ bench-logs/
 bench_runs/
 bench-*.log
 Highs.log
-# Ad-hoc result CSVs stay local; the canonical full-suite result is committed.
+# Intermediate/ad-hoc result CSVs stay local (scripts default under bench_runs/);
+# the canonical full-suite "one truth" results are committed under results/.
 bench-*.csv
-!bench-results.csv

@@ -83,9 +83,10 @@ python3 scripts/benchmark_solvers.py
 | formulation | per-family default: **tree** everywhere (intermodal additionally uses `--strategy pricer-heavy`) |
 
 Each run emits one CSV row (`instance,formulation,iterations,columns,objective,
-lower_bound,optimal,time,…`) to `--out` (default `bench-results.csv`) and saves
-its full per-iteration CG log to `--logdir` (default `bench-logs/`), one file per
-run named `<family>__<instance>__<formulation>__<solver>.log`.
+lower_bound,optimal,time,…`) to `--out` (default `bench_runs/cg/results.csv`) and
+saves its full per-iteration CG log to `--logdir` (default `bench_runs/cg/logs/`),
+one file per run named `<family>__<instance>__<formulation>__<solver>.log`. Both
+defaults live under the gitignored `bench_runs/` tree, never repo root.
 
 Common narrowing:
 
@@ -123,10 +124,12 @@ delta-API rationale.)
 
 ### What to commit
 
-The **result CSV is the reproducibility artifact** — compact and diff-friendly;
-commit it. The per-run CG logs under `bench-logs/` are bulky and fully
-regenerable, so they are not tracked by default; keep a specific log only when
-it documents a notable run.
+Everything a benchmark writes lands under the gitignored `bench_runs/` tree
+(per-run CG/solver logs, `*.stdout`, incremental/partial CSVs) — bulky and fully
+regenerable, so it is never tracked. The **committed "one truth" is a single
+consolidated results CSV per experiment under the tracked `results/` folder**
+(compact, diff-friendly). For the CG suite, promote a finalized full run's
+`bench_runs/cg/results.csv` to `results/` when you want it committed.
 
 ## Compact-Model Baseline (`benchmark_mps.py`)
 
@@ -172,9 +175,9 @@ under the gitignored `bench_runs/mps/` tree (never repo root).
 into one clean table (and parser fixes apply retroactively):
 
 ```
-python3 scripts/consolidate_mps_logs.py    # bench_runs/mps/logs -> bench_runs/mps/results_all.csv
+python3 scripts/consolidate_mps_logs.py    # bench_runs/mps/logs -> results/mps_compact_baseline.csv
 ```
 
-As with the CG benchmark, the consolidated **result CSV is the artifact to commit**
-(the bulky per-cell logs stay local/regenerable) — copy `results_all.csv` to the
-repo's canonical committed results path when finalizing a run.
+Its default `--out` writes straight to the tracked `results/mps_compact_baseline.csv`
+— the committed one truth. The bulky per-cell logs under `bench_runs/mps/` stay
+local/regenerable.

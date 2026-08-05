@@ -11,8 +11,7 @@ giant pass that was interrupted/OOM'd partway. That's exactly what we need to
 avoid re-solving already-converged instances just to get one clean CSV.
 
 Usage:
-  python3 scripts/consolidate_mps_logs.py --logdir bench_runs/mps/logs \
-      --out bench_runs/mps/results_batchA.csv [--tol 1e-3]
+  python3 scripts/consolidate_mps_logs.py   # bench_runs/mps/logs -> results/mps_compact_baseline.csv
 """
 
 import argparse
@@ -50,7 +49,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--logdir", default="bench_runs/mps/logs")
-    ap.add_argument("--out", default="bench_runs/mps/results_all.csv")
+    ap.add_argument("--out", default="results/mps_compact_baseline.csv",
+                    help="the committed 'one truth' results CSV (tracked in "
+                         "results/); rebuilt from the gitignored per-cell logs.")
     ap.add_argument("--tol", type=float, default=1e-3)
     args = ap.parse_args()
 

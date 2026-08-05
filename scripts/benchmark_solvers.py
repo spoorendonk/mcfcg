@@ -302,14 +302,18 @@ def main():
                          "boundaries (a barrier stuck mid-solve is not interrupted).")
     ap.add_argument("--max-iters", type=int, default=10000)
     ap.add_argument("--tol", type=float, default=1e-3, help="relative objective tolerance for pass.")
-    ap.add_argument("--out", default="bench-results.csv")
-    ap.add_argument("--logdir", default="bench-logs",
+    ap.add_argument("--out", default="bench_runs/cg/results.csv",
+                    help="results CSV; default under the gitignored bench_runs/ "
+                         "tree, not repo root. Promote a finalized full run to "
+                         "results/ to commit it.")
+    ap.add_argument("--logdir", default="bench_runs/cg/logs",
                     help="directory to save each run's full stdout+stderr (the per-iteration "
                          "CG log: cut growth, slack/bound history, timings). One file per run, "
                          "named <family>__<instance>__<formulation>__<solver>.log. "
-                         "Always written (default 'bench-logs').")
+                         "Default under gitignored bench_runs/, not repo root.")
     args = ap.parse_args()
 
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     os.makedirs(args.logdir, exist_ok=True)
 
     if not os.path.exists(args.binary):
