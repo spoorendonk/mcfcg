@@ -153,7 +153,8 @@ def parse_csv_row(stdout):
     return None
 
 
-def write_log(log_path, cmd, stdout, stderr, returncode, outcome):
+def write_log(log_path, cmd, stdout, stderr, returncode, outcome, peak_rss_kb=None,
+              peak_rss_source="measured"):
     """Persist a run's full console output for later forensic reconstruction.
 
     The CLI runs at Verbosity::Iteration (src/main.cpp), so stderr carries the
@@ -162,33 +163,74 @@ def write_log(log_path, cmd, stdout, stderr, returncode, outcome):
     slack dynamics, and bound history. stdout carries the final CSV row. We dump
     both verbatim regardless of outcome (success or error) so a partial run is
     never silently lost.
+
+    Peak RSS goes in the header because it is the ONE metric not present in the
+    child's own output: everything else can be re-derived by re-parsing the log,
+    but memory is measured externally (GNU time) and would otherwise survive only
+    in the sweep's result CSV. `peak_rss_source` records how the number got here
+    ("measured" for a live run; "backfilled:<file>" when relocated from an older
+    sweep CSV by backfill_log_memory.py) so provenance stays legible in the log.
     """
     with open(log_path, "w") as f:
         f.write("# cmd: " + " ".join(cmd) + "\n")
         f.write(f"# outcome: {outcome}\n")
         if returncode is not None:
             f.write(f"# returncode: {returncode}\n")
+        if peak_rss_kb is not None:
+            f.write(f"# peak_rss_kb: {peak_rss_kb}\n")
+            f.write(f"# peak_rss_source: {peak_rss_source}\n")
         f.write("# === STDERR (CG iteration log + preamble) ===\n")
         f.write(stderr or "")
         f.write("\n# === STDOUT (result CSV) ===\n")
         f.write(stdout or "")
 
 
-def read_peak_mem_gb(mem_path):
-    """Parse GNU time's `-f %M` output (peak RSS in KB) into GB, or '' on miss."""
+def read_peak_mem_kb(mem_path):
+    """Parse GNU time's `-f %M` output (peak RSS in KB) into an int, or None.
+
+    Consumes the temp file — this is the only copy of the measurement, so the
+    caller must persist it (write_log's `# peak_rss_kb:` header) rather than
+    keeping it in memory alone. Memory is the one metric that cannot be
+    recovered by re-parsing a log afterwards, so losing it means a rerun.
+    """
     if not mem_path or not os.path.exists(mem_path):
-        return ""
+        return None
     try:
         with open(mem_path) as f:
-            kb = int(f.read().strip().split()[-1])
-        return round(kb / 1024.0 / 1024.0, 3)
+            return int(f.read().strip().split()[-1])
     except (ValueError, IndexError):
-        return ""
+        return None
     finally:
         try:
             os.remove(mem_path)
         except OSError:
             pass
+
+
+def mem_gb_from_kb(kb):
+    """Peak RSS in KB -> GB rounded to 3 decimals, or '' when unmeasured."""
+    return "" if kb is None else round(kb / 1024.0 / 1024.0, 3)
+
+
+def parse_peak_rss(log_text):
+    """Read write_log's peak-RSS header back: (kb, source) or (None, "").
+
+    `kb` is an int; `source` is "measured" or "backfilled:<file>". Logs written
+    before the header existed yield (None, "") — memory for those lives only in
+    the originating sweep CSV, which is what backfill_log_memory.py relocates.
+    """
+    kb, source = None, ""
+    for line in log_text.splitlines():
+        if line.startswith("# ===") or not line.startswith("#"):
+            break  # headers are the leading block, ending at the STDERR marker
+        if line.startswith("# peak_rss_kb:"):
+            try:
+                kb = int(line.split(":", 1)[1].strip())
+            except ValueError:
+                kb = None
+        elif line.startswith("# peak_rss_source:"):
+            source = line.split(":", 1)[1].strip()
+    return kb, source
 
 
 def parse_lp_config(stderr):
@@ -248,11 +290,13 @@ def run_one(binary, instance, solver, formulation, extra, max_iters, log_path=No
                 os.remove(p)
             except OSError:
                 pass
-    mem_gb = read_peak_mem_gb(mem_path)
+    peak_rss_kb = read_peak_mem_kb(mem_path)
+    mem_gb = mem_gb_from_kb(peak_rss_kb)
     config = parse_lp_config(stderr)
     outcome = "ok" if returncode == 0 else "error"
     if log_path:
-        write_log(log_path, cmd, stdout, stderr, returncode, outcome)
+        write_log(log_path, cmd, stdout, stderr, returncode, outcome,
+                  peak_rss_kb=peak_rss_kb)
     if returncode != 0:
         tail = "\n".join(stderr.strip().splitlines()[-3:])
         return {"outcome": "error", "returncode": returncode, "stderr_tail": tail,

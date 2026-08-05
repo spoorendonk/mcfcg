@@ -144,6 +144,29 @@ dir overrides an earlier one for the same cell), so a multi-pass historical log 
 consolidates correctly; a single fresh `benchmark_solvers.py` run needs just the
 one default dir.
 
+### Peak memory is the one metric that must be written down
+
+Every other column can be re-derived by re-parsing a log, because the CLI prints
+it. Peak RSS cannot: it is measured *outside* the child by GNU `time -f %M`, so if
+it is not persisted at measurement time it is gone. `write_log` therefore records
+it in the log header, and the consolidator reads it back:
+
+```
+# peak_rss_kb: 14704
+# peak_rss_source: measured
+```
+
+`mem_source` is `measured` for a live run, or `backfilled:<csv>` when relocated
+from a pre-header sweep CSV by `backfill_log_memory.py` (a one-shot recovery tool;
+it refuses to write unless the CSV row's `time` matches the log's, proving both
+came from the same execution). **Never delete `bench_runs/` while any cell still
+reads `backfilled:` from a CSV that is the only copy** — check with:
+
+```
+python3 -c "import csv;rows=list(csv.DictReader(open('results/cg_benchmark.csv')));\
+print(sum(1 for r in rows if not r['mem_gb']),'cells missing mem_gb')"
+```
+
 ## Compact-Model Baseline (`benchmark_mps.py`)
 
 The column-generation numbers above are compared against a **direct** solve of the

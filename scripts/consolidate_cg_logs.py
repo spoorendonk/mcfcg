@@ -11,6 +11,12 @@ of `consolidate_mps_logs.py`. Because it derives everything from the logs it mak
 the committed `results/cg_benchmark.csv` reproducible: run the full suite with
 `benchmark_solvers.py` (logs -> bench_runs/cg/logs), then run this.
 
+Peak RSS (`mem_gb`) is read from each log's `# peak_rss_kb:` header, with
+`mem_source` recording whether it was measured live or relocated from an older
+sweep CSV by backfill_log_memory.py. Memory is the only metric measured outside
+the child process, so it must be in the log for this tool to see it; logs
+predating that header report an empty mem_gb until backfilled.
+
 Multiple `--logdir`s are applied in PRIORITY ORDER: a later dir overrides an earlier
 one for the same (family,instance,formulation,solver) cell. That is how the
 authoritative HiPO ablation (HiGHS 1.15.1) supersedes a deprecated earlier `highs`
@@ -85,15 +91,22 @@ def main():
             text = open(os.path.join(logdir, fn), errors="replace").read()
             body = text.split(STDOUT_MARKER, 1)[1] if STDOUT_MARKER in text else text
             row = bs.parse_csv_row(body)
-            cells[keyparts] = (row, os.path.basename(logdir) + "/" + fn)
+            # Peak RSS comes from the log HEADER, not the child's output: it is
+            # measured externally by GNU time. Read it here so an errored run
+            # (no result row) still contributes its memory — the OOM cells are
+            # precisely the ones the memory comparison turns on.
+            kb, mem_source = bs.parse_peak_rss(text)
+            cells[keyparts] = (row, os.path.basename(logdir) + "/" + fn, kb, mem_source)
 
     fields = ["family", "instance", "formulation", "solver", "objective", "ref",
-              "rel_err", "pass", "optimal", "time", "source"]
+              "rel_err", "pass", "optimal", "time", "mem_gb", "mem_source", "source"]
     out_rows = []
-    for (family, inst, form, solver), (row, source) in sorted(cells.items()):
+    for (family, inst, form, solver), (row, source, kb, mem_source) in sorted(cells.items()):
         rec = {"family": family, "instance": inst, "formulation": form,
                "solver": solver, "objective": "", "ref": "", "rel_err": "",
-               "pass": "", "optimal": "", "time": "", "source": source}
+               "pass": "", "optimal": "", "time": "",
+               "mem_gb": bs.mem_gb_from_kb(kb), "mem_source": mem_source,
+               "source": source}
         ref = refs.get(inst)
         if ref is not None:
             rec["ref"] = ref
@@ -126,8 +139,11 @@ def main():
     have = set(cells)
     npass = sum(1 for r in out_rows if r["pass"] is True)
     nrow = len(out_rows)
+    nmem = sum(1 for r in out_rows if r["mem_gb"] != "")
     print(f"Wrote {nrow} rows to {args.out}  (pass={npass}, "
           f"non-pass/err={nrow - npass})")
+    print(f"peak RSS present: {nmem}/{nrow}"
+          + (f"  MISSING {nrow - nmem}" if nmem < nrow else ""))
     by_fam = {}
     for (fam, inst, form, sol) in have:
         by_fam.setdefault(fam, set()).add(inst)
