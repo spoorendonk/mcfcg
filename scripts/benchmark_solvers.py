@@ -153,6 +153,28 @@ def parse_csv_row(stdout):
     return None
 
 
+# The saved log is a real serialization format: consolidate_cg_logs.py and
+# backfill_log_memory.py both parse it back, and backfill_log_memory.py rewrites
+# its header block in place. Keep the delimiters and the peak-RSS header builder
+# here, in the module that writes them, so no reader or rewriter can drift.
+HEADER_END_PREFIX = "# ==="
+STDERR_MARKER = "# === STDERR (CG iteration log + preamble) ==="
+STDOUT_MARKER = "# === STDOUT (result CSV) ==="
+
+
+def format_peak_rss_headers(peak_rss_kb, peak_rss_source):
+    """Render the two peak-RSS header lines, or "" when there is nothing to record.
+
+    Sole producer of this format — write_log uses it for live runs and
+    backfill_log_memory.inject_header for relocated ones, so a backfilled log is
+    byte-identical to a freshly written one.
+    """
+    if peak_rss_kb is None:
+        return ""
+    return (f"# peak_rss_kb: {peak_rss_kb}\n"
+            f"# peak_rss_source: {peak_rss_source}\n")
+
+
 def write_log(log_path, cmd, stdout, stderr, returncode, outcome, peak_rss_kb=None,
               peak_rss_source="measured"):
     """Persist a run's full console output for later forensic reconstruction.
@@ -176,12 +198,10 @@ def write_log(log_path, cmd, stdout, stderr, returncode, outcome, peak_rss_kb=No
         f.write(f"# outcome: {outcome}\n")
         if returncode is not None:
             f.write(f"# returncode: {returncode}\n")
-        if peak_rss_kb is not None:
-            f.write(f"# peak_rss_kb: {peak_rss_kb}\n")
-            f.write(f"# peak_rss_source: {peak_rss_source}\n")
-        f.write("# === STDERR (CG iteration log + preamble) ===\n")
+        f.write(format_peak_rss_headers(peak_rss_kb, peak_rss_source))
+        f.write(STDERR_MARKER + "\n")
         f.write(stderr or "")
-        f.write("\n# === STDOUT (result CSV) ===\n")
+        f.write("\n" + STDOUT_MARKER + "\n")
         f.write(stdout or "")
 
 
@@ -221,7 +241,7 @@ def parse_peak_rss(log_text):
     """
     kb, source = None, ""
     for line in log_text.splitlines():
-        if line.startswith("# ===") or not line.startswith("#"):
+        if line.startswith(HEADER_END_PREFIX) or not line.startswith("#"):
             break  # headers are the leading block, ending at the STDERR marker
         if line.startswith("# peak_rss_kb:"):
             try:
@@ -230,7 +250,9 @@ def parse_peak_rss(log_text):
                 kb = None
         elif line.startswith("# peak_rss_source:"):
             source = line.split(":", 1)[1].strip()
-    return kb, source
+    # Keep the pair atomic: a source with no usable kb would write a row claiming
+    # provenance for a measurement that isn't there.
+    return (kb, source) if kb is not None else (None, "")
 
 
 def parse_lp_config(stderr):
@@ -362,6 +384,19 @@ def main():
 
     if not os.path.exists(args.binary):
         sys.exit(f"binary not found: {args.binary} (build it first)")
+
+    # Peak RSS is the only metric measured outside the child, so a missing GNU
+    # time costs the whole sweep its memory column with nothing to re-parse
+    # afterwards (gh #37). Say so up front, not after a 20-hour run.
+    if not os.path.exists(GNU_TIME):
+        sys.stderr.write(
+            f"WARNING: {GNU_TIME} not found — peak RSS will NOT be measured, so the\n"
+            "  `# peak_rss_kb:` header is omitted from every log this sweep writes.\n"
+            "  write_log truncates, so rerunning into a --logdir whose logs already\n"
+            "  carry memory REPLACES them with headerless ones and loses those\n"
+            "  measurements permanently — memory cannot be re-derived from a log.\n"
+            "  Install GNU time (`apt install time`) before a sweep whose mem_gb\n"
+            "  column matters, and prefer a fresh --logdir for reruns.\n")
 
     solvers = [s.strip() for s in args.solvers.split(",") if s.strip()]
     families = [f.strip() for f in args.families.split(",") if f.strip()]

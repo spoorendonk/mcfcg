@@ -156,15 +156,51 @@ it in the log header, and the consolidator reads it back:
 # peak_rss_source: measured
 ```
 
-`mem_source` is `measured` for a live run, or `backfilled:<csv>` when relocated
-from a pre-header sweep CSV by `backfill_log_memory.py` (a one-shot recovery tool;
-it refuses to write unless the CSV row's `time` matches the log's, proving both
-came from the same execution). **Never delete `bench_runs/` while any cell still
-reads `backfilled:` from a CSV that is the only copy** — check with:
+`mem_source` records where the number came from:
+
+| value | meaning |
+|---|---|
+| `measured` | GNU time read it during the run that wrote this log. |
+| `backfilled:<csv>` | relocated from a pre-header sweep CSV by `backfill_log_memory.py`; the CSV row's `time` and `outcome` matched the log's. |
+| `backfilled-untimed:<csv>` | relocated, but the row had no `time` to check (the run errored), so only `outcome` was matched. One cell: `transportation/Sydney/path/mosek`, OOM-killed at rc=137, 95.8 GB. |
+
+The match is a **tripwire, not a proof**. Times print to 3 decimals, so two runs
+of a fast deterministic instance can agree exactly while being different
+executions — and peak RSS depends on machine, build and solver version, not just
+the instance. Only extend `DEFAULT_SOURCES` when you already know which sweep
+produced the logs in the paired dir. (`bench_runs/legacy-root/*.csv` carry memory
+for 14 of the 28 still-missing cells and are deliberately excluded for exactly
+this reason.)
+
+Because the logs also live under the gitignored `bench_runs/`, **deleting that
+tree makes `results/cg_benchmark.csv` unreproducible outright — not just its
+memory column**, and peak RSS specifically would need a full rerun. Audit the
+tracked CSV with:
 
 ```
-python3 -c "import csv;rows=list(csv.DictReader(open('results/cg_benchmark.csv')));\
-print(sum(1 for r in rows if not r['mem_gb']),'cells missing mem_gb')"
+python3 - <<'PY'
+import collections, csv
+rows = list(csv.DictReader(open('results/cg_benchmark.csv')))
+print(sum(1 for r in rows if not r['mem_gb']), 'cells missing mem_gb')
+print(collections.Counter(r['mem_source'] for r in rows if r['mem_gb']))
+PY
+```
+
+28 cells are expected to be missing until the `transportation × path` rerun in
+gh #37 lands.
+
+#### `backfill_log_memory.py`
+
+One-shot recovery tool, already applied — kept as the auditable record of how the
+pre-header runs got their memory. It reads the sweep CSVs listed in
+`DEFAULT_SOURCES`, matches each row to its log, and injects the header. Re-running
+it is a no-op (a log that already has a header is skipped), and it refuses any row
+whose `time`/`outcome` disagree with the log. New sweeps do not need it: they
+record memory natively.
+
+```
+python3 scripts/backfill_log_memory.py --dry-run   # report only
+python3 scripts/backfill_log_memory.py --allow-untimed
 ```
 
 ## Compact-Model Baseline (`benchmark_mps.py`)

@@ -39,7 +39,7 @@ import sys
 
 import benchmark_solvers as bs  # sibling module; run from scripts/ or repo root
 
-STDOUT_MARKER = "# === STDOUT (result CSV) ==="
+STDOUT_MARKER = bs.STDOUT_MARKER  # format owned by benchmark_solvers.write_log
 
 
 def load_all_refs():
@@ -96,7 +96,11 @@ def main():
             # (no result row) still contributes its memory — the OOM cells are
             # precisely the ones the memory comparison turns on.
             kb, mem_source = bs.parse_peak_rss(text)
-            cells[keyparts] = (row, os.path.basename(logdir) + "/" + fn, kb, mem_source)
+            # Full dir, not basename: bench_runs/logs and
+            # bench_runs/highs_hipo_ablation/logs both basename to "logs", which
+            # left `source` unable to say which logdir actually won a cell — it
+            # named the superseded dir for the 88 ablation rows.
+            cells[keyparts] = (row, os.path.join(logdir, fn), kb, mem_source)
 
     fields = ["family", "instance", "formulation", "solver", "objective", "ref",
               "rel_err", "pass", "optimal", "time", "mem_gb", "mem_source", "source"]

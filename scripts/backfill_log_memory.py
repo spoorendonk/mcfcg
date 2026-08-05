@@ -11,13 +11,24 @@ This script closes that gap for the historical runs WITHOUT re-solving: for each
 old sweep CSV row it finds the matching log and injects the header. The numbers
 are real measurements from the very same executions, not estimates.
 
-Provenance gate. A CSV row and a log file are only accepted as the same
-execution when their `time` fields agree to within --time-tol (relative). On any
-mismatch the script refuses to write that cell and reports it — a mismatch would
-mean the memory number came from a different run than the log it is being
-attached to, which is exactly the kind of quiet corruption this is meant to
-avoid. Backfilled headers are tagged `# peak_rss_source: backfilled:<csv>` so a
-reader can always tell them from `measured`.
+Provenance gate. A CSV row and a log file are accepted as the same execution
+only when their `time` and `outcome` both agree (time to within --time-tol,
+relative). On any mismatch the script refuses that cell and reports it — a
+mismatch means the memory number came from a different run than the log it is
+being attached to, which is exactly the kind of quiet corruption this exists to
+avoid.
+
+The gate is NECESSARY, NOT SUFFICIENT. Times print to 3 decimals, so two runs of
+a fast deterministic instance can agree exactly while being different executions
+on different hardware — and peak RSS depends on machine, build and solver
+version, not just the instance. Empirically, two legacy-sweep rows pass the time
+gate against unrelated logs with memory off by ~13x. So only add a CSV to
+DEFAULT_SOURCES when you already know from provenance notes that it produced the
+logs in the paired logdir; the gate is a tripwire against mistakes, not evidence
+of pairing.
+
+Backfilled headers are tagged `# peak_rss_source: backfilled:<csv>` so a reader
+can always tell them from `measured`.
 
 Rows whose run errored carry no time and therefore cannot be time-matched; they
 are skipped unless --allow-untimed is given (see --help). The known case is
@@ -42,8 +53,18 @@ import sys
 import benchmark_solvers as bs  # sibling module; run from scripts/ or repo root
 
 # Sweep CSVs that carry a mem_gb column, mapped to the log dir holding the runs
-# they came from. Priority order matches consolidate_cg_logs.py: a later entry
-# wins for the same cell (the HiPO ablation supersedes earlier `highs` runs).
+# they came from. No two pairs target the same log file today; if a future pair
+# did, the FIRST entry to write a header would win, because a log that already
+# carries one is skipped (see --force). Supersession between runs is resolved by
+# consolidate_cg_logs.py's --logdir priority, not here — the HiPO ablation has
+# its own log dir, so it never collides with the earlier `highs` runs.
+#
+# bench_runs/legacy-root/*.csv are deliberately NOT listed. They do carry mem_gb
+# for 14 of the 28 still-missing transportation/path cells, but from a different
+# execution than the logs those cells consolidate from (different timings, their
+# own logs under legacy-root/bench-logs/). Their memory belongs to those runs,
+# not these; the fix for the 28 is the rerun in gh #37 ask (c), not a cross-sweep
+# graft. This is the trap the "necessary, not sufficient" note above is about.
 DEFAULT_SOURCES = [
     ("bench_runs/grid_planar_5cfg.csv", "bench_runs/logs"),
     ("bench_runs/intermodal_5cfg_pathtree.csv", "bench_runs/intermodal_logs"),
@@ -62,27 +83,51 @@ def log_name(row):
 
 
 def times_agree(csv_time, log_time, tol):
-    """True when both times are present and match to `tol` relative."""
+    """Tri-state match on the CSV-vs-log `time` field.
+
+    True/False when both times are present and parseable (relative comparison
+    against `tol`); None when either is simply absent, meaning "cannot check
+    either way" — an errored run records no time. The caller treats the two
+    negative cases differently: None is skipped unless --allow-untimed, False is
+    always refused, because False is positive evidence of a different execution.
+    An unparseable time is likewise refused: garbage is not the same as absent.
+    """
     if not csv_time or not log_time:
-        return None  # untimed: cannot prove same-run either way
+        return None  # untimed: nothing to compare
     try:
         a, b = float(csv_time), float(log_time)
     except ValueError:
-        return None
+        return False  # corrupt: cannot trust this pairing
     return abs(a - b) <= tol * max(1.0, abs(a))
 
 
+def parse_outcome(log_text):
+    """Read write_log's `# outcome:` header ("ok"/"error"), or "" if absent."""
+    for line in log_text.splitlines():
+        if line.startswith(bs.HEADER_END_PREFIX) or not line.startswith("#"):
+            break
+        if line.startswith("# outcome:"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
 def inject_header(text, kb, source):
-    """Insert (or replace) the peak-RSS headers in a saved log's header block."""
+    """Insert (or replace) the peak-RSS headers in a saved log's header block.
+
+    Uses benchmark_solvers.format_peak_rss_headers so a backfilled log is
+    byte-identical to one write_log produces live.
+    """
     lines = text.splitlines(keepends=True)
     kept, i = [], 0
-    while i < len(lines) and lines[i].startswith("#") and not lines[i].startswith("# ==="):
+    while (i < len(lines) and lines[i].startswith("#")
+           and not lines[i].startswith(bs.HEADER_END_PREFIX)):
         if not (lines[i].startswith("# peak_rss_kb:")
                 or lines[i].startswith("# peak_rss_source:")):
             kept.append(lines[i])
         i += 1
-    kept.append(f"# peak_rss_kb: {kb}\n")
-    kept.append(f"# peak_rss_source: {source}\n")
+    if kept and not kept[-1].endswith("\n"):
+        kept[-1] += "\n"  # truncated log: never fuse our header onto its last line
+    kept.append(bs.format_peak_rss_headers(kb, source))
     return "".join(kept) + "".join(lines[i:])
 
 
@@ -92,11 +137,14 @@ def main():
     ap.add_argument("--dry-run", action="store_true",
                     help="report what would change; write nothing.")
     ap.add_argument("--force", action="store_true",
-                    help="overwrite a peak_rss header that is already present.")
+                    help="overwrite an existing BACKFILLED peak_rss header. A "
+                         "`measured` header (a live GNU-time reading) is never "
+                         "overwritten — it is strictly more precise.")
     ap.add_argument("--allow-untimed", action="store_true",
                     help="also backfill cells whose CSV row has no time (errored "
-                         "runs). Same-run provenance cannot be proven for these, so "
-                         "they are tagged backfilled-untimed:<csv> in the log.")
+                         "runs). The time check cannot run for these, so they are "
+                         "tagged backfilled-untimed:<csv> in the log. The outcome "
+                         "check still applies.")
     ap.add_argument("--time-tol", type=float, default=1e-6,
                     help="relative tolerance for the CSV-vs-log time match "
                          "(default 1e-6).")
@@ -119,13 +167,31 @@ def main():
                 nolog.append((log_name(row), csv_path))
                 continue
             text = open(path, errors="replace").read()
-            have_kb, _ = bs.parse_peak_rss(text)
-            if have_kb is not None and not args.force:
+            have_kb, have_source = bs.parse_peak_rss(text)
+            # A live `measured` header always wins over a backfill: it is the
+            # original integer from GNU time, whereas a backfilled value is
+            # reconstructed from a 3-decimal GB round-trip and carries ~0.5 MB of
+            # fabricated precision. --force may refresh an earlier backfill; it
+            # must never clobber a real measurement.
+            if have_kb is not None and (have_source == "measured" or not args.force):
                 skipped_have += 1
                 continue
 
-            body = text.split("# === STDOUT", 1)
-            log_row = bs.parse_csv_row(body[1]) if len(body) > 1 else None
+            # Same split AND same fallback as consolidate_cg_logs.py: a log
+            # missing the marker still gets its result row read, so the gate uses
+            # every scrap of evidence rather than degrading to "untimed".
+            body = text.split(bs.STDOUT_MARKER, 1)
+            log_row = bs.parse_csv_row(body[1] if len(body) > 1 else text)
+            # Outcome is a second, independent signal that costs nothing and
+            # catches cross-sweep mixups the time check cannot: a log recording
+            # `ok` cannot be the execution behind an errored CSV row. It is the
+            # ONLY check available for untimed (errored) rows.
+            log_outcome = parse_outcome(text)
+            csv_outcome = (row.get("outcome") or "").strip()
+            if csv_outcome and log_outcome and csv_outcome != log_outcome:
+                mismatched.append((log_name(row), f"outcome={csv_outcome}",
+                                   f"outcome={log_outcome}", csv_path))
+                continue
             log_time = (log_row or {}).get("time", "")
             agree = times_agree(row.get("time", ""), log_time, args.time_tol)
             if agree is False:
@@ -144,8 +210,12 @@ def main():
             # mark it backfilled: the value is the real measurement to ~1 MB.
             kb = int(round(float(mem_gb) * 1024 * 1024))
             if not args.dry_run:
-                with open(path, "w") as f:
+                # Write-then-rename: this log is the only surviving record of the
+                # run (regenerating one costs hours), so never truncate in place.
+                tmp = path + ".tmp"
+                with open(tmp, "w") as f:
                     f.write(inject_header(text, kb, source))
+                os.replace(tmp, path)
             applied += 1
 
     verb = "would backfill" if args.dry_run else "backfilled"
@@ -163,10 +233,15 @@ def main():
         if len(nolog) > 20:
             print(f"  ... and {len(nolog) - 20} more")
     if mismatched:
-        print(f"\n*** REFUSED — time mismatch, CSV row is from a different execution "
-              f"than the log: {len(mismatched)} ***")
+        print(f"\n*** REFUSED — CSV row disagrees with the log, so it is from a "
+              f"different execution: {len(mismatched)} ***")
         for name, ct, lt, src in mismatched:
-            print(f"  {name}  csv_t={ct}  log_t={lt}  ({src})")
+            print(f"  {name}  csv={ct}  log={lt}  ({src})")
+        return 1
+    if nolog and not applied:
+        # Recovered nothing and found no logs: almost certainly pointed at the
+        # wrong tree. Don't report success — this is a data-recovery tool.
+        print("\n*** nothing backfilled and no logs matched — wrong --logdir tree? ***")
         return 1
     return 0
 
