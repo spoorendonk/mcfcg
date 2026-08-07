@@ -26,10 +26,22 @@ just one dir.
 Usage:
   # fresh run: one dir
   python3 scripts/consolidate_cg_logs.py                       # bench_runs/cg/logs -> results/cg_benchmark.csv
-  # historical multi-pass sets, ablation last (authoritative highs):
+  # the committed results/cg_benchmark.csv, exactly: six historical passes in
+  # priority order, each later dir superseding the cells it re-ran. Verified
+  # byte-identical to the tracked CSV when that CSV was regenerated; treat this
+  # list as the canonical incantation rather than reconstructing it from the
+  # `source` column again, and keep it in sync with extract_iterations.py --
+  # the two tracked CSVs must be built from the SAME six dirs or they describe
+  # different runs.
+  #
+  # It is NOT a pure replay: ref/rel_err/pass are recomputed against the CURRENT
+  # data/*/optimal.csv and --tol, so updating a reference changes those three
+  # columns with every log untouched. A diff there is a reference change; a diff
+  # elsewhere is a log-set or parser change.
   python3 scripts/consolidate_cg_logs.py --logdir \
       bench_runs/logs bench_runs/intermodal_logs bench_runs/transportation_logs \
-      bench_runs/highs_hipo_ablation/logs
+      bench_runs/transportation_logs_v2 bench_runs/highs_hipo_ablation/logs \
+      bench_runs/issue40_rerun/logs
 """
 
 import argparse
@@ -93,9 +105,15 @@ def main():
             row = bs.parse_csv_row(body)
             # Peak RSS comes from the log HEADER, not the child's output: it is
             # measured externally by GNU time. Read it here so an errored run
-            # (no result row) still contributes its memory — the OOM cells are
-            # precisely the ones the memory comparison turns on.
+            # (no result row) still contributes its memory — a cell killed at its
+            # high-water mark is precisely the one the memory comparison turns on.
             kb, mem_source = bs.parse_peak_rss(text)
+            # Exit disposition, likewise from the header — the child cannot report
+            # how it died, so a run killed by a signal prints nothing at all and
+            # the ONLY trace is `# returncode:`. Without this a killed cell landed
+            # here as a row of blanks annotated "(no result row)", identical to a
+            # crash or a licence failure.
+            exit_status = bs.format_exit_status(bs.parse_returncode(text))
             # Per-iteration aggregates: `columns` from the result row is the
             # FINAL master size, which reconciles to neither the generated count
             # (aging purges) nor the seed. Carry all three so the paper's table
@@ -107,7 +125,7 @@ def main():
             # left `source` unable to say which logdir actually won a cell — it
             # named the superseded dir for the 88 ablation rows.
             cells[keyparts] = (row, os.path.join(logdir, fn), kb, mem_source, iters,
-                               slack_mode)
+                               slack_mode, exit_status)
 
     # Columns carried straight through from the CLI's result row. `columns` is
     # master.num_columns() at TERMINATION (cg_loop.h) — the final master size,
@@ -124,15 +142,24 @@ def main():
     DERIVED = ["columns_generated", "columns_seeded", "columns_purged",
                "slack_columns", "cuts_added", "cuts_removed"]
 
+    # `exit_status` sits next to `optimal` because it qualifies it. A time-limited
+    # run still prints its result row, so "ran but did not certify" is
+    # `optimal=0`; `optimal` is blank only when there is NO result row at all, and
+    # `exit_status` is what says why there is none -- killed by a signal, nonzero
+    # exit, or a clean exit whose output would not parse. Empty `exit_status` =
+    # the log predates the returncode header, which is unknown rather than ok
+    # (bs.format_exit_status).
+    # NOT named `status`: results/mps_compact_baseline.csv already uses that for
+    # the solver's SOLUTION status, and the two CSVs get compared side by side.
     fields = (["family", "instance", "formulation", "solver", "objective", "ref",
-               "rel_err", "pass", "optimal", "time"] + PASSTHROUGH + DERIVED
+               "rel_err", "pass", "optimal", "exit_status", "time"] + PASSTHROUGH + DERIVED
               + ["mem_gb", "mem_source", "source"])
     out_rows = []
-    for (family, inst, form, solver), (row, source, kb, mem_source, iters, smode) in \
-            sorted(cells.items()):
+    for (family, inst, form, solver), (row, source, kb, mem_source, iters, smode,
+                                       exit_status) in sorted(cells.items()):
         rec = {"family": family, "instance": inst, "formulation": form,
                "solver": solver, "objective": "", "ref": "", "rel_err": "",
-               "pass": "", "optimal": "", "time": "",
+               "pass": "", "optimal": "", "exit_status": exit_status, "time": "",
                "mem_gb": bs.mem_gb_from_kb(kb), "mem_source": mem_source,
                "source": source}
         rec.update({f: "" for f in PASSTHROUGH})

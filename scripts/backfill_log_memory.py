@@ -103,9 +103,7 @@ def times_agree(csv_time, log_time, tol):
 
 def parse_outcome(log_text):
     """Read write_log's `# outcome:` header ("ok"/"error"), or "" if absent."""
-    for line in log_text.splitlines():
-        if line.startswith(bs.HEADER_END_PREFIX) or not line.startswith("#"):
-            break
+    for line in bs.iter_header_lines(log_text):
         if line.startswith("# outcome:"):
             return line.split(":", 1)[1].strip()
     return ""

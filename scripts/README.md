@@ -191,15 +191,49 @@ it in the log header, and the consolidator reads it back:
 |---|---|
 | `measured` | GNU time read it during the run that wrote this log. |
 | `backfilled:<csv>` | relocated from a pre-header sweep CSV by `backfill_log_memory.py`; the CSV row's `time` and `outcome` matched the log's. |
-| `backfilled-untimed:<csv>` | relocated, but the row had no `time` to check (the run errored), so only `outcome` was matched. One cell: `transportation/Sydney/path/mosek`, OOM-killed at rc=137, 95.8 GB. |
+| `backfilled-untimed:<csv>` | relocated, but the row had no `time` to check (the run errored), so only `outcome` was matched. One cell: `transportation/Sydney/path/mosek`, SIGKILLed at 95.8 GB — see `exit_status` below. |
 
 The match is a **tripwire, not a proof**. Times print to 3 decimals, so two runs
 of a fast deterministic instance can agree exactly while being different
 executions — and peak RSS depends on machine, build and solver version, not just
 the instance. Only extend `DEFAULT_SOURCES` when you already know which sweep
 produced the logs in the paired dir. (`bench_runs/legacy-root/*.csv` carry memory
-for 14 of the 28 still-missing cells and are deliberately excluded for exactly
-this reason.)
+for 14 cells that were missing memory at the time and are deliberately excluded
+for exactly this reason.)
+
+### How a run died is the other thing only the header knows
+
+A run killed by a signal prints nothing about it — the child is gone before it can
+report anything, so the exit disposition survives only in `write_log`'s header:
+
+```
+# returncode: 137
+```
+
+`parse_returncode` reads it back and `format_exit_status` decodes it into the
+`exit_status` column of both CSVs. It is the single place a return code is interpreted, so the
+sweep CSV, the consolidated CSV and the console verdict cannot drift apart:
+
+| value | meaning |
+|---|---|
+| `ok` | clean exit (rc 0). **Reports the exit, not the answer** — `transportation/Sydney/path/cuopt` exited 0 with `objective=-inf` after 0 iterations: a barrier failure the backend swallowed (gh #33, since fixed; that row predates the fix and is still in the CSV). A clean exit that printed nothing parseable also lands here, with a blank `objective` and `(no result row)` on `source`. Read it with `optimal`/`rel_err`, never alone. |
+| `error rc=N` | non-zero exit that is not a signal death. |
+| `killed SIGKILL` | died on a signal, name resolved. `killed sig=N` when Python's enum has no name for the number. |
+| *(empty)* | no `# returncode:` header — a pre-header or hand-assembled log. **Unknown, not ok**; never infer success from a missing header. |
+
+`exit_status` is not redundant with the sweep CSV's `outcome`: every way a run can die
+collapses into `outcome=error`, and only `exit_status` says which. It also qualifies
+a blank `optimal`. A time-limited run still prints its result row, so "ran but did
+not certify" is `optimal=0`; `optimal` is blank only when there is no result row at
+all, and `exit_status` is what says why there is none.
+
+**A signal names itself, never its cause.** `killed SIGKILL` is consistent with
+the kernel OOM killer, but equally with a manual `kill -9` or a cgroup limit, and
+the harness keeps no kernel-log evidence to separate them. Read it next to
+`mem_gb` and judge — the one such cell, `transportation/Sydney/path/mosek`, peaked
+at 95.8 GB on a 125 GB box with the harness documented as never killing its child
+(`run_one`), which makes OOM the strong reading but still a reading. The column
+deliberately does not say `oom`: that would record an inference as a measurement.
 
 Because the logs also live under the gitignored `bench_runs/`, **deleting that
 tree makes `results/cg_benchmark.csv` unreproducible outright — not just its
@@ -212,11 +246,15 @@ import collections, csv
 rows = list(csv.DictReader(open('results/cg_benchmark.csv')))
 print(sum(1 for r in rows if not r['mem_gb']), 'cells missing mem_gb')
 print(collections.Counter(r['mem_source'] for r in rows if r['mem_gb']))
+print(collections.Counter(r['exit_status'] for r in rows))
 PY
 ```
 
-28 cells are expected to be missing until the `transportation × path` rerun in
-gh #37 lands.
+Coverage is complete: 440/440 cells carry `mem_gb` (gh #37, closed). 439 cells
+report `exit_status=ok`; the one exception is `transportation/Sydney/path/mosek`.
+A cell reappearing in the "missing" count means a log lost its header — most
+likely a sweep rerun into a `--logdir` whose logs already carried memory
+(`write_log` truncates), which is unrecoverable without a re-solve.
 
 #### `backfill_log_memory.py`
 

@@ -48,6 +48,7 @@ import fnmatch
 import glob
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -192,6 +193,13 @@ def write_log(log_path, cmd, stdout, stderr, returncode, outcome, peak_rss_kb=No
     in the sweep's result CSV. `peak_rss_source` records how the number got here
     ("measured" for a live run; "backfilled:<file>" when relocated from an older
     sweep CSV by backfill_log_memory.py) so provenance stays legible in the log.
+
+    `cmd` is the command as ACTUALLY spawned, GNU `time` wrapper included (the
+    sibling benchmark_mps.py logs its wrapped argv the same way). That matters for
+    reading `# returncode:` back: a wrapped run encodes a signal death as
+    128+signum, an unwrapped one as Python's negative convention, and without the
+    wrapper in the header a bare number does not say which vocabulary it belongs
+    to. Nothing parses this line — it is forensic only.
     """
     with open(log_path, "w") as f:
         f.write("# cmd: " + " ".join(cmd) + "\n")
@@ -232,6 +240,18 @@ def mem_gb_from_kb(kb):
     return "" if kb is None else round(kb / 1024.0 / 1024.0, 3)
 
 
+def iter_header_lines(log_text):
+    """Yield write_log's leading `#` header lines, stopping at the STDERR marker.
+
+    Reader-side counterpart to format_peak_rss_headers: every header parser shares
+    this one scan, so none of them can drift on where the header block ends.
+    """
+    for line in log_text.splitlines():
+        if line.startswith(HEADER_END_PREFIX) or not line.startswith("#"):
+            return  # headers are the leading block, ending at the STDERR marker
+        yield line
+
+
 def parse_peak_rss(log_text):
     """Read write_log's peak-RSS header back: (kb, source) or (None, "").
 
@@ -240,9 +260,7 @@ def parse_peak_rss(log_text):
     the originating sweep CSV, which is what backfill_log_memory.py relocates.
     """
     kb, source = None, ""
-    for line in log_text.splitlines():
-        if line.startswith(HEADER_END_PREFIX) or not line.startswith("#"):
-            break  # headers are the leading block, ending at the STDERR marker
+    for line in iter_header_lines(log_text):
         if line.startswith("# peak_rss_kb:"):
             try:
                 kb = int(line.split(":", 1)[1].strip())
@@ -253,6 +271,74 @@ def parse_peak_rss(log_text):
     # Keep the pair atomic: a source with no usable kb would write a row claiming
     # provenance for a measurement that isn't there.
     return (kb, source) if kb is not None else (None, "")
+
+
+def parse_returncode(log_text):
+    """Read write_log's `# returncode:` header back as an int, or None.
+
+    None means no usable header — absent (a log written before write_log recorded
+    it, or a hand-assembled one) or present with a value that will not parse.
+    Either way that is genuinely "unknown", not "ok": do not infer success from a
+    missing header (format_exit_status keeps it blank for that reason).
+    """
+    for line in iter_header_lines(log_text):
+        if line.startswith("# returncode:"):
+            try:
+                return int(line.split(":", 1)[1].strip())
+            except ValueError:
+                return None
+    return None
+
+
+def format_exit_status(returncode):
+    """Decode a return code into the results CSVs' `exit_status` column.
+
+    Named `exit_status`, not `status`: results/mps_compact_baseline.csv already
+    has a `status` column carrying the SOLVER's reported solution status ("Optimal",
+    "Model status : Not Set", ...), parsed from solver output. That CSV and
+    results/cg_benchmark.csv are compared head-to-head, so one name meaning two
+    orthogonal things across them would mislead in both directions. This column is
+    the PROCESS exit disposition and says so.
+
+    The one place a return code is interpreted, so the sweep CSV, the consolidated
+    CSV and the console verdict all agree. Vocabulary:
+
+        ""                no returncode recorded -> unknown, NOT assumed ok
+        "ok"              clean exit
+        "killed SIGKILL"  died on a signal, name resolved
+        "killed sig=N"    died on a signal Python's enum has no name for
+        "error rc=N"      non-zero exit that is not a signal death
+
+    "ok" reports the EXIT, not the answer. A backend that swallows its own barrier
+    failure exits 0 and still reports garbage (gh #33 — cuOpt did exactly this on
+    transportation/Sydney/path, exiting 0 with objective=-inf after 0 iterations;
+    fixed in the required fork, but that row is still in the committed CSV), so
+    this column is only ever read alongside `optimal`/`rel_err`, never alone.
+
+    Signal encoding is ambiguous by construction: subprocess returns a NEGATIVE
+    code on signal death, but we normally run the child under GNU `time`, which
+    exits 128+signum instead. Both are decoded, which means a genuine exit status
+    above 128 would be misreported as a signal — no benchmarked run exits that
+    way, and losing "killed" is the worse failure mode.
+
+    A signal death names the signal, never a cause. SIGKILL is *consistent* with
+    the kernel OOM killer but equally with a manual `kill -9` or a cgroup limit,
+    and the harness keeps no kernel-log evidence to tell them apart — read it
+    alongside `mem_gb` (which does survive, via GNU time) and judge. Recording
+    "oom" here would be recording an inference as a measurement.
+    """
+    if returncode is None:
+        return ""
+    if returncode == 0:
+        return "ok"
+    signum = -returncode if returncode < 0 else (
+        returncode - 128 if 128 < returncode <= 128 + 64 else None)  # Linux: sig 1..64
+    if signum is not None:
+        try:
+            return f"killed {signal.Signals(signum).name}"
+        except ValueError:
+            return f"killed sig={signum}"
+    return f"error rc={returncode}"
 
 
 # Iteration-table header -> tidy column name. The CLI prints this table on stderr
@@ -421,21 +507,33 @@ def run_one(binary, instance, solver, formulation, extra, max_iters, log_path=No
     peak_rss_kb = read_peak_mem_kb(mem_path)
     mem_gb = mem_gb_from_kb(peak_rss_kb)
     config = parse_lp_config(stderr)
-    outcome = "ok" if returncode == 0 else "error"
+    # Parse BEFORE the log write so the header's `# outcome:` is the same verdict
+    # this function returns. It used to be rc-derived only, so a clean exit that
+    # printed nothing parseable wrote `# outcome: ok` into a log whose CSV row said
+    # `error` -- and backfill_log_memory.parse_outcome compares exactly those two,
+    # so the harness would have refused its own log as a cross-execution mismatch.
+    # parse_csv_row is total (returns None, never raises), so moving it above the
+    # write keeps write_log's "dump both verbatim regardless of outcome" promise.
+    row = parse_csv_row(stdout)
+    outcome = "ok" if returncode == 0 and row is not None else "error"
     if log_path:
-        write_log(log_path, cmd, stdout, stderr, returncode, outcome,
+        write_log(log_path, run_cmd, stdout, stderr, returncode, outcome,
                   peak_rss_kb=peak_rss_kb)
     if returncode != 0:
         tail = "\n".join(stderr.strip().splitlines()[-3:])
         return {"outcome": "error", "returncode": returncode, "stderr_tail": tail,
                 "mem_gb": mem_gb, "config": config}
-    row = parse_csv_row(stdout)
     if row is None:
+        # rc really was 0 -- the child exited cleanly and printed nothing
+        # parseable. Reporting anything else here would put an inference where a
+        # measurement belongs; the caller names the condition in `detail`, so the
+        # tail no longer carries its own "no CSV row" prefix.
         tail = "\n".join(stderr.strip().splitlines()[-3:])
-        return {"outcome": "error", "returncode": 0, "stderr_tail": "no CSV row; " + tail,
+        return {"outcome": "error", "returncode": 0, "stderr_tail": tail,
                 "mem_gb": mem_gb, "config": config}
     return {
         "outcome": "ok",
+        "returncode": returncode,
         "objective": float(row["objective"]),
         "lower_bound": row.get("lower_bound", "") or "",
         "optimal": int(row["optimal"]),
@@ -509,9 +607,14 @@ def main():
     override_forms = ([f.strip() for f in args.formulations.split(",") if f.strip()]
                       if args.formulations else None)
 
-    fields = ["family", "instance", "solver", "formulation", "outcome", "objective",
-              "ref", "rel_err", "pass", "optimal", "iterations", "columns", "time", "mem_gb",
-              "config", "detail"]
+    # `exit_status` decodes the child's exit disposition (format_exit_status);
+    # `outcome` is the coarse ok/error bucket the summary counts. They are not
+    # redundant: every way a run can die -- signal, crash, bad args -- collapses
+    # into "error", and only `exit_status` says which, so a cell killed by a signal
+    # is distinguishable from a licence failure without opening the log.
+    fields = ["family", "instance", "solver", "formulation", "outcome", "exit_status",
+              "objective", "ref", "rel_err", "pass", "optimal", "iterations", "columns",
+              "time", "mem_gb", "config", "detail"]
     rows = []
     summary = {s: {"pass": 0, "fail": 0, "wrong": 0, "error": 0, "noref": 0} for s in solvers}
 
@@ -537,6 +640,7 @@ def main():
                 ref = refs.get(key)
                 rec = {"family": family, "instance": key, "solver": solver,
                        "formulation": formulation, "outcome": r["outcome"],
+                       "exit_status": format_exit_status(r.get("returncode")),
                        "objective": "", "ref": "" if ref is None else ref,
                        "rel_err": "", "pass": "", "optimal": "", "iterations": "",
                        "columns": "", "time": "", "mem_gb": r.get("mem_gb", ""),
@@ -569,9 +673,23 @@ def main():
                             verdict = f"FAIL rel={rel:.2e}"
                     sys.stderr.write(f"{verdict} obj={r['objective']:.3f} t={r['time']:.1f}s\n")
                 else:
-                    rec["detail"] = r.get("stderr_tail", "") or f"rc={r.get('returncode','')}"
+                    # The exit disposition LEADS the detail. It used to be a
+                    # fallback for an empty stderr, so a run that died mid-log --
+                    # exactly the interesting kind -- had its stderr tail win and
+                    # the return code silently dropped: a signal-killed cell was
+                    # indistinguishable from any other error in this CSV.
+                    #
+                    # An errored run whose exit_status is "ok" is the clean-exit-
+                    # but-nothing-parseable case; leading with a bare "ok" on an
+                    # error row reads as a contradiction, so name that condition
+                    # instead of restating the exit code.
+                    lead = rec["exit_status"] or "rc=?"
+                    if lead == "ok":
+                        lead = "exited 0 without a result row"
+                    tail = r.get("stderr_tail", "")
+                    rec["detail"] = f"{lead}; {tail}" if tail else lead
                     summary[solver][r["outcome"]] += 1
-                    sys.stderr.write(f"{r['outcome'].upper()}\n")
+                    sys.stderr.write(f"{r['outcome'].upper()} ({lead})\n")
                 rows.append(rec)
 
     with open(args.out, "w", newline="") as f:

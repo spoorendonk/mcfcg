@@ -40,9 +40,15 @@ plenty for convergence plots but NOT for reporting objectives — take those fro
 
 Usage:
   python3 scripts/extract_iterations.py                       # bench_runs/cg/logs
+  # the committed results/cg_iterations.csv, exactly. MUST be the same six dirs in
+  # the same order as consolidate_cg_logs.py's canonical list, or the two tracked
+  # CSVs describe different runs: dropping transportation_logs_v2 and
+  # issue40_rerun leaves superseded cells winning and yields 9,604 iteration rows
+  # instead of 9,601 -- including the ones gh #40's reruns were meant to replace.
   python3 scripts/extract_iterations.py --logdir \
       bench_runs/logs bench_runs/intermodal_logs bench_runs/transportation_logs \
-      bench_runs/highs_hipo_ablation/logs
+      bench_runs/transportation_logs_v2 bench_runs/highs_hipo_ablation/logs \
+      bench_runs/issue40_rerun/logs
 """
 
 import argparse
