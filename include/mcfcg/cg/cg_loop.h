@@ -8,6 +8,7 @@
 #include "mcfcg/util/timer.h"
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <limits>
 #include <vector>
@@ -322,7 +323,15 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
             if (num_new_caps == 0 && num_active_slacks == 0) {
                 timer.stop(TimerCat::Total);
                 finish_iter(obj, num_new_caps, 0, 0, false, 0, 0);
-                set_optimal(obj, iter);
+                // Report the incumbent, not this iter's LP objective — same as
+                // the gap-test exit above.  The UB-tightening guard upstream is
+                // exactly this branch's condition, so best_ub = min(best_ub, obj)
+                // has already run for this iter and best_ub <= obj is invariant.
+                // A barrier that lands above an earlier solve on a strictly
+                // larger column set (observed with cuOpt/MOSEK) would otherwise
+                // make CG report a value worse than a solution it already had.
+                assert(best_ub <= obj && "UB-update guard must cover this branch");
+                set_optimal(best_ub, iter);
                 return result;
             }
             // Pricing is exhausted but we are NOT optimal — slacks are still
