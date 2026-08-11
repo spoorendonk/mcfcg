@@ -409,9 +409,26 @@ exits non-zero on any mismatch.
 
 ## Citing
 
-Cite the paper for the result and the archived release for the code —
-`CITATION.cff` carries both. Cite a tag, never `main`: the result tables move
-with the code.
+Cite the paper for the result and the archived release for the code.
+[`CITATION.cff`](CITATION.cff) carries both in machine-readable form — GitHub's
+"Cite this repository" button reads it.
+
+The paper is **arXiv:2509.24656**, <https://arxiv.org/abs/2509.24656>:
+
+```bibtex
+@misc{spoorendonk2025treemcf,
+  title        = {Tree-based formulation for the multi-commodity flow problem},
+  author       = {Spoorendonk, Simon and Petersen, Bj{\o}rn},
+  year         = {2025},
+  eprint       = {2509.24656},
+  archivePrefix= {arXiv},
+  primaryClass = {math.OC},
+  url          = {https://arxiv.org/abs/2509.24656}
+}
+```
+
+Cite a tag, never `main`: the result tables under `results/` move with the code,
+and `PROVENANCE.txt` pins the solver stack only as of the tag that carries it.
 
 ## License
 
