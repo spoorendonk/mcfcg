@@ -100,7 +100,13 @@ public:
         check_mosek(MSK_putdouparam(_task, MSK_DPAR_INTPNT_TOL_REL_GAP, BARRIER_TOL), "TolRelGap");
         int threads = 0;
         check_mosek(MSK_getintparam(_task, MSK_IPAR_NUM_THREADS, &threads), "GetNumThreads");
-        log_solver_config("mosek", "barrier", /*gpu=*/false, threads);
+        int major = 0;
+        int minor = 0;
+        int revision = 0;
+        check_mosek(MSK_getversion(&major, &minor, &revision), "GetVersion");
+        std::string version =
+            std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(revision);
+        log_solver_config("mosek", version.c_str(), "barrier", /*gpu=*/false, threads);
     }
 
     ~MosekSolver() override {

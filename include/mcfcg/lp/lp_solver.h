@@ -128,7 +128,14 @@ public:
 // crossover off, tol = BARRIER_TOL) plus the effective execution mode and
 // thread count, so every run is self-documenting. `threads <= 0` is reported as
 // "auto(<hardware_concurrency>)"; `gpu` selects the CPU/GPU execution label.
-void log_solver_config(const char* backend, const char* method, bool gpu, int threads);
+//
+// `version` must be queried from the loaded library at run time, never from the
+// vendor header's compile-time macros: a header/library mismatch (a stale
+// LD_LIBRARY_PATH pointing at another install) is exactly the provenance failure
+// this field exists to catch. Keep it whitespace-free so the banner stays
+// parseable as space-separated key=value pairs.
+void log_solver_config(const char* backend, const char* version, const char* method, bool gpu,
+                       int threads);
 
 std::unique_ptr<LPSolver> create_lp_solver(bool verbose = false);
 

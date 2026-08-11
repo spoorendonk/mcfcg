@@ -5,9 +5,11 @@
 #include "mcfcg/util/tolerances.h"
 
 #include <cassert>
+#include <cctype>
 #include <copt.h>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace mcfcg {
@@ -19,6 +21,39 @@ void check_copt(int status, const char* msg) {
         throw std::runtime_error(std::string("COPT error (") + std::to_string(status) + ") in " +
                                  msg);
     }
+}
+
+// COPT exposes no numeric version getter, only a multi-line human banner whose
+// first line reads "Cardinal Optimizer v8.0.1. Build date Oct 22 2025". Pull the
+// dotted version out of it rather than reading COPT_VERSION_* from the header:
+// the header's macros describe what we compiled against, and the whole point of
+// the banner field is to name the library actually loaded. Falls back to
+// "unknown" rather than guessing if the format ever changes.
+std::string copt_version() {
+    char banner[512] = {0};
+    if (COPT_GetBanner(banner, sizeof(banner)) != COPT_RETCODE_OK) {
+        return "unknown";
+    }
+    // isdigit takes an int that must be representable as unsigned char; a plain
+    // char is signed here, so a non-ASCII byte in the banner would be UB.
+    auto is_digit = [](char chr) { return std::isdigit(static_cast<unsigned char>(chr)) != 0; };
+    std::string_view text(banner);
+    for (size_t i = 0; i + 1 < text.size(); ++i) {
+        bool at_token_start = (i == 0) || text[i - 1] == ' ';
+        if (!at_token_start || text[i] != 'v' || !is_digit(text[i + 1])) {
+            continue;
+        }
+        size_t end = i + 1;
+        while (end < text.size() && (is_digit(text[end]) || text[end] == '.')) {
+            ++end;
+        }
+        // Drop a trailing '.' — it ends the banner's sentence, not the version.
+        while (end > i + 1 && text[end - 1] == '.') {
+            --end;
+        }
+        return std::string(text.substr(i + 1, end - (i + 1)));
+    }
+    return "unknown";
 }
 
 }  // namespace
@@ -57,7 +92,8 @@ public:
         check_copt(COPT_SetDblParam(_prob, COPT_DBLPARAM_DUALTOL, BARRIER_TOL), "DualTol");
         int threads = 0;
         check_copt(COPT_GetIntParam(_prob, COPT_INTPARAM_THREADS, &threads), "GetThreads");
-        log_solver_config("copt", "barrier", /*gpu=*/gpu_mode != 0, threads);
+        log_solver_config("copt", copt_version().c_str(), "barrier", /*gpu=*/gpu_mode != 0,
+                          threads);
     }
 
     ~CoptSolver() override {

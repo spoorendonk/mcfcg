@@ -13,7 +13,8 @@ namespace mcfcg {
 // Shared across every backend (declared in lp_solver.h, defined once here in the
 // always-compiled HiGHS TU). One concise provenance line per solver
 // construction — i.e. once per CG solve, since the loop builds one solver.
-void log_solver_config(const char* backend, const char* method, bool gpu, int threads) {
+void log_solver_config(const char* backend, const char* version, const char* method, bool gpu,
+                       int threads) {
     char threads_buf[32];
     if (gpu) {
         std::snprintf(threads_buf, sizeof(threads_buf), "n/a(GPU)");
@@ -24,9 +25,9 @@ void log_solver_config(const char* backend, const char* method, bool gpu, int th
                       std::thread::hardware_concurrency());
     }
     std::fprintf(stderr,
-                 "[lp-config] backend=%s method=%s exec=%s presolve=off crossover=off "
+                 "[lp-config] backend=%s version=%s method=%s exec=%s presolve=off crossover=off "
                  "tol=%g threads=%s\n",
-                 backend, method, gpu ? "GPU" : "CPU", BARRIER_TOL, threads_buf);
+                 backend, version, method, gpu ? "GPU" : "CPU", BARRIER_TOL, threads_buf);
 }
 
 class HiGHSSolver : public LPSolver {
@@ -66,7 +67,12 @@ public:
         _highs.passModel(std::move(model));
         HighsInt threads = 0;
         _highs.getOptionValue("threads", threads);
-        log_solver_config("highs", method, /*gpu=*/false, static_cast<int>(threads));
+        // Githash identifies the upstream tag only — it cannot reveal whether
+        // cmake/patches/highs-hipo-refine-status.patch is applied, so a run's
+        // full HiGHS provenance is this banner plus PROVENANCE.txt.
+        char version[64];
+        std::snprintf(version, sizeof(version), "%s-%s", highsVersion(), highsGithash());
+        log_solver_config("highs", version, method, /*gpu=*/false, static_cast<int>(threads));
     }
 
     uint32_t add_cols(const std::vector<double>& obj, const std::vector<double>& lb,

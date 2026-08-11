@@ -187,7 +187,18 @@ public:
     explicit CuOptSolver(bool verbose) : _verbose(verbose) {
         // GPU barrier; no CPU thread count applies. Logged once per solver
         // (i.e. once per CG solve) for run provenance, like the other backends.
-        log_solver_config("cuopt", "barrier", /*gpu=*/true, /*threads=*/-1);
+        // The reported version is the upstream RAPIDS version; it cannot
+        // distinguish the delta-API fork this repo builds against by default
+        // (see PROVENANCE.txt for the fork commit).
+        cuopt_int_t major = 0;
+        cuopt_int_t minor = 0;
+        cuopt_int_t patch = 0;
+        std::string version = "unknown";
+        if (cuOptGetVersion(&major, &minor, &patch) == CUOPT_SUCCESS) {
+            version =
+                std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
+        }
+        log_solver_config("cuopt", version.c_str(), "barrier", /*gpu=*/true, /*threads=*/-1);
     }
 
     CuOptSolver(const CuOptSolver&) = delete;
