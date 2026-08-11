@@ -162,14 +162,24 @@ because they depend on where the barrier's interior point lands.
 **And only objectives that were certified optimal gate the result.** A run
 stopped by `--time-limit` reports whatever bound it had reached when the clock
 ran out — a measure of host speed as much as of the formulation. Twenty
-committed cells are in that state (`optimal=0`), and two of them differ by over
-1% between backends on the reference machine itself: `planar2500/tree` spans
+committed cells are not certified: 19 hit the time limit (`optimal=0`) and one
+was SIGKILLed (`optimal` blank). Two of the timed-out ones differ by over 1%
+between backends on the reference machine itself: `planar2500/tree` spans
 1.2481e10 to 1.2661e10, `Philadelphia/path` spans 2.5095e7 to 2.5893e7. Gating
 on those would fail every host that is not exactly as fast as this one, so they
-print as `note` lines and are counted under `advisory`. The same applies when
-this host solves a cell the reference host could not — the one OOM-killed cell
-comes back if you have more than 125 GB — since doing better is not a failure
-to reproduce.
+print as `note` lines and are counted under `advisory`.
+
+Two more cases are advisory for the same reason — the reference cell is not a
+target worth hitting:
+
+- **This host did better.** `Sydney/path/mosek` was OOM-killed at 95.8 GB and
+  has no objective; a machine with more than 125 GB solves it.
+- **The reference value is known-bad.** `Sydney/path/cuopt` recorded `-inf`, the
+  swallowed barrier failure of gh #33. The cuOpt fork this release requires has
+  fixed that, so a correct rerun is *expected* to disagree.
+
+A self-compare of the committed CSV therefore reports 420 matched, 18 advisory
+and 2 agreed-by-absence — 440 cells, nothing gated that should not be.
 
 The default tolerance is `1e-4`, matching `BARRIER_TOL` — every backend is pinned
 to that convergence tolerance, so it is the tightest agreement the comparison can

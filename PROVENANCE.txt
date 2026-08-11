@@ -247,10 +247,11 @@ records the version at run time and no inference is needed.
 Objective values are the reproducible quantity, with one qualification: only
 the cells that PROVED optimality. A run stopped by the 7200 s limit reports the
 bound it had reached when the clock ran out, so its objective measures host
-speed as much as formulation — 20 of the 440 cells are in that state, and two
-of them differ by more than 1% between backends on this machine alone. The
-reproduction checker compares those cells but never fails on them. Timings and
-peak memory depend throughout on this host, this GPU and these library versions.
+speed as much as formulation. 20 of the 440 cells are not certified — 19 timed
+out, one was killed — and two of the timed-out ones differ by more than 1%
+between backends on this machine alone. The reproduction checker compares those
+cells but never fails on them. Timings and peak memory depend throughout on this
+host, this GPU and these library versions.
 
 Reproducible with open-source components only:
     highs      HiGHS is fetched and built by CMake. No licence, no GPU, no

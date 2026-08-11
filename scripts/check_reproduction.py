@@ -74,8 +74,9 @@ def certified(row):
     A run stopped by the time limit reports the best bound it had reached when
     the clock ran out, so its objective is a function of how fast the host is --
     the very property this script excludes time and iteration counts for. Twenty
-    committed cells are in that state, and two of them vary by more than 1% even
-    between backends on the reference machine.
+    committed cells are not certified (19 hit the time limit, one was killed),
+    and two of the timed-out ones vary by more than 1% between backends on the
+    reference machine alone.
     """
     return (row.get("optimal") or "").strip() == "1"
 
@@ -109,16 +110,23 @@ def compare(fresh_row, ref_row, tol):
     if got is None:
         return "diff", None, "no objective in the fresh run"
     # NaN never equals itself, and inf - inf is NaN, so both cases have to be
-    # settled before the relative-error formula runs. The reference does contain
-    # an infinite objective (a swallowed barrier failure recorded as -inf).
-    if math.isnan(got) or math.isnan(want):
-        if math.isnan(got) and math.isnan(want):
-            return "ok", None, "NaN on both sides"
-        return "diff", None, "NaN on one side"
-    if math.isinf(got) or math.isinf(want):
-        if got == want:
+    # settled before the relative-error formula runs.
+    if got == want:
+        # Covers matching infinities. Agreeing on a non-finite value is the same
+        # kind of agreement as agreeing on absence: both runs failed the same way.
+        if not math.isfinite(want):
             return "ok", None, f"both {got}"
-        return "diff", None, "one side is infinite"
+    elif not math.isfinite(want):
+        # A non-finite reference objective is not a reproducible target. The one
+        # such cell (-inf) is the swallowed cuOpt barrier failure of gh #33,
+        # which the fork this release requires has since fixed -- so a correct
+        # rerun is EXPECTED to disagree here. Same reasoning as a missing
+        # reference objective above: not a reproduction failure.
+        return "advisory", None, "reference objective is non-finite; not a reproducible target"
+    if not math.isfinite(got):
+        # Reference has a real value and this run produced inf/NaN. That is a
+        # failure, and the only remaining non-finite case.
+        return "diff", None, "non-finite objective in the fresh run"
     rel = abs(got - want) / max(1.0, abs(want))
     if not (certified(fresh_row) and certified(ref_row)):
         return "advisory", rel, f"rel={rel:.3e}, not certified optimal"

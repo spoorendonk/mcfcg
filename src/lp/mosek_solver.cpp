@@ -103,9 +103,14 @@ public:
         int major = 0;
         int minor = 0;
         int revision = 0;
-        check_mosek(MSK_getversion(&major, &minor, &revision), "GetVersion");
-        std::string version =
-            std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(revision);
+        // Degrade rather than throw, like the COPT and cuOpt version queries: a
+        // banner field is provenance, and failing to read it must not take down
+        // a solve that would otherwise run.
+        std::string version = "unknown";
+        if (MSK_getversion(&major, &minor, &revision) == MSK_RES_OK) {
+            version = std::to_string(major) + "." + std::to_string(minor) + "." +
+                      std::to_string(revision);
+        }
         log_solver_config("mosek", version.c_str(), "barrier", /*gpu=*/false, threads);
     }
 

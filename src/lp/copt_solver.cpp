@@ -30,7 +30,10 @@ void check_copt(int status, const char* msg) {
 // the banner field is to name the library actually loaded. Falls back to
 // "unknown" rather than guessing if the format ever changes.
 std::string copt_version() {
-    char banner[512] = {0};
+    // COPT_BUFFSIZE is the buffer size its message getters document; anything
+    // smaller is below the API's contract, and a full-buffer write would also
+    // leave the result without the NUL that string_view assumes.
+    char banner[COPT_BUFFSIZE] = {0};
     if (COPT_GetBanner(banner, sizeof(banner)) != COPT_RETCODE_OK) {
         return "unknown";
     }
