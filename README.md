@@ -140,9 +140,9 @@ The **non-optimal** exit reports $UB$ when one was ever recorded and
 falls back to the Lagrangian $LB$ otherwise: with slacks basic the LP
 objective is a feasibility penalty rather than a routing cost, so it
 would be worse than useless as a reported value. That fallback is not a
-corner case in practice — 17 of the 20 uncertified cells in
-`results/cg_benchmark.csv` report a lower bound in their `objective`
-column for exactly this reason.
+corner case in practice — of the 20 uncertified cells in
+`results/cg_benchmark.csv`, 19 produced a number at all, and 17 of those
+report a lower bound in their `objective` column for exactly this reason.
 
 `pricer.price` is the source-level dispatcher; each per-source call
 (`PriceOneSource`) is the A* inner body. Postponement is a
@@ -276,6 +276,7 @@ the vendor header's compile-time macros, so a stale `LD_LIBRARY_PATH` pointing a
 a second install shows up here instead of being silently misreported.
 `PROVENANCE.txt` records the two things it cannot see: whether the HiGHS HiPO
 patch is applied, and whether cuOpt is the delta-API fork.
+
 `threads=auto(N)` reports the backend's effective thread count (`N` = hardware
 concurrency when the backend auto-selects); `exec` is CPU or GPU. The banner
 reports the steady-state pins — a stall-recovery certify solve transiently runs

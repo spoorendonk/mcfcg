@@ -202,8 +202,8 @@ The default tolerance is `1e-3`, matching `benchmark_solvers.py`'s pass
 criterion. It is deliberately *looser* than `BARRIER_TOL` / `RELATIVE_FEAS_TOL`
 (1e-4): 1e-4 is the gap at which CG stops, so two faithful runs may legitimately
 differ by nearly that much. Reruns of the same grid/highs cells on the reference
-host itself land 5e-5 apart — half the budget — so gating at 1e-4 would fail
-correct builds on any host with a different core count. The per-cell `rel=`
+host itself land 5e-5 apart — half the budget — so gating at 1e-4 would risk
+failing correct builds, most likely on a host with a different core count. The per-cell `rel=`
 printout stays, so drift toward the limit is still visible.
 
 Cells the sweep did not run are counted as `not run`, never as passes; a narrowed

@@ -165,8 +165,9 @@ def main():
                          "NOT 1e-4: that is RELATIVE_FEAS_TOL, the gap at which "
                          "CG stops, so two faithful runs may legitimately differ "
                          "by nearly that much -- reruns of the same grid cells on "
-                         "the reference host itself land 5e-5 apart. Gating at the "
-                         "stopping tolerance would fail correct builds.")
+                         "the reference host itself land 5e-5 apart, half that "
+                         "budget. Gating at the stopping tolerance would risk "
+                         "failing correct builds.")
     ap.add_argument("--quiet", action="store_true",
                     help="print only mismatches and the verdict")
     args = ap.parse_args()
