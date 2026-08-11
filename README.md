@@ -109,7 +109,7 @@ UB \leftarrow +\infty,\ LB \leftarrow -\infty \\
 \quad \text{trim } C \text{ to the } C_{\max} \text{ columns with lowest reduced cost} \\
 \quad \textsf{master.bumpSlacks}();\ \text{purge aged cols};\ \text{purge idle cap rows} \\
 \quad \textsf{master.addColumns}(C) \\
-\textbf{return stopped}(UB) \\
+\textbf{return stopped}\bigl(UB < \infty\ ?\ UB : LB\bigr) \qquad \triangleright \text{time limit / } it_{\max} \text{ / LP not optimal} \\
 \end{array}
 $$
 
@@ -135,6 +135,14 @@ exactly the guard that updates $UB$, so $UB \le \mathit{obj}$ holds
 there by construction; returning $\mathit{obj}$ instead used to hand
 back a value worse than one CG already had whenever a barrier landed
 above an earlier solve on a strictly larger column set.
+
+The **non-optimal** exit reports $UB$ when one was ever recorded and
+falls back to the Lagrangian $LB$ otherwise: with slacks basic the LP
+objective is a feasibility penalty rather than a routing cost, so it
+would be worse than useless as a reported value. That fallback is not a
+corner case in practice — 17 of the 20 uncertified cells in
+`results/cg_benchmark.csv` report a lower bound in their `objective`
+column for exactly this reason.
 
 `pricer.price` is the source-level dispatcher; each per-source call
 (`PriceOneSource`) is the A* inner body. Postponement is a
@@ -260,9 +268,14 @@ runs the same regime: **presolve off, crossover off, convergence tolerance 1e-4*
 construction (captured in the CG / benchmark logs), e.g.:
 
 ```
-[lp-config] backend=mosek method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+[lp-config] backend=mosek version=11.0.30 method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
 ```
 
+`version=` is queried from the library actually loaded at run time, never from
+the vendor header's compile-time macros, so a stale `LD_LIBRARY_PATH` pointing at
+a second install shows up here instead of being silently misreported.
+`PROVENANCE.txt` records the two things it cannot see: whether the HiGHS HiPO
+patch is applied, and whether cuOpt is the delta-API fork.
 `threads=auto(N)` reports the backend's effective thread count (`N` = hardware
 concurrency when the backend auto-selects); `exec` is CPU or GPU. The banner
 reports the steady-state pins — a stall-recovery certify solve transiently runs

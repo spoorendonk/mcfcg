@@ -41,6 +41,7 @@ preferred-citation:
       given-names: Bjørn
       affiliation: Flowty ApS
   year: 2025
+  doi: "10.48550/arXiv.2509.24656"
   url: "https://arxiv.org/abs/2509.24656"
   identifiers:
     - type: other

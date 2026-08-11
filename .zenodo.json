@@ -27,11 +27,6 @@
       "identifier": "arXiv:2509.24656",
       "relation": "isSupplementTo",
       "scheme": "arxiv"
-    },
-    {
-      "identifier": "https://github.com/spoorendonk/mcfcg",
-      "relation": "isSupplementTo",
-      "scheme": "url"
     }
   ]
 }

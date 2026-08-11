@@ -309,11 +309,14 @@ def format_exit_status(returncode):
         "killed sig=N"    died on a signal Python's enum has no name for
         "error rc=N"      non-zero exit that is not a signal death
 
-    "ok" reports the EXIT, not the answer. A backend that swallows its own barrier
-    failure exits 0 and still reports garbage (gh #33 — cuOpt did exactly this on
-    transportation/Sydney/path, exiting 0 with objective=-inf after 0 iterations;
-    fixed in the required fork, but that row is still in the committed CSV), so
-    this column is only ever read alongside `optimal`/`rel_err`, never alone.
+    "ok" reports the EXIT, not the answer. transportation/Sydney/path/cuopt exits
+    0 with objective=-inf: the cuOpt barrier failed, CG's first LP solve came back
+    non-optimal, and the loop broke after 0 iterations, so that -inf is CGResult's
+    "no objective established" sentinel rather than a computed value. A backend
+    can also swallow its own failure and report a plausible wrong optimum instead,
+    which looks quite different — optimal=1 (gh #33, fixed in the required fork).
+    Either way this column is only ever read alongside `optimal`/`rel_err`, never
+    alone.
 
     Signal encoding is ambiguous by construction: subprocess returns a NEGATIVE
     code on signal death, but we normally run the child under GNU `time`, which

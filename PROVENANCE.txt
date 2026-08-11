@@ -175,7 +175,8 @@ directories by `scripts/consolidate_cg_logs.py` (which re-parses logs and never
 re-solves). The `source` column of results/cg_benchmark.csv names the log file
 behind every row.
 
-Across that window the solver code moved by exactly two commits:
+Across that window the C++ solver sources (src/, include/) moved by exactly two
+commits:
 
     4e67897 (2026-06-23)  human summary line only — prints UB=inf gap=inf when
                           no feasible incumbent was found. The CSV result row
@@ -188,9 +189,24 @@ Across that window the solver code moved by exactly two commits:
                           bench_runs/issue40_rerun/logs entries named in the
                           `source` column.
 
-Everything else in the window is benchmark tooling, scripts and documentation.
-The last commit to touch solver behaviour before the sweep began is 4a4f4b6
-(2026-06-22), so v1.0.0 reproduces every committed cell.
+Two further commits changed the HiGHS backend without touching src/ or include/,
+so a `git log` scoped to those two directories misses them:
+
+    eca2057 (2026-07-05)  bumped the FetchContent'd HiGHS to v1.15.1 and rebased
+                          the HiPO patch — a version change to a benchmarked
+                          solver.
+    d24f47d (2026-08-02)  forced the HiPO numerical extras to link statically.
+                          Before it, HiGHS silently fell back to dual simplex
+                          while still reporting method=hipo, so this changes
+                          which algorithm ran (see the HiPO note in CLAUDE.md).
+
+Both land before the single 2026-08-05 sweep that produced all 88 HiGHS cells,
+so no committed HiGHS cell straddles either. ff56ad2 (2026-06-26) corrected the
+Austin/Sydney reference optima; the consolidator recomputes ref/rel_err/pass
+from the current optimal.csv, so that correction is already reflected in every
+row. Everything else in the window is benchmark tooling, scripts and
+documentation. The last commit to touch solver behaviour before the sweep began
+is 4a4f4b6 (2026-06-22), so v1.0.0 reproduces every committed cell.
 
 All 88 HiGHS cells come from a single sweep on 2026-08-05
 (bench_runs/highs_hipo_ablation/), whose own PROVENANCE.txt records
@@ -247,11 +263,26 @@ records the version at run time and no inference is needed.
 Objective values are the reproducible quantity, with one qualification: only
 the cells that PROVED optimality. A run stopped by the 7200 s limit reports the
 bound it had reached when the clock ran out, so its objective measures host
-speed as much as formulation. 20 of the 440 cells are not certified — 19 timed
-out, one was killed — and two of the timed-out ones differ by more than 1%
-between backends on this machine alone. The reproduction checker compares those
-cells but never fails on them. Timings and peak memory depend throughout on this
-host, this GPU and these library versions.
+speed as much as formulation. 20 of the 440 cells are not certified: 14 hit the
+time limit, 5 aborted after 0-5 iterations when an LP solve returned a
+non-optimal status (the four cuOpt transportation/*/path cells and
+planar2500/path/highs), and one was killed. Two of the timed-out ones differ by
+more than 1% between backends on this machine alone. The reproduction checker
+compares those cells but never fails on them.
+
+Read the `objective` column of those 20 with care: for 17 of the 19 that
+produced a number at all, that number is the Lagrangian LOWER bound, not an
+objective. CG falls back to `best_lb` when it never recorded a slack-free
+incumbent (`result.objective = best_ub < INF ? best_ub : best_lb` in
+cg_loop.h), and `lower_bound` in the CSV then holds the same value. Only
+transportation/Philadelphia/path/mosek reports a true upper bound (2.5893e7
+against an LB of 2.5572e7); transportation/Sydney/path/cuopt's -inf is the "no
+objective established" sentinel, its first LP solve having failed. A reader
+comparing these rows against the certified optima needs to know which direction
+the error runs.
+
+Timings and peak memory depend throughout on this host, this GPU and these
+library versions.
 
 Reproducible with open-source components only:
     highs      HiGHS is fetched and built by CMake. No licence, no GPU, no
@@ -272,7 +303,8 @@ derived data); regenerate them with scripts/write_mps.sh before running
 scripts/benchmark_mps.py.
 
 Smoke test — reproduces the grid/highs rows of results/cg_benchmark.csv on the
-default HiGHS-only build, in roughly 15 minutes:
+default HiGHS-only build, in roughly 15 minutes of solve time plus a from-scratch
+CMake configure and build of HiGHS and the project:
 
     cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY
     cmake --build build -j$(nproc)

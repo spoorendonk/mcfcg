@@ -31,10 +31,10 @@ void check_copt(int status, const char* msg) {
 // "unknown" rather than guessing if the format ever changes.
 std::string copt_version() {
     // COPT_BUFFSIZE is the buffer size its message getters document; anything
-    // smaller is below the API's contract, and a full-buffer write would also
-    // leave the result without the NUL that string_view assumes.
-    char banner[COPT_BUFFSIZE] = {0};
-    if (COPT_GetBanner(banner, sizeof(banner)) != COPT_RETCODE_OK) {
+    // smaller is below the API's contract. The +1 keeps a NUL available even if
+    // COPT ever filled the buffer exactly, since string_view below assumes one.
+    char banner[COPT_BUFFSIZE + 1] = {0};
+    if (COPT_GetBanner(banner, COPT_BUFFSIZE) != COPT_RETCODE_OK) {
         return "unknown";
     }
     // isdigit takes an int that must be representable as unsigned char; a plain

@@ -162,29 +162,49 @@ because they depend on where the barrier's interior point lands.
 **And only objectives that were certified optimal gate the result.** A run
 stopped by `--time-limit` reports whatever bound it had reached when the clock
 ran out — a measure of host speed as much as of the formulation. Twenty
-committed cells are not certified: 19 hit the time limit (`optimal=0`) and one
-was SIGKILLed (`optimal` blank). Two of the timed-out ones differ by over 1%
-between backends on the reference machine itself: `planar2500/tree` spans
-1.2481e10 to 1.2661e10, `Philadelphia/path` spans 2.5095e7 to 2.5893e7. Gating
-on those would fail every host that is not exactly as fast as this one, so they
-print as `note` lines and are counted under `advisory`.
+committed cells are not certified: 14 hit the time limit, 5 aborted after 0–5
+iterations when an LP solve returned a non-optimal status (the four cuOpt
+`transportation/*/path` cells and `planar2500/path/highs`), and one was
+SIGKILLed (`optimal` blank; the rest are `optimal=0`). Two of the timed-out ones
+differ by over 1% between backends on the reference machine itself:
+`planar2500/tree` spans 1.2481e10 to 1.2661e10, `Philadelphia/path` spans
+2.5095e7 to 2.5893e7. Gating on those would fail every host that is not exactly
+as fast as this one, so they print as `note` lines and are counted under
+`advisory`.
 
-Two more cases are advisory for the same reason — the reference cell is not a
-target worth hitting:
+**Their `objective` is usually a lower bound.** For 17 of the 19 that produced a
+number, `objective` equals `lower_bound`: CG falls back to `best_lb` when it
+never recorded a slack-free incumbent, so the column holds the Lagrangian bound
+rather than a feasible cost. Only `Philadelphia/path/mosek` reports a true UB.
+Quote these rows accordingly.
 
-- **This host did better.** `Sydney/path/mosek` was OOM-killed at 95.8 GB and
-  has no objective; a machine with more than 125 GB solves it.
-- **The reference value is known-bad.** `Sydney/path/cuopt` recorded `-inf`, the
-  swallowed barrier failure of gh #33. The cuOpt fork this release requires has
-  fixed that, so a correct rerun is *expected* to disagree.
+A **lost certification** — the reference proved optimality and your run did not —
+is called out on its own line in the summary. It cannot gate (on slower hardware
+it is expected), but it is also the shape of a backend regression, so it must not
+hide inside the advisory total.
 
-A self-compare of the committed CSV therefore reports 420 matched, 18 advisory
-and 2 agreed by absence or non-finite value — 440 cells, nothing gated that
-should not be.
+Two more cases are advisory because the reference cell is not a target worth
+hitting:
 
-The default tolerance is `1e-4`, matching `BARRIER_TOL` — every backend is pinned
-to that convergence tolerance, so it is the tightest agreement the comparison can
-honestly demand.
+- **This host produced something the reference did not.** `Sydney/path/mosek` was
+  SIGKILLed at a 95.8 GB peak and has no objective; a machine with more headroom
+  may well solve it.
+- **The reference value is known-bad.** `Sydney/path/cuopt` recorded `-inf` — its
+  first LP solve failed and CG broke out after 0 iterations, so that is the "no
+  objective established" sentinel, not a computed value. A correct rerun is
+  *expected* to disagree.
+
+A self-compare is a different case: those two cells agree with themselves, so it
+reports 420 matched, 18 advisory and 2 agreed by absence or non-finite value —
+440 cells, nothing gated that should not be.
+
+The default tolerance is `1e-3`, matching `benchmark_solvers.py`'s pass
+criterion. It is deliberately *looser* than `BARRIER_TOL` / `RELATIVE_FEAS_TOL`
+(1e-4): 1e-4 is the gap at which CG stops, so two faithful runs may legitimately
+differ by nearly that much. Reruns of the same grid/highs cells on the reference
+host itself land 5e-5 apart — half the budget — so gating at 1e-4 would fail
+correct builds on any host with a different core count. The per-cell `rel=`
+printout stays, so drift toward the limit is still visible.
 
 Cells the sweep did not run are counted as `not run`, never as passes; a narrowed
 sweep must not read as having reproduced the whole matrix. A cell present in the
@@ -286,7 +306,7 @@ sweep CSV, the consolidated CSV and the console verdict cannot drift apart:
 
 | value | meaning |
 |---|---|
-| `ok` | clean exit (rc 0). **Reports the exit, not the answer** — `transportation/Sydney/path/cuopt` exited 0 with `objective=-inf` after 0 iterations: a barrier failure the backend swallowed (gh #33, since fixed; that row predates the fix and is still in the CSV). A clean exit that printed nothing parseable also lands here, with a blank `objective` and `(no result row)` on `source`. Read it with `optimal`/`rel_err`, never alone. |
+| `ok` | clean exit (rc 0). **Reports the exit, not the answer** — `transportation/Sydney/path/cuopt` exited 0 with `objective=-inf` after 0 iterations: the cuOpt barrier failed, the first LP solve returned non-optimal and CG broke out, so `-inf` is the "no objective established" sentinel, not a computed value. A backend can also swallow such a failure and report a plausible *wrong optimum* instead (gh #33, fixed in the required fork) — that one shows `optimal=1`. A clean exit that printed nothing parseable also lands here, with a blank `objective` and `(no result row)` on `source`. Read it with `optimal`/`rel_err`, never alone. |
 | `error rc=N` | non-zero exit that is not a signal death. |
 | `killed SIGKILL` | died on a signal, name resolved. `killed sig=N` when Python's enum has no name for the number. |
 | *(empty)* | no `# returncode:` header — a pre-header or hand-assembled log. **Unknown, not ok**; never infer success from a missing header. |

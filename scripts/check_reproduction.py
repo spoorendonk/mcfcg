@@ -25,8 +25,11 @@ narrowed sweep must not read as having reproduced the whole matrix.
     python3 scripts/check_reproduction.py fresh.csv --tol 1e-5
     python3 scripts/check_reproduction.py fresh.csv --reference results/other.csv
 
-Exit status is 0 when every compared cell matches, 1 otherwise, so this can gate
-a CI job or a release checklist.
+Exit status is 0 when every gated cell matches and every fresh cell was found in
+the reference, 1 otherwise, so this can gate a CI job or a release checklist. A
+cell present in the fresh run but absent from the reference fails too: it was
+never compared, and the two tables disagreeing about what the matrix *is* is a
+real discrepancy even when no objective differs.
 """
 
 import argparse
@@ -74,9 +77,12 @@ def certified(row):
     A run stopped by the time limit reports the best bound it had reached when
     the clock ran out, so its objective is a function of how fast the host is --
     the very property this script excludes time and iteration counts for. Twenty
-    committed cells are not certified (19 hit the time limit, one was killed),
-    and two of the timed-out ones vary by more than 1% between backends on the
-    reference machine alone.
+    committed cells are not certified: 14 hit the time limit, 5 aborted after an
+    LP solve returned a non-optimal status, and one was killed. For 17 of the 19
+    that produced a number, that number is the Lagrangian LOWER bound -- CG
+    reports best_lb when no slack-free incumbent was ever recorded -- so it is
+    not an objective at all. Two of the timed-out ones vary by more than 1%
+    between backends on the reference machine alone.
     """
     return (row.get("optimal") or "").strip() == "1"
 
@@ -103,9 +109,10 @@ def compare(fresh_row, ref_row, tol):
         # fail the gate.
         return "ok", None, "no objective on either side"
     if want is None:
-        # This host solved something the reference host could not -- the one
-        # such cell was OOM-killed at 95.8 GB. Doing better is not a failure to
-        # reproduce, but it is a divergence worth showing.
+        # This host produced something the reference host did not -- the one such
+        # cell was SIGKILLed at a 95.8 GB peak (OOM the strong reading, but a
+        # signal names itself, never its cause). Not a failure to reproduce, but
+        # a divergence worth showing.
         return "advisory", None, "reference has no objective; this run produced one"
     if got is None:
         return "diff", None, "no objective in the fresh run"
@@ -118,9 +125,10 @@ def compare(fresh_row, ref_row, tol):
         return "ok", None, f"both {got}"
     if not math.isfinite(want):
         # A non-finite reference objective is not a reproducible target. The one
-        # such cell (-inf) is the swallowed cuOpt barrier failure of gh #33,
-        # which the fork this release requires has since fixed -- so a correct
-        # rerun is EXPECTED to disagree here. Same reasoning as a missing
+        # such cell is -inf: cuOpt's barrier failed, CG's first LP solve came back
+        # non-optimal and the loop broke after 0 iterations, so that -inf is the
+        # "no objective established" sentinel rather than a computed value. A
+        # correct rerun is EXPECTED to disagree. Same reasoning as a missing
         # reference objective above: not a reproduction failure.
         return "advisory", None, "reference objective is non-finite; not a reproducible target"
     if not math.isfinite(got):
@@ -128,7 +136,13 @@ def compare(fresh_row, ref_row, tol):
         # failure, and the only remaining non-finite case.
         return "diff", None, "non-finite objective in the fresh run"
     rel = abs(got - want) / max(1.0, abs(want))
-    if not (certified(fresh_row) and certified(ref_row)):
+    if certified(ref_row) and not certified(fresh_row):
+        # The reference proved optimality here and this run did not. Expected on
+        # slower hardware -- the time limit is wall-clock -- so it cannot gate.
+        # But it is also what a backend regression looks like, so name it rather
+        # than filing it under the same word as "this host did better".
+        return "advisory", rel, f"rel={rel:.3e}, LOST CERTIFICATION (reference certified this cell)"
+    if not certified(fresh_row) or not certified(ref_row):
         return "advisory", rel, f"rel={rel:.3e}, not certified optimal"
     return ("ok" if rel < tol else "diff"), rel, f"rel={rel:.3e}"
 
@@ -145,9 +159,14 @@ def main():
     ap.add_argument("--reference", default=DEFAULT_REFERENCE,
                     help="committed results CSV to compare against "
                          "(default: results/cg_benchmark.csv)")
-    ap.add_argument("--tol", type=float, default=1e-4,
-                    help="relative objective tolerance (default 1e-4, the "
-                         "barrier convergence tolerance every backend is pinned to)")
+    ap.add_argument("--tol", type=float, default=1e-3,
+                    help="relative objective tolerance (default 1e-3, matching "
+                         "benchmark_solvers.py's pass criterion). Deliberately "
+                         "NOT 1e-4: that is RELATIVE_FEAS_TOL, the gap at which "
+                         "CG stops, so two faithful runs may legitimately differ "
+                         "by nearly that much -- reruns of the same grid cells on "
+                         "the reference host itself land 5e-5 apart. Gating at the "
+                         "stopping tolerance would fail correct builds.")
     ap.add_argument("--quiet", action="store_true",
                     help="print only mismatches and the verdict")
     args = ap.parse_args()
@@ -203,6 +222,12 @@ def main():
     if advisory:
         print(f"advisory  : {len(advisory)} not gated (time-limited, or solved here "
               f"but not in the reference)")
+        lost = [a for a in advisory if "LOST CERTIFICATION" in a[3]]
+        if lost:
+            # Called out separately: expected on slower hardware, but also the
+            # shape of a backend regression, and it must not hide inside the
+            # advisory total.
+            print(f"  of which: {len(lost)} lost certification the reference had")
     print(f"mismatched: {len(mismatched)}")
     if unmatched:
         print(f"unknown   : {len(unmatched)} (in the fresh run, absent from the reference)")
