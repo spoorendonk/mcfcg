@@ -1,0 +1,47 @@
+cff-version: 1.2.0
+title: "mcfcg: column generation for minimum-cost multicommodity flow"
+message: >-
+  If you use this software, please cite both the software (this file) and the
+  accompanying paper (listed under preferred-citation).
+type: software
+authors:
+  - family-names: Spoorendonk
+    given-names: Simon
+    email: simon@flowty.ai
+    affiliation: Flowty ApS
+  - family-names: Petersen
+    given-names: Bjørn
+    email: bjorn@flowty.ai
+    affiliation: Flowty ApS
+repository-code: "https://github.com/spoorendonk/mcfcg"
+license: MIT
+version: 1.0.0
+abstract: >-
+  A column generation solver for the minimum-cost multicommodity flow problem,
+  supporting both path-based and tree-based Dantzig-Wolfe decompositions over a
+  shared CG loop. Includes four LP backends (HiGHS, MOSEK, COPT, NVIDIA cuOpt)
+  behind one interface, the instance-preparation and benchmark scripts, and the
+  result tables reported in the accompanying paper. PROVENANCE.txt pins the
+  exact solver versions and host behind those tables.
+keywords:
+  - multicommodity flow
+  - column generation
+  - Dantzig-Wolfe decomposition
+  - linear programming
+  - operations research
+preferred-citation:
+  type: article
+  title: "Tree-based formulation for the multi-commodity flow problem"
+  authors:
+    - family-names: Spoorendonk
+      given-names: Simon
+      affiliation: Flowty ApS
+    - family-names: Petersen
+      given-names: Bjørn
+      affiliation: Flowty ApS
+  year: 2025
+  url: "https://arxiv.org/abs/2509.24656"
+  identifiers:
+    - type: other
+      value: "arXiv:2509.24656"
+      description: arXiv preprint

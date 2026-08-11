@@ -1,0 +1,37 @@
+{
+  "title": "mcfcg: column generation for minimum-cost multicommodity flow",
+  "description": "<p>A column generation solver for the minimum-cost multicommodity flow problem, supporting both path-based and tree-based Dantzig-Wolfe decompositions over a shared CG loop.</p><p>This archive is the computational artifact accompanying &ldquo;Tree-based formulation for the multi-commodity flow problem&rdquo; (<a href=\"https://arxiv.org/abs/2509.24656\">arXiv:2509.24656</a>). It contains the solver, four LP backends (HiGHS, MOSEK, COPT, NVIDIA cuOpt) behind one interface, every benchmark instance of all four families, the instance-preparation and benchmark scripts, and the committed result tables under <code>results/</code>.</p><p><code>PROVENANCE.txt</code> pins the exact solver versions, host and patches behind those tables, and states which results are reproducible with open-source components only. The default build is HiGHS-only and needs no licence and no GPU.</p>",
+  "upload_type": "software",
+  "license": "MIT",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Spoorendonk, Simon",
+      "affiliation": "Flowty ApS"
+    },
+    {
+      "name": "Petersen, Bjørn",
+      "affiliation": "Flowty ApS"
+    }
+  ],
+  "keywords": [
+    "multicommodity flow",
+    "column generation",
+    "Dantzig-Wolfe decomposition",
+    "linear programming",
+    "operations research",
+    "reproducibility"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "arXiv:2509.24656",
+      "relation": "isSupplementTo",
+      "scheme": "arxiv"
+    },
+    {
+      "identifier": "https://github.com/spoorendonk/mcfcg",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}

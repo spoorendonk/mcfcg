@@ -1,0 +1,278 @@
+PROVENANCE — mcfcg computational artifact
+=========================================
+
+This file pins the exact software stack that produced the committed result
+tables under `results/`, so the accompanying manuscript can cite a fixed
+artifact rather than a moving branch.
+
+Companion paper
+    S. Spoorendonk and B. Petersen,
+    "Tree-based formulation for the multi-commodity flow problem",
+    arXiv:2509.24656 — https://arxiv.org/abs/2509.24656
+
+Code
+    Repository   https://github.com/spoorendonk/mcfcg  (public, MIT)
+    Release tag  v1.0.0
+    Commit       `git rev-parse v1.0.0` at the tag that carries this file.
+
+Result tables pinned by this record
+    results/cg_benchmark.csv        440 cells = 44 instances (grid 15,
+                                    planar 10, intermodal 10, transportation 9)
+                                    x {path,tree} x 5 backend configurations
+    results/cg_iterations.csv       per-iteration CG trace for those runs
+    results/mps_compact_baseline.csv  direct (non-CG) barrier solves of the
+                                    compact source LP
+
+The two experiments do NOT share a solver stack. The CG benchmark links each
+vendor's library into `mcfcg_cli`; the compact baseline drives each vendor's
+own command-line barrier on an exported MPS file, because `mcfcg_cli` does not
+read external MPS. Sections 1 and 2 pin them separately — the cuOpt build
+differs between them.
+
+
+1. Column generation benchmark — LP backend versions
+----------------------------------------------------
+
+Pins results/cg_benchmark.csv and results/cg_iterations.csv. Versions are of
+the library loaded into `mcfcg_cli` (see section 6 on how each was established):
+
+    highs      HiGHS 1.15.1, githash 04024d701f      + local patch, see 4.1
+    mosek      MOSEK 11.0.30 (build date 2025-11-17)
+    copt-cpu   COPT (Cardinal Optimizer) 8.0.1, build date 2025-10-22
+    copt-gpu   COPT 8.0.1 — same library, GPUMode 2 instead of 0
+    cuopt      NVIDIA cuOpt 26.8.0, from the delta-API fork in 4.2
+
+`copt-cpu` and `copt-gpu` are one library exercised two ways (COPT_INTPARAM_
+GPUMODE 0 vs 2), not two products; the CPU config is the GPU-off control.
+
+Barrier regime: presolve off, crossover off, convergence tolerance 1e-4
+(BARRIER_TOL), pinned identically across all five so timings compare like for
+like. Crossover is re-enabled for a single solve when the CG loop stalls and
+requests a certified (vertex) solution; see README.md.
+
+Every run since v1.0.0 self-reports its backend version in the one-line
+`[lp-config]` banner written to stderr at solver construction and captured in
+the run log, e.g.
+
+    [lp-config] backend=mosek version=11.0.30 method=barrier exec=CPU \
+        presolve=off crossover=off tol=0.0001 threads=auto(32)
+
+The version is queried from the loaded library, never from the vendor header's
+compile-time macros, so a stale LD_LIBRARY_PATH pointing at a second install
+shows up in the log instead of being silently misreported.
+
+
+2. Compact-model baseline — solver binaries
+-------------------------------------------
+
+Pins results/mps_compact_baseline.csv: 165 cells = 33 instances x 5, run
+2026-08-03 to 2026-08-05 by scripts/benchmark_mps.py against `data/mps/*.mps.gz`
+(regenerable via scripts/write_mps.sh; gitignored, ~5.6 GB).
+
+Unlike the CG logs, these logs capture each vendor's own startup banner, so
+four of the five versions here are recorded rather than inferred:
+
+    highs      HiGHS 1.15.1 githash 04024d701f   [recorded in all 33 logs]
+    mosek      MOSEK 11.0.30 (build 2025-11-17)  [recorded in all 33 logs]
+    copt-cpu   COPT 8.0.1, build Oct 22 2025     [recorded in all 33 logs]
+    copt-gpu   COPT 8.0.1                        [recorded in all 33 logs]
+    cuopt      NVIDIA cuOpt 26.2.0 — STOCK, not the fork
+
+Two differences from section 1 matter:
+
+    cuOpt is the stock upstream CLI (/usr/local/cuopt/bin/cuopt_cli, 26.2.0),
+    not the delta-API fork. A one-shot monolithic solve never mutates the
+    model, so the fork's incremental API is irrelevant here and stock cuOpt is
+    the right — and more reproducible — choice. Its CLI prints no version
+    banner; the binary path is recorded in each log's `# cmd:` header and that
+    binary reports 26.2.0.
+
+    HiGHS is a standalone CLI built from THIS repository's patched HiGHS source
+    tree (build/_deps/highs-src) with -DBUILD_SHARED_EXTRAS_LIB=OFF, so it
+    carries the same HiPO patch as the linked library in section 1. The stock
+    1.15.1 CLI cannot run HiPO at all: it aborts with "features unavailable:
+    amd, blas, metis, rcm" because upstream defaults the numerical extras to a
+    shared library that the standalone does not link. Reproducing this row with
+    a distro HiGHS will not work.
+
+Barrier regime, deliberately NOT identical to section 1: crossover off and tol
+1e-4 as before, but presolve is left at each solver's default. A direct
+monolithic solve genuinely benefits from presolve, and forcing it off would
+handicap the baseline the CG results are compared against.
+
+
+3. Benchmark host
+-----------------
+
+    CPU        AMD Ryzen 9 3950X, 16 cores / 32 threads
+    Memory     125 GiB
+    GPU        NVIDIA GeForce RTX 5070 Ti, 16 GiB, driver 580.95.05
+    CUDA       13.0
+    OS         Ubuntu 24.04.4 LTS
+    Compiler   gcc (Ubuntu 14.2.0-4ubuntu2~24.04.1) 14.2.0
+    CMake      4.4.2
+    Build      -DMCFCG_NATIVE_ARCH=ON (default; -march=native)
+
+The 16 GiB GPU is the binding constraint behind one documented result: the
+cuOpt barrier cannot fit the path-formulation master of high-commodity
+instances (see the cuOpt notes in CLAUDE.md). That is a property of this host,
+not of cuOpt.
+
+Wall-clock and peak-RSS figures are host-specific by nature and will not
+reproduce numerically elsewhere; objective values will (section 7).
+
+
+4. Deviations from stock solvers
+--------------------------------
+
+Two configurations are NOT stock upstream builds: HiGHS in both experiments,
+and cuOpt in the CG benchmark only (the compact baseline uses stock cuOpt — see
+section 2). Both deviations change results relative to an unpatched install, so
+they are part of the version pin, and neither is visible in the version string
+the library reports.
+
+4.1 HiGHS — local patch, required for correctness
+    cmake/patches/highs-hipo-refine-status.patch, applied to the FetchContent'd
+    HiGHS source by CMakeLists.txt (idempotent; no manual step).
+
+    Stock HiPO discards a near-optimal solution as an "internal error" when its
+    IPX refinement step fails on the ill-conditioned path masters this solver
+    produces (the slack penalty gives the objective a wide dynamic range).
+    Without the patch those instances fail rather than solve. Reported upstream;
+    tracked in this repo as issue #36.
+
+    `highsGithash()` reports the upstream tag's hash and cannot tell you whether
+    the patch is applied — the build applies it unconditionally, so any binary
+    built from this tag has it.
+
+4.2 cuOpt — delta-API fork, required for the default build
+    Repository https://github.com/spoorendonk/cuopt  (public)
+    Branch     delta-api
+    Commit     8ea7a033addb5594532f8f60b33b99067459c853  (2026-06-22)
+    Base       branched from NVIDIA/cuopt at ffbe51a3921fa36362ca0ebec9eece597a87b9d9
+
+    Cite the commit, not the branch name: `delta-api` is a moving ref.
+
+    Stock cuOpt has no incremental (delta) C API, so the restricted master must
+    be rebuilt from scratch on every CG iteration — supported via
+    -DMCFCG_CUOPT_DELTA_API=OFF, but a serious performance degradation that
+    does not represent the reported cuOpt timings. The fork adds
+    `cuopt_c_delta.h`. The reported cuOpt numbers are the fork's.
+
+    The fork also carries a barrier fix for a ranged-constraint miscomputation
+    with a large finite bound (this repo's issue #32).
+
+    `cuOptGetVersion` reports the upstream RAPIDS version (26.8.0) and cannot
+    distinguish the fork.
+
+
+5. Repository state during the benchmark runs
+---------------------------------------------
+
+The 440 cells were not all produced by a single sweep at a single commit; they
+were collected between 2026-06-22 and 2026-08-07 and consolidated from six log
+directories by `scripts/consolidate_cg_logs.py` (which re-parses logs and never
+re-solves). The `source` column of results/cg_benchmark.csv names the log file
+behind every row.
+
+Across that window the solver code moved by exactly two commits:
+
+    4e67897 (2026-06-23)  human summary line only — prints UB=inf gap=inf when
+                          no feasible incumbent was found. The CSV result row
+                          is untouched, so it cannot affect any tabulated value.
+    3fc9ce9 (2026-08-07)  fix(cg): report best_ub, not the terminating
+                          iteration's LP objective, on the pricing-exhaustion
+                          optimal exit (issue #40). This DOES change reported
+                          objectives. The five affected cells were re-run at
+                          the fixed code; their logs are the
+                          bench_runs/issue40_rerun/logs entries named in the
+                          `source` column.
+
+Everything else in the window is benchmark tooling, scripts and documentation.
+The last commit to touch solver behaviour before the sweep began is 4a4f4b6
+(2026-06-22), so v1.0.0 reproduces every committed cell.
+
+All 88 HiGHS cells come from a single sweep on 2026-08-05
+(bench_runs/highs_hipo_ablation/), whose own PROVENANCE.txt records
+commit=d24f47d and HiGHS 1.15.1 githash 04024d701f.
+
+Note on what the archive does and does not contain: `bench_runs/` is gitignored
+— bulky (583 CG run logs plus 225 baseline-solve logs) and fully
+regenerable — so the log files named in the `source` column are NOT part of this
+release or of the Zenodo archive. The consolidated CSVs under `results/` are the
+committed record; `source` documents which run produced each row, not a file you
+can open from the archive. Reproducing a row means re-running it, not re-parsing
+a log.
+
+
+6. How the version pin was established — and its one soft spot
+--------------------------------------------------------------
+
+The soft spot is confined to the CG benchmark (section 1). The compact baseline
+(section 2) is on firm ground: each vendor CLI prints its own version banner and
+benchmark_mps.py captures the whole solver log, so those versions are read back
+from the runs themselves.
+
+For the CG benchmark the `version=` field of the `[lp-config]` banner was added
+*after* the runs, as part of preparing this artifact. It is therefore absent
+from the committed CG run logs, and the versions in section 1 were established
+as follows:
+
+    HiGHS    Recorded. Pinned by GIT_TAG v1.15.1 in CMakeLists.txt and written
+             down at run time in bench_runs/highs_hipo_ablation/PROVENANCE.txt.
+             All 88 HiGHS cells come from that one sweep.
+    cuOpt    Recorded. The fork commit is fixed and the built library predates
+             the sweep.
+    MOSEK    Inferred (see below).
+    COPT     Inferred (see below).
+
+For MOSEK and COPT the argument is that no upgrade could have occurred inside
+the benchmark window: the installed libraries' timestamps
+(libmosek64.so.11.0 dated 2025-11-17, libcopt.so dated 2025-10-22) both predate
+the first run on 2026-06-22, and the versions in section 1 were read back from
+those same libraries afterwards. Independent corroboration: the compact baseline
+ran on this same host on 2026-08-03..05, inside the CG window, and its logs
+record exactly MOSEK 11.0.30 and COPT 8.0.1.
+
+State it plainly all the same: for the CG runs that is a strong reading of file
+timestamps, not a measurement taken at run time. It is the same standard of
+evidence the `exit_status` column applies to a SIGKILL (see scripts/README.md) —
+a well-supported inference, labelled as one. From v1.0.0 onward the banner
+records the version at run time and no inference is needed.
+
+
+7. Reproducibility and licensing
+--------------------------------
+
+Objective values are the reproducible quantity. Timings and peak memory depend
+on this host, this GPU and these library versions.
+
+Reproducible with open-source components only:
+    highs      HiGHS is fetched and built by CMake. No licence, no GPU, no
+               external install. This is the repo's default build.
+    cuopt      cuOpt and the fork are open source (Apache-2.0), but an NVIDIA
+               GPU is required. The fork must be built first; see README.md.
+
+Requires a commercial licence (free academic licences are available from both
+vendors):
+    mosek      MOSEK 11
+    copt-cpu   COPT 8
+    copt-gpu   COPT 8, plus an NVIDIA GPU
+
+All instance data for all four families is committed to the repository, so no
+download step is needed to reproduce any row of the CG benchmark. The compact
+baseline additionally needs the MPS exports, which are NOT committed (~5.6 GB of
+derived data); regenerate them with scripts/write_mps.sh before running
+scripts/benchmark_mps.py.
+
+Smoke test — reproduces the grid/highs rows of results/cg_benchmark.csv on the
+default HiGHS-only build, in roughly 15 minutes:
+
+    cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY
+    cmake --build build -j$(nproc)
+    python3 scripts/benchmark_solvers.py --families grid --solvers highs \
+        --formulations path,tree --out /tmp/grid_highs.csv
+    python3 scripts/check_reproduction.py /tmp/grid_highs.csv
+
+See "Verifying a reproduction" in scripts/README.md for the full procedure and
+for what the checker does and does not compare.

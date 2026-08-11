@@ -99,11 +99,11 @@ UB \leftarrow +\infty,\ LB \leftarrow -\infty \\
 \quad C \leftarrow \textsf{pricer.price}(\pi, \mu,\ C_{\max}) \\
 \quad \textbf{if } C = \emptyset \textbf{ then } C \leftarrow \textsf{pricer.price}(\pi, \mu,\ C_{\max},\ \text{final}=\top) \qquad \triangleright \text{full sweep ignoring postpone flags} \\
 \quad \textbf{if } C \ne \emptyset \textbf{ then } \textsf{pricer.clearPostponed}() \qquad \triangleright \text{flags only; keep cursor for partial pricing} \\
-\quad \textbf{if } \textsf{pricer.pricedAll} \wedge s = 0 \wedge A^{\text{new}} = \emptyset \textbf{ then} \\
-\qquad LB \leftarrow \max\!\bigl(LB,\ \pi^\top b + \mu^\top u + \textstyle\sum_k d_k \min(\bar c^*_k, 0) - \varepsilon\bigr) \\
+\quad \textbf{if } \textsf{pricer.pricedAll} \textbf{ then} \qquad \triangleright \text{no gate on } s \text{ or } A^{\text{new}}\text{: valid for any } \mu \le 0 \\
+\qquad LB \leftarrow \max\!\bigl(LB,\ \textstyle\sum_{a} u_a \mu_a + \sum_k d_k\, \mathit{sp}_k(c - \mu) - \varepsilon\bigr) \\
 \quad \textbf{if } UB < \infty \wedge 0 \le UB - LB < \tau \cdot \max(1, \lvert UB \rvert) \textbf{ then return optimal}(UB) \\
 \quad \textbf{if } C = \emptyset \textbf{ then} \\
-\qquad \textbf{if } s = 0 \wedge A^{\text{new}} = \emptyset \textbf{ then return optimal}(\mathit{obj}) \\
+\qquad \textbf{if } s = 0 \wedge A^{\text{new}} = \emptyset \textbf{ then return optimal}(UB) \\
 \qquad \textbf{if } s > 0 \textbf{ then } \textsf{master.bumpSlacks}() \\
 \qquad \textsf{pricer.resetPostponed}();\ \textbf{continue} \qquad \triangleright \text{fresh sweep next iter} \\
 \quad \text{trim } C \text{ to the } C_{\max} \text{ columns with lowest reduced cost} \\
@@ -113,13 +113,28 @@ UB \leftarrow +\infty,\ LB \leftarrow -\infty \\
 \end{array}
 $$
 
-The LB uses the LP *dual* objective $\pi^\top b + \mu^\top u$ (exact at
-LP optimum even when a barrier backend's primal and dual differ at
-solver tolerance); $\bar c^*_k$ is the pricer's best reduced cost for
-entity $k$, and $\varepsilon$ a rounding-error budget for the
-scale-integer Dijkstra. The structural-row RHS $b$ is $d_k$ for the
-path formulation and $1$ for the tree formulation, so the $d_k$
-weighting collapses under tree.
+The LB is the Lagrangian relaxation of the capacity (coupling)
+constraints: $\mathit{sp}_k(c-\mu)$ is the reduced-cost shortest path
+the pricer already computed for entity $k$, accumulated *without*
+subtracting the structural dual $\pi_k$, and $\varepsilon$ is a
+rounding-error budget for the scale-integer Dijkstra. By weak duality
+$L(\mu) \le \mathrm{OPT}$ for **any** $\mu \le 0$, so the bound holds
+whatever the master's feasibility state — it is gated only on the
+pricer having visited every source, not on $s = 0$ or
+$A^{\text{new}} = \emptyset$, and so it advances from the first
+iteration rather than waiting for the last slack to leave the basis.
+The $\pi$-free form matters numerically as well as logically: a basic
+slack pins $\pi_k$ at the bumped slack cost, and reconstructing the
+bound from $\pi^\top b$ would then lose it to catastrophic
+cancellation. Demands weight the path sum for the path formulation;
+under tree the convexity RHS is $1$ and the $d_k$ weighting collapses.
+
+Both optimal exits return $UB$ — the incumbent — never the terminating
+iteration's LP objective. The pricing-exhaustion exit fires under
+exactly the guard that updates $UB$, so $UB \le \mathit{obj}$ holds
+there by construction; returning $\mathit{obj}$ instead used to hand
+back a value worse than one CG already had whenever a barrier landed
+above an earlier solve on a strictly larger column set.
 
 `pricer.price` is the source-level dispatcher; each per-source call
 (`PriceOneSource`) is the A* inner body. Postponement is a
@@ -169,7 +184,7 @@ $$
 |--------|---------|
 | `It` | iteration number |
 | `UB` | running min LP obj over MCF-feasible iters |
-| `LB` | best Lagrangian/Farley bound so far |
+| `LB` | best $\pi$-free capacity-relaxation Lagrangian bound so far |
 | `LP_obj` | current LP objective (carries slack penalty while `#slk > 0`) |
 | `#col`, `#row` | columns / rows in the LP right now |
 | `#slk` | basic slack columns; non-zero means `LP_obj` is a penalty, not a bound |
@@ -328,7 +343,73 @@ Four instance families from public sources:
 | Transportation | TNTP (gz) | [TransportationNetworks](https://github.com/bstabler/TransportationNetworks) |
 | Intermodal | CommaLab (gz) | [Lienkamp & Schiffer 2024](https://doi.org/10.1016/j.ejor.2023.09.019) |
 
-Download scripts are in `scripts/`.
+Every instance of all four families is committed to this repository, so
+reproducing any published row needs no download step. Three of the four can
+also be re-derived from their original sources rather than taken on trust:
+`scripts/download_commalab.sh` refetches grid and planar, and
+`scripts/prepare_intermodal.sh` regenerates the intermodal instances end to
+end. The transportation instances have no fetch script — the committed
+`.tntp.gz` files came from the linked TransportationNetworks repository
+unmodified, and the CLI applies the per-city demand coefficient at read time
+(the coefficients are tabulated in `scripts/README.md`).
+
+## Reproducing the published results
+
+The committed result tables are in `results/`; `PROVENANCE.txt` pins the exact
+solver versions, host and patches behind them, and `scripts/README.md` documents
+how each table is produced and consolidated.
+
+**The standard build is HiGHS-only.** That is deliberate — it needs no licence,
+no GPU and no external install — but it means the default `cmake -B build`
+produces a binary that can reproduce one of the five benchmark configurations.
+The other four are opt-in at configure time, and a `--solver` label whose backend
+was not compiled in reports as an `error` row rather than silently disappearing.
+To build the full matrix:
+
+```bash
+export MOSEK_HOME=/opt/mosek/<ver>/tools/platform/linux64x86 \
+       COPT_HOME=/opt/copt80
+cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY \
+      -DMCFCG_USE_MOSEK=ON -DMCFCG_USE_COPT=ON -DMCFCG_USE_CUOPT=ON \
+      -DCUOPT_INCLUDE_DIR=/path/to/cuopt/cpp/include \
+      -DCUOPT_LIBRARY=/path/to/cuopt/cpp/build/libcuopt.so
+cmake --build build -j$(nproc)
+```
+
+### What each configuration costs you
+
+| Config | Licence | Hardware | Reproducible with open-source components? |
+|--------|---------|----------|-------------------------------------------|
+| `highs`    | none (MIT) | CPU | **Yes.** Fetched and built by CMake; nothing to install. |
+| `cuopt`    | none (Apache-2.0) | **NVIDIA GPU** | **Yes**, given a GPU. Build the [`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt) fork at commit `8ea7a033a` first — the delta C API the default build needs is not in stock cuOpt. |
+| `mosek`    | commercial (academic licences available) | CPU | No. |
+| `copt-cpu` | commercial (academic licences available) | CPU | No. |
+| `copt-gpu` | commercial (academic licences available) | NVIDIA GPU | No. |
+
+Cite the cuOpt fork by commit, not by branch: `delta-api` is a moving ref.
+
+### Verifying a reproduction
+
+Objective values are the reproducible quantity. Wall-clock time and peak RSS are
+properties of the host, the GPU and the solver build, and will not match on
+different hardware. `scripts/check_reproduction.py` compares objectives only, and
+reports cells your sweep did not run as *not run* rather than folding them into a
+pass:
+
+```bash
+python3 scripts/benchmark_solvers.py --families grid --solvers highs \
+    --formulations path,tree --out /tmp/grid_highs.csv
+python3 scripts/check_reproduction.py /tmp/grid_highs.csv
+```
+
+That is the smoke test: 30 cells, roughly 15 minutes, no licence and no GPU. It
+exits non-zero on any mismatch.
+
+## Citing
+
+Cite the paper for the result and the archived release for the code —
+`CITATION.cff` carries both. Cite a tag, never `main`: the result tables move
+with the code.
 
 ## License
 

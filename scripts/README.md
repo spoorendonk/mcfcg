@@ -122,6 +122,53 @@ ldd build/mcfcg_cli | grep -E 'cuopt|copt|mosek'   # all three should resolve
 requires `-DMCFCG_CUOPT_DELTA_API=OFF`. See the top-level CLAUDE.md for the
 delta-API rationale.)
 
+Each backend reports the version of the library it actually loaded in the
+`[lp-config]` banner, captured in every run log and in the sweep CSV's `config`
+column:
+
+```
+[lp-config] backend=mosek version=11.0.30 method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+```
+
+That version is read back from the loaded library, not from the vendor header's
+compile-time macros, so a stale `LD_LIBRARY_PATH` pointing at a second install
+shows up in the log instead of being silently misreported as the version you
+built against. Two things it cannot tell you, both recorded in `PROVENANCE.txt`
+instead: whether the HiGHS HiPO patch is applied (`highsGithash()` reports the
+upstream tag either way), and whether cuOpt is the delta-API fork
+(`cuOptGetVersion` reports the upstream RAPIDS version).
+
+### Verifying a reproduction
+
+`check_reproduction.py` joins a fresh sweep CSV against the committed
+`results/cg_benchmark.csv` on `(family, instance, formulation, solver)` and
+compares objectives:
+
+```
+python3 scripts/benchmark_solvers.py --families grid --solvers highs \
+    --formulations path,tree --out /tmp/grid_highs.csv
+python3 scripts/check_reproduction.py /tmp/grid_highs.csv
+```
+
+It exits non-zero on any mismatch, so it can gate a release checklist.
+
+**Objectives are the only thing worth comparing.** Time and peak RSS are
+properties of the host, the GPU and the solver build — a faithful reproduction
+on other hardware differs on both, and comparing them would report failures that
+are not failures. Iteration and column counts are excluded for a subtler reason:
+they are deterministic for a fixed backend version but shift when it changes,
+because they depend on where the barrier's interior point lands.
+
+The default tolerance is `1e-4`, matching `BARRIER_TOL` — every backend is pinned
+to that convergence tolerance, so it is the tightest agreement the comparison can
+honestly demand.
+
+Cells the sweep did not run are counted as `not run`, never as passes; a narrowed
+sweep must not read as having reproduced the whole matrix. A cell present in the
+fresh run but absent from the reference is reported as `unknown` and fails the
+check — it means the two tables disagree about what the matrix *is*, which is a
+real discrepancy even though no objective differs.
+
 ### What to commit
 
 Everything a benchmark writes lands under the gitignored `bench_runs/` tree
