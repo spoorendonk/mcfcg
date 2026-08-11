@@ -179,7 +179,8 @@ target worth hitting:
   fixed that, so a correct rerun is *expected* to disagree.
 
 A self-compare of the committed CSV therefore reports 420 matched, 18 advisory
-and 2 agreed-by-absence — 440 cells, nothing gated that should not be.
+and 2 agreed by absence or non-finite value — 440 cells, nothing gated that
+should not be.
 
 The default tolerance is `1e-4`, matching `BARRIER_TOL` — every backend is pinned
 to that convergence tolerance, so it is the tightest agreement the comparison can

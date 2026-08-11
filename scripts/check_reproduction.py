@@ -109,14 +109,14 @@ def compare(fresh_row, ref_row, tol):
         return "advisory", None, "reference has no objective; this run produced one"
     if got is None:
         return "diff", None, "no objective in the fresh run"
-    # NaN never equals itself, and inf - inf is NaN, so both cases have to be
-    # settled before the relative-error formula runs.
-    if got == want:
-        # Covers matching infinities. Agreeing on a non-finite value is the same
-        # kind of agreement as agreeing on absence: both runs failed the same way.
-        if not math.isfinite(want):
-            return "ok", None, f"both {got}"
-    elif not math.isfinite(want):
+    # NaN never equals itself, and inf - inf is NaN, so every non-finite case
+    # has to be settled before the relative-error formula runs. NaN needs the
+    # explicit test precisely because `==` cannot express agreement on it.
+    if (math.isnan(got) and math.isnan(want)) or (got == want and not math.isfinite(want)):
+        # Both runs failed the same way: the same kind of agreement as both
+        # producing no objective at all.
+        return "ok", None, f"both {got}"
+    if not math.isfinite(want):
         # A non-finite reference objective is not a reproducible target. The one
         # such cell (-inf) is the swallowed cuOpt barrier failure of gh #33,
         # which the fork this release requires has since fixed -- so a correct
