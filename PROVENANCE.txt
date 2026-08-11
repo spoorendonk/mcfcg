@@ -197,7 +197,7 @@ All 88 HiGHS cells come from a single sweep on 2026-08-05
 commit=d24f47d and HiGHS 1.15.1 githash 04024d701f.
 
 Note on what the archive does and does not contain: `bench_runs/` is gitignored
-— bulky (583 CG run logs plus 225 baseline-solve logs) and fully
+— bulky (583 CG run logs plus 165 baseline-solve logs) and fully
 regenerable — so the log files named in the `source` column are NOT part of this
 release or of the Zenodo archive. The consolidated CSVs under `results/` are the
 committed record; `source` documents which run produced each row, not a file you
@@ -244,8 +244,13 @@ records the version at run time and no inference is needed.
 7. Reproducibility and licensing
 --------------------------------
 
-Objective values are the reproducible quantity. Timings and peak memory depend
-on this host, this GPU and these library versions.
+Objective values are the reproducible quantity, with one qualification: only
+the cells that PROVED optimality. A run stopped by the 7200 s limit reports the
+bound it had reached when the clock ran out, so its objective measures host
+speed as much as formulation — 20 of the 440 cells are in that state, and two
+of them differ by more than 1% between backends on this machine alone. The
+reproduction checker compares those cells but never fails on them. Timings and
+peak memory depend throughout on this host, this GPU and these library versions.
 
 Reproducible with open-source components only:
     highs      HiGHS is fetched and built by CMake. No licence, no GPU, no

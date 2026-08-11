@@ -390,11 +390,13 @@ Cite the cuOpt fork by commit, not by branch: `delta-api` is a moving ref.
 
 ### Verifying a reproduction
 
-Objective values are the reproducible quantity. Wall-clock time and peak RSS are
-properties of the host, the GPU and the solver build, and will not match on
-different hardware. `scripts/check_reproduction.py` compares objectives only, and
-reports cells your sweep did not run as *not run* rather than folding them into a
-pass:
+Objective values are the reproducible quantity — specifically, the objectives of
+runs that proved optimality. Wall-clock time and peak RSS are properties of the
+host, the GPU and the solver build and will not match on different hardware, and
+a run stopped by the time limit reports a bound that likewise depends on how fast
+the machine is. `scripts/check_reproduction.py` compares objectives only, gates
+on the certified ones, and reports cells your sweep did not run as *not run*
+rather than folding them into a pass:
 
 ```bash
 python3 scripts/benchmark_solvers.py --families grid --solvers highs \

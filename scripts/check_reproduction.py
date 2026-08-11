@@ -11,6 +11,13 @@ not failures. Iteration and column counts are likewise excluded: they are
 deterministic for a given backend version but shift with it, since they depend
 on the barrier's interior point.
 
+For the same reason the gate covers only cells that PROVED optimality on both
+sides. A run stopped by the time limit reports whatever bound it had reached
+when the clock ran out, which is a measure of host speed as much as of the
+formulation; those cells are compared and printed but never fail the gate. So
+is the case where this host solved a cell the reference host could not -- doing
+better is not a failure to reproduce.
+
 Cells the sweep did not run are reported as skipped, never as passes: a
 narrowed sweep must not read as having reproduced the whole matrix.
 
@@ -61,33 +68,61 @@ def objective(row):
         return None
 
 
-def compare(got, want, tol):
-    """Compare one cell's objectives. Returns (ok, relative_error, note).
+def certified(row):
+    """True when the run proved optimality.
+
+    A run stopped by the time limit reports the best bound it had reached when
+    the clock ran out, so its objective is a function of how fast the host is --
+    the very property this script excludes time and iteration counts for. Twenty
+    committed cells are in that state, and two of them vary by more than 1% even
+    between backends on the reference machine.
+    """
+    return (row.get("optimal") or "").strip() == "1"
+
+
+def compare(fresh_row, ref_row, tol):
+    """Compare one cell. Returns (verdict, relative_error, note).
+
+    verdict is one of:
+      "ok"       -- reproduced; counts toward the gate passing
+      "advisory" -- differs, but for a reason that is not a reproduction
+                    failure; reported, never gating
+      "diff"     -- failed to reproduce
 
     `relative_error` is None whenever the cells agree by something other than a
     numeric comparison, which the caller reports separately -- an agreement on
     "this run produced nothing" is a much weaker statement than an agreement on
     a value, and the summary should not blur the two.
     """
+    got, want = objective(fresh_row), objective(ref_row)
     if got is None and want is None:
         # Reproducing a reference failure IS a reproduction. The committed
         # matrix contains a cell that was SIGKILLed with no objective; scoring
         # it as a mismatch would make a byte-perfect rerun of the full matrix
         # fail the gate.
-        return True, None, "no objective on either side"
-    if got is None or want is None:
-        return False, None, ("no objective in the fresh run" if got is None
-                             else "reference cell has no objective")
+        return "ok", None, "no objective on either side"
+    if want is None:
+        # This host solved something the reference host could not -- the one
+        # such cell was OOM-killed at 95.8 GB. Doing better is not a failure to
+        # reproduce, but it is a divergence worth showing.
+        return "advisory", None, "reference has no objective; this run produced one"
+    if got is None:
+        return "diff", None, "no objective in the fresh run"
     # NaN never equals itself, and inf - inf is NaN, so both cases have to be
     # settled before the relative-error formula runs. The reference does contain
     # an infinite objective (a swallowed barrier failure recorded as -inf).
     if math.isnan(got) or math.isnan(want):
-        return got is want, None, "NaN objective"
+        if math.isnan(got) and math.isnan(want):
+            return "ok", None, "NaN on both sides"
+        return "diff", None, "NaN on one side"
     if math.isinf(got) or math.isinf(want):
-        return got == want, None, ("both " + repr(got) if got == want
-                                   else "one side is infinite")
+        if got == want:
+            return "ok", None, f"both {got}"
+        return "diff", None, "one side is infinite"
     rel = abs(got - want) / max(1.0, abs(want))
-    return rel < tol, rel, f"rel={rel:.3e}"
+    if not (certified(fresh_row) and certified(ref_row)):
+        return "advisory", rel, f"rel={rel:.3e}, not certified optimal"
+    return ("ok" if rel < tol else "diff"), rel, f"rel={rel:.3e}"
 
 
 def describe(key):
@@ -112,16 +147,18 @@ def main():
     fresh = load(args.fresh)
     reference = load(args.reference)
 
-    matched, non_numeric, mismatched, unmatched = [], [], [], []
+    matched, non_numeric, advisory, mismatched, unmatched = [], [], [], [], []
     for key, row in sorted(fresh.items()):
         ref_row = reference.get(key)
         if ref_row is None:
             unmatched.append(key)
             continue
+        verdict, rel, why = compare(row, ref_row, args.tol)
         got, want = objective(row), objective(ref_row)
-        ok, rel, why = compare(got, want, args.tol)
-        if not ok:
+        if verdict == "diff":
             mismatched.append((key, got, want, why))
+        elif verdict == "advisory":
+            advisory.append((key, got, want, why))
         elif rel is None:
             non_numeric.append((key, why))
         else:
@@ -134,6 +171,10 @@ def main():
             print(f"  ok    {describe(key)}  rel={rel:.2e}")
         for key, why in non_numeric:
             print(f"  ok*   {describe(key)}  {why}")
+    for key, got, want, why in advisory:
+        got_s = "-" if got is None else f"{got:.6g}"
+        want_s = "-" if want is None else f"{want:.6g}"
+        print(f"  note  {describe(key)}  got={got_s} want={want_s}  ({why})")
     for key, got, want, why in mismatched:
         got_s = "-" if got is None else f"{got:.6g}"
         want_s = "-" if want is None else f"{want:.6g}"
@@ -151,6 +192,9 @@ def main():
         # but a much weaker one than agreeing on a value. Counted apart so the
         # summary cannot overstate what was checked.
         print(f"agreed    : {len(non_numeric)} by absence or non-finite value, not by objective")
+    if advisory:
+        print(f"advisory  : {len(advisory)} not gated (time-limited, or solved here "
+              f"but not in the reference)")
     print(f"mismatched: {len(mismatched)}")
     if unmatched:
         print(f"unknown   : {len(unmatched)} (in the fresh run, absent from the reference)")
