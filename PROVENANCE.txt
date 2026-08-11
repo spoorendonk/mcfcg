@@ -12,8 +12,8 @@ Companion paper
 
 Code
     Repository   https://github.com/spoorendonk/mcfcg  (public, MIT)
-    Release tag  v1.0.0
-    Commit       `git rev-parse v1.0.0` at the tag that carries this file.
+    Release tag  v0.1.0
+    Commit       `git rev-parse v0.1.0` at the tag that carries this file.
 
 Result tables pinned by this record
     results/cg_benchmark.csv        440 cells = 44 instances (grid 15,
@@ -50,7 +50,7 @@ Barrier regime: presolve off, crossover off, convergence tolerance 1e-4
 like. Crossover is re-enabled for a single solve when the CG loop stalls and
 requests a certified (vertex) solution; see README.md.
 
-Every run since v1.0.0 self-reports its backend version in the one-line
+Every run since v0.1.0 self-reports its backend version in the one-line
 `[lp-config]` banner written to stderr at solver construction and captured in
 the run log, e.g.
 
@@ -206,7 +206,7 @@ Austin/Sydney reference optima; the consolidator recomputes ref/rel_err/pass
 from the current optimal.csv, so that correction is already reflected in every
 row. Everything else in the window is benchmark tooling, scripts and
 documentation. The last commit to touch solver behaviour before the sweep began
-is 4a4f4b6 (2026-06-22), so v1.0.0 reproduces every committed cell.
+is 4a4f4b6 (2026-06-22), so v0.1.0 reproduces every committed cell.
 
 All 88 HiGHS cells come from a single sweep on 2026-08-05
 (bench_runs/highs_hipo_ablation/), whose own PROVENANCE.txt records
@@ -253,7 +253,7 @@ record exactly MOSEK 11.0.30 and COPT 8.0.1.
 State it plainly all the same: for the CG runs that is a strong reading of file
 timestamps, not a measurement taken at run time. It is the same standard of
 evidence the `exit_status` column applies to a SIGKILL (see scripts/README.md) —
-a well-supported inference, labelled as one. From v1.0.0 onward the banner
+a well-supported inference, labelled as one. From v0.1.0 onward the banner
 records the version at run time and no inference is needed.
 
 
