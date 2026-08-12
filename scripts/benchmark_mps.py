@@ -675,7 +675,9 @@ def kill_preserving_mem(proc, mem_path):
     try:
         pgid = os.getpgid(proc.pid)
     except OSError:
-        return proc.communicate()  # already gone; nothing to signal
+        # Nothing left to signal -- but still drain with a bound rather than
+        # bare: the wrapper being gone does not prove every pipe holder is.
+        return _drain(proc)
     if mem_path and is_time_wrapper(proc.pid, mem_path):
         for pid in pgid_members(pgid, exclude=(proc.pid,)):
             try:
