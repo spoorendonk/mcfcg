@@ -24,6 +24,21 @@ Run a single test by name:
 ./build/mcfcg_integration_tests --gtest_filter='GridCorrectness.Grid1'
 ```
 
+`scripts/` has a stdlib-unittest tier in `test/python/`, run by ctest as
+`Python.Scripts`. It exists because those scripts carry the provenance of every
+committed result, and their failure mode is a silently blank or mislabelled
+column rather than a crash. Add a test as `test/python/<module>_test.py` — the
+`_test.py` suffix matches the C++ convention and is why ctest passes
+`-p "*_test.py"`; unittest's default `test*.py` would discover nothing. Files
+must sit directly in `test/python/` (discovery does not recurse, and the
+directory is not a package, so `python3 -m unittest test.python.foo` will not
+work).
+
+```
+python3 -m unittest discover -s test/python -p '*_test.py'                # all
+python3 -m unittest discover -s test/python -p '*_test.py' -k preserves   # one
+```
+
 ## What This Is
 
 Column generation solver for minimum-cost multicommodity flow (MCF). Supports path-based and tree-based Dantzig-Wolfe decompositions.

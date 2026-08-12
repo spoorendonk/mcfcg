@@ -221,6 +221,12 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME Python.Scripts
         COMMAND ${Python3_EXECUTABLE} -m unittest discover
                 -s ${CMAKE_SOURCE_DIR}/test/python -p "*_test.py")
+    # Python >= 3.12 exits 5 on an empty discovery, but 3.11 and older exit 0 --
+    # a renamed file or a broken -p would pass having run nothing. Assert the
+    # count too. TIMEOUT bounds the teardown paths, which wait on flush windows.
+    set_tests_properties(Python.Scripts PROPERTIES
+        TIMEOUT 300
+        FAIL_REGULAR_EXPRESSION "Ran 0 tests")
 else()
     message(STATUS "Python3 interpreter not found — skipping Python.Scripts tests")
 endif()

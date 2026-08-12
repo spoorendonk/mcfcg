@@ -366,25 +366,6 @@ def copt_solve_failed(text):
     return any(m in text for m in COPT_FAIL_MARKERS)
 
 
-def scope_runtime_max_sec(time_limit):
-    """RuntimeMaxSec for a solve's systemd scope.
-
-    Must land STRICTLY AFTER the harness has finished its own teardown, because
-    systemd's expiry SIGTERMs every process in the scope -- the GNU `time`
-    wrapper included -- which destroys the measurement kill_preserving_mem
-    exists to save. The harness needs `time_limit + HARNESS_TIMEOUT_GRACE_SEC`
-    to declare the hang and up to KILL_FLUSH_SEC more to let the wrapper flush;
-    SCOPE_TEARDOWN_MARGIN_SEC is the headroom on top. At the historical value of
-    exactly the subprocess timeout the two teardowns fired in the same instant
-    and systemd won often enough to matter.
-
-    Defined here rather than inline in main() so the ordering invariant is
-    testable without reimplementing it (test/python/timeout_memory_test.py).
-    """
-    return int(time_limit + HARNESS_TIMEOUT_GRACE_SEC
-               + KILL_FLUSH_SEC + SCOPE_TEARDOWN_MARGIN_SEC)
-
-
 def copt_read_failed(text):
     """True when COPT never loaded the model, as opposed to failing to solve it.
 
@@ -596,6 +577,25 @@ def parse_output(solver, text):
     return obj, tlast, status
 
 
+def scope_runtime_max_sec(time_limit):
+    """RuntimeMaxSec for a solve's systemd scope.
+
+    Must land STRICTLY AFTER the harness has finished its own teardown, because
+    systemd's expiry SIGTERMs every process in the scope -- the GNU `time`
+    wrapper included -- which destroys the measurement kill_preserving_mem
+    exists to save. The harness needs `time_limit + HARNESS_TIMEOUT_GRACE_SEC`
+    to declare the hang and up to KILL_FLUSH_SEC more to let the wrapper flush;
+    SCOPE_TEARDOWN_MARGIN_SEC is the headroom on top. At the historical value of
+    exactly the subprocess timeout the two teardowns fired in the same instant
+    and systemd won often enough to matter.
+
+    Defined here rather than inline in main() so the ordering invariant is
+    testable without reimplementing it (test/python/timeout_memory_test.py).
+    """
+    return int(time_limit + HARNESS_TIMEOUT_GRACE_SEC
+               + KILL_FLUSH_SEC + SCOPE_TEARDOWN_MARGIN_SEC)
+
+
 def pgid_members(pgid, exclude=()):
     """Live pids whose process group is `pgid`, minus `exclude`. [] without /proc.
 
@@ -684,32 +684,31 @@ def kill_preserving_mem(proc, mem_path):
                 os.kill(pid, signal.SIGKILL)
             except OSError:
                 pass
-        # Snapshot stragglers BEFORE reaping. Once communicate() reaps the
-        # wrapper, its pid -- which IS the pgid -- is free for the kernel to
-        # recycle, so scanning for "members of pgid" afterwards can match an
-        # unrelated new process group and SIGKILL somebody else's processes.
-        # Only pids observed while the group was still ours are eligible. The
-        # cost is that anything forked during the flush window is not swept up
-        # here; its parent has already been SIGKILLed, and under the memory
-        # guard the scope's RuntimeMaxSec is the backstop.
-        stragglers = pgid_members(pgid, exclude=(proc.pid,))
+        # Second sweep, BEFORE we block: anything forked between the scan above
+        # and its kills would otherwise hold the inherited stdout/stderr pipe and
+        # keep communicate() waiting out the whole flush window. Doing it here
+        # also means we never signal after reaping -- once communicate() reaps
+        # the wrapper, its pid (which IS the pgid) is free, and so is every pid
+        # we might have snapshotted, so a late SIGKILL could land on an unrelated
+        # process. Anything forked during the flush window is not swept up: its
+        # parent is already dead, and under the memory guard the scope's
+        # RuntimeMaxSec is the backstop.
+        for pid in pgid_members(pgid, exclude=(proc.pid,)):
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
         try:
-            out = proc.communicate(timeout=KILL_FLUSH_SEC)
+            return proc.communicate(timeout=KILL_FLUSH_SEC)
         except subprocess.TimeoutExpired:
             pass  # wrapper wedged too -- fall through and take the group down
-        else:
-            # Re-verify membership before signalling. `stragglers` was observed up
-            # to KILL_FLUSH_SEC ago and the wrapper has since been reaped, so a pid
-            # on that list may already belong to someone else. Requiring it to be
-            # BOTH on the snapshot and still in the group closes that window: a
-            # recycled pid would have to land back in a group whose leader pid was
-            # itself recycled.
-            for pid in set(stragglers) & set(pgid_members(pgid, exclude=(proc.pid,))):
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except OSError:
-                    pass
-            return out
+    if mem_path:
+        # The blunt kill takes the `time` wrapper with it. Say so: an unmeasured
+        # cell that announces itself can be re-run, which is the whole difference
+        # between this and the silent hole that motivated the function.
+        sys.stderr.write(
+            f"[mps] WARNING: falling back to killpg (pid {proc.pid} is not the "
+            "`time` wrapper, or it wedged); peak RSS for this cell may be LOST\n")
     try:
         os.killpg(pgid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError):
@@ -804,9 +803,10 @@ def run_one(solver, mps, key, time_limit, logdir, probe_iters=0):
             rc = proc.returncode
             outcome = "ok" if rc == 0 else "error"
         except subprocess.TimeoutExpired:
-            # Stamp the wall BEFORE the kill: teardown can take up to
-            # KILL_FLUSH_SEC, and folding that into time_wall would report a
-            # timed-out solve as having run minutes longer than it did.
+            # Stamp the wall BEFORE the kill: teardown can take several times
+            # KILL_FLUSH_SEC in the worst case (the flush window, then both of
+            # _drain's bounded waits), and folding that into time_wall would
+            # report a timed-out solve as having run minutes longer than it did.
             wall_override = time.monotonic() - t0
             # Kills the solver but spares the `time` wrapper, so a hang still
             # yields peak RSS -- see kill_preserving_mem.

@@ -117,7 +117,7 @@ def inject_header(text, kb, source):
     produces live — and the sibling injector (inject_probe_memory.py) shares both.
     """
     return bs.rewrite_header_block(
-        text, ("# peak_rss_kb:", "# peak_rss_source:"),
+        text, bs.PEAK_RSS_HEADER_PREFIXES,
         bs.format_peak_rss_headers(kb, source))
 
 

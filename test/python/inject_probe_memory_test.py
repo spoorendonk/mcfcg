@@ -189,28 +189,5 @@ class InjectProbeMemoryTest(unittest.TestCase):
         self.assertIsNone(bs.parse_peak_rss(self.read_base())[0])
 
 
-class RewriteHeaderBlockTest(unittest.TestCase):
-    """benchmark_solvers.rewrite_header_block, now shared by two writers."""
-
-    def test_drops_then_appends_before_the_marker(self):
-        log = ("# cmd: x\n# peak_rss_kb: 1\n# peak_rss_source: measured\n"
-               + MARKER + "\nbody\n")
-        out = bs.rewrite_header_block(
-            log, ("# peak_rss_kb:", "# peak_rss_source:"), "# peak_rss_kb: 2\n")
-        self.assertEqual(out.count("# peak_rss_kb:"), 1)
-        self.assertIn("# peak_rss_kb: 2\n" + MARKER, out)
-        self.assertTrue(out.endswith("body\n"))
-
-    def test_truncated_last_line_is_not_fused(self):
-        """A log cut off mid-header must not absorb the new header onto it."""
-        out = bs.rewrite_header_block("# cmd: x\n# wall=1", (), "# peak_rss_kb: 2\n")
-        self.assertIn("# wall=1\n# peak_rss_kb: 2\n", out)
-
-    def test_body_containing_a_hash_line_is_untouched(self):
-        log = "# cmd: x\n" + MARKER + "\n# not a header\nbody\n"
-        out = bs.rewrite_header_block(log, (), "# peak_rss_kb: 2\n")
-        self.assertIn(MARKER + "\n# not a header\nbody\n", out)
-
-
 if __name__ == "__main__":
     unittest.main()

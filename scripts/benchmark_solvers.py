@@ -154,21 +154,30 @@ def parse_csv_row(stdout):
     return None
 
 
-# The saved log is a real serialization format: consolidate_cg_logs.py and
-# backfill_log_memory.py both parse it back, and backfill_log_memory.py rewrites
-# its header block in place. Keep the delimiters and the peak-RSS header builder
-# here, in the module that writes them, so no reader or rewriter can drift.
+# The saved log is a real serialization format: consolidate_cg_logs.py,
+# consolidate_mps_logs.py and backfill_log_memory.py parse it back, and
+# backfill_log_memory.py + inject_probe_memory.py rewrite its header block
+# (write-then-rename, never in place -- see rewrite_header_block). Keep the
+# delimiters and the peak-RSS header builder here, in the module that writes
+# them, so no reader or rewriter can drift.
 HEADER_END_PREFIX = "# ==="
 STDERR_MARKER = "# === STDERR (CG iteration log + preamble) ==="
 STDOUT_MARKER = "# === STDOUT (result CSV) ==="
 
 
+# The prefixes of the pair format_peak_rss_headers writes. Exported because every
+# rewriter has to DROP them before appending a fresh pair, and a rewriter whose
+# spelling drifted from the writer's would silently leave two peaks in one log --
+# with parse_peak_rss returning whichever it met first.
+PEAK_RSS_HEADER_PREFIXES = ("# peak_rss_kb:", "# peak_rss_source:")
+
+
 def format_peak_rss_headers(peak_rss_kb, peak_rss_source):
     """Render the two peak-RSS header lines, or "" when there is nothing to record.
 
-    Sole producer of this format — write_log uses it for live runs and
-    backfill_log_memory.inject_header for relocated ones, so a backfilled log is
-    byte-identical to a freshly written one.
+    Sole producer of this format — write_log and benchmark_mps.run_one use it for
+    live runs, backfill_log_memory.inject_header and inject_probe_memory for
+    relocated ones, so a relocated log is byte-identical to a freshly written one.
     """
     if peak_rss_kb is None:
         return ""
@@ -221,8 +230,8 @@ def write_log(log_path, cmd, stdout, stderr, returncode, outcome, peak_rss_kb=No
     child's own output: everything else can be re-derived by re-parsing the log,
     but memory is measured externally (GNU time) and would otherwise survive only
     in the sweep's result CSV. `peak_rss_source` records how the number got here
-    ("measured" for a live run; "backfilled:<file>" when relocated from an older
-    sweep CSV by backfill_log_memory.py) so provenance stays legible in the log.
+    ("measured" for a live run; a relocation tag otherwise — see parse_peak_rss
+    for the full vocabulary) so provenance stays legible in the log.
 
     `cmd` is the command as ACTUALLY spawned, GNU `time` wrapper included (the
     sibling benchmark_mps.py logs its wrapped argv the same way). That matters for
@@ -285,9 +294,12 @@ def iter_header_lines(log_text):
 def parse_peak_rss(log_text):
     """Read write_log's peak-RSS header back: (kb, source) or (None, "").
 
-    `kb` is an int; `source` is "measured" or "backfilled:<file>". Logs written
-    before the header existed yield (None, "") — memory for those lives only in
-    the originating sweep CSV, which is what backfill_log_memory.py relocates.
+    `kb` is an int; `source` says where the number came from: "measured" (a live
+    GNU-time reading), "backfilled[-untimed]:<csv>" (the SAME execution's number,
+    relocated from an old sweep CSV by backfill_log_memory.py) or
+    "probeN[-partial]:<log>" (a DIFFERENT, iteration-capped execution, relocated
+    by inject_probe_memory.py — a lower bound, never this run's peak). Logs
+    written before the header existed yield (None, "").
     """
     kb, source = None, ""
     for line in iter_header_lines(log_text):

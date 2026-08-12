@@ -6,8 +6,9 @@ Context. The compact-model baseline (`benchmark_mps.py`, bench_runs/mps/logs,
 RSS and results/mps_compact_baseline.csv has a memory figure for only the five
 grid1 cells that were re-run afterwards. The iteration-capped probe sweep
 (`benchmark_mps.py --probe-iters 3`, bench_runs/mps_probe/logs, 2026-08-11..12)
-measured all 165 cells cheaply. Re-running the full sweep purely for memory costs
-days, so the probe's numbers are relocated into the baseline logs instead, and
+measured 164 of its 165 cells cheaply (the exception is named below). Re-running
+the full sweep purely for memory costs days, so the probe's numbers are
+relocated into the baseline logs instead, and
 results/mps_compact_baseline.csv gains a memory column from them.
 
     THE INJECTED NUMBER IS NOT THE FULL SOLVE'S PEAK.
@@ -32,9 +33,9 @@ backfill_log_memory.py checks that the CSV row and the log agree on time and
 outcome because it relocates the SAME execution's measurement and a disagreement
 would prove a mixup. This script relocates a DIFFERENT execution's measurement on
 purpose: a 3-iteration probe and a full solve are expected to disagree on both
-(Austin x copt-cpu: 1106 s probe vs 7267 s full; and 24 probe cells stopped at
-the iteration cap or died at the cgroup cap while their full solves ran to a
-timeout or an optimum). The only pairing evidence that exists — and the only one
+(Austin x copt-cpu: 1106 s probe vs 7267 s full; and 27 probe cells stopped
+short of the iteration cap while their full solves ran to a timeout or an
+optimum). The only pairing evidence that exists — and the only one
 that means anything — is the (instance, solver) identity of the two log files.
 
 What is refused rather than guessed:
@@ -47,8 +48,9 @@ ChicagoRegional x highs, killed by the harness timeout before GNU `time` could
 write (a hole since closed: benchmark_mps.kill_preserving_mem).
 
 Idempotent: a baseline log that already carries a peak is left alone unless
---force, and a live `measured` header (the five grid1 cells) is never overwritten
-even then.
+--force, and a FULL-SOLVE reading -- `measured` (the five grid1 cells and the ten
+Sydney / BUS-2632-0 ones) or `backfilled:` (the same execution's number relocated
+from a sweep CSV) -- is never overwritten even then. Only an injection refreshes.
 
 Usage:
   python3 scripts/inject_probe_memory.py --dry-run     # report, write nothing
@@ -67,10 +69,12 @@ import consolidate_mps_logs as cm  # same (instance, solver) key as the CSV rows
 BASELINE_LOGS = "bench_runs/mps/logs"
 PROBE_LOGS = "bench_runs/mps_probe/logs"
 
-# Every header line the injected block owns. Listed once: rewrite_header_block
-# drops exactly these and re-adds whichever of them the probe supplies, so a
-# re-injection can never leave a stale VRAM figure beside a fresh RSS one.
-MEM_HEADERS = ("# peak_rss_kb:", "# peak_rss_source:", "# peak_vram_mib:")
+# Every header line the injected block owns. rewrite_header_block drops exactly
+# these and re-adds whichever of them the probe supplies, so a re-injection can
+# never leave a stale VRAM figure beside a fresh RSS one — that would pair two
+# different runs inside one header. The RSS pair comes from its writer so the
+# spellings cannot drift; the VRAM line is benchmark_mps's own.
+MEM_HEADERS = bs.PEAK_RSS_HEADER_PREFIXES + ("# peak_vram_mib:",)
 
 
 def source_tag(probe_iters, reached_cap, probe_path):

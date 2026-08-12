@@ -57,6 +57,11 @@ time.sleep(3600)        # hang: only the harness timeout can end this run
 # is 30 minutes, so the test patches it; 6 s is ample for a ~1 s allocation.
 TIME_LIMIT = 1.0
 GRACE = 5.0
+# Production gives the wrapper 120 s to flush; a synthetic hog flushes in
+# milliseconds. Keeping the real value here would buy nothing on the passing path
+# and cost minutes per BROKEN run -- every way this fix can regress ends in this
+# window expiring, so a red suite would take ~6 minutes to say so.
+FLUSH = 15.0
 
 
 class HarnessTimeoutMemoryTest(unittest.TestCase):
@@ -89,6 +94,7 @@ class HarnessTimeoutMemoryTest(unittest.TestCase):
         cfg = dict(bm.CONFIGS, mosek=(lambda m, t, d, g, p: (argv, {}), "cpu"))
         with mock.patch.object(bm, "CONFIGS", cfg), \
                 mock.patch.object(bm, "HARNESS_TIMEOUT_GRACE_SEC", GRACE), \
+                mock.patch.object(bm, "KILL_FLUSH_SEC", FLUSH), \
                 mock.patch.object(bm, "MEM_GUARD", list(guard)):
             res = bm.run_one("mosek", "unused.mps", "synthetic", TIME_LIMIT, self.tmp)
         self.assertEqual(res["outcome"], "timeout",
@@ -170,6 +176,14 @@ class ScopeRuntimeMaxTest(unittest.TestCase):
 
 class PgidMembersTest(unittest.TestCase):
     """The /proc scan kill_preserving_mem targets its SIGKILLs with."""
+
+    @classmethod
+    def setUpClass(cls):
+        # Same guard as HarnessTimeoutMemoryTest: without /proc, pgid_members
+        # returns [] BY DESIGN, which is a skip, not a failure. (On macOS the
+        # split bites: BSD /usr/bin/time exists, /proc does not.)
+        if not os.path.exists("/proc/self/stat"):
+            raise unittest.SkipTest("no /proc: process-group scan unavailable")
 
     def test_finds_a_known_child_and_excludes(self):
         proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"],
