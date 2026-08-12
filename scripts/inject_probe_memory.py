@@ -73,15 +73,21 @@ PROBE_LOGS = "bench_runs/mps_probe/logs"
 MEM_HEADERS = ("# peak_rss_kb:", "# peak_rss_source:", "# peak_vram_mib:")
 
 
-def source_tag(probe_iters, probe_outcome, probe_path):
+def source_tag(probe_iters, reached_cap, probe_path):
     """Provenance string for an injected peak.
 
-    `probeN:` — the probe ran its N iterations and stopped at the cap.
-    `probeN-partial:` — it died first (OOM at the cgroup cap, or a backend
-    error), so the peak is where it died: still a lower bound on the full solve,
-    but a weaker one, and the reader is told which kind they have.
+    `probeN:` — the probe reached its iteration cap, so the model-setup regime
+    (read, presolve, symbolic + numeric factorization, N iterations) completed.
+    `probeN-partial:` — it stopped short: OOM at the cgroup cap, a backend
+    error, or a clean rc=0 exit that never reached the barrier at all (cuOpt
+    does this on a VRAM exhaustion it fails to report — see the #33 note in
+    CLAUDE.md). The peak is wherever it stopped: still a lower bound on the full
+    solve, but a weaker one, and the reader is told which kind they have.
+
+    Keyed on the backend's own iteration-limit marker rather than on the exit
+    status, because a clean exit is NOT evidence the barrier ran.
     """
-    suffix = "" if probe_outcome == "ok" else "-partial"
+    suffix = "" if reached_cap else "-partial"
     return f"probe{probe_iters}{suffix}:{probe_path}"
 
 
@@ -109,8 +115,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true",
                     help="report what would change; write nothing.")
     ap.add_argument("--force", action="store_true",
-                    help="overwrite an existing INJECTED peak. A `measured` "
-                         "header — the full solve's own reading — is never "
+                    help="overwrite an existing INJECTED peak. A full-solve "
+                         "reading (`measured` or `backfilled:`) is never "
                          "overwritten: it is the stronger number.")
     args = ap.parse_args()
 
@@ -151,15 +157,30 @@ def main():
             continue
         have_kb, have_source = bs.parse_peak_rss(base_text)
         if have_kb is not None:
-            if have_source == "measured":
+            # Only a peak this script injected is refreshable. `measured` and
+            # `backfilled:` are both the FULL SOLVE's own reading -- backfill
+            # relocates the same execution's number under a time/outcome gate --
+            # so a probe lower bound must never replace either, --force or not.
+            # Memory cannot be re-derived: a downgrade here is unrecoverable.
+            if not have_source.startswith("probe"):
                 skipped_measured += 1
-            elif not args.force:
+                continue
+            if not args.force:
                 skipped_have += 1
-            if have_source == "measured" or not args.force:
                 continue
 
+        # `outcome == "ok"` is not enough: cuOpt exits 0 after a swallowed VRAM
+        # failure having never run an iteration (ChicagoRegional, Philadelphia,
+        # planar2500 -- their bodies stop after presolve, at ~15.07 of 15.47 GiB).
+        # Require the backend's own iteration-limit marker, which is what "the
+        # probe reached its cap" actually means. Unknown solvers cannot be
+        # judged, so they take the weaker tag rather than a KeyError.
         _, _, probe_outcome = bm.parse_run_header(probe_text)
-        tag = source_tag(iters, probe_outcome, probe_path)
+        reached_cap = (probe_outcome == "ok"
+                       and cell[1] in cm.KNOWN_SOLVERS
+                       and bm.probe_hit_iter_limit(
+                           cell[1], probe_text.split(cm.MARKER, 1)[-1]))
+        tag = source_tag(iters, reached_cap, probe_path)
         # format_extra_headers(..., 0): the VRAM line travels with the RSS one,
         # but the `# probe_iters:` line MUST NOT -- consolidate_mps_logs.py keys
         # the solve/probe populations off it, so a baseline log carrying it would
@@ -213,9 +234,12 @@ def main():
         # The two sweeps are meant to cover the same matrix. Them disagreeing
         # about what the matrix IS is a finding, not a detail to print quietly.
         return 1
-    if not applied and not (skipped_measured or skipped_have):
-        print("\n*** nothing injected and nothing was already present -- "
-              "wrong log trees? ***")
+    # "Did the operator point at the wrong directories?" is a question about
+    # PAIRING, not about how many writes happened. A tree whose every probe cell
+    # legitimately has no peak pairs fine and must not be reported as misaimed.
+    if not (applied or skipped_measured or skipped_have or no_peak):
+        print("\n*** no cell paired between the two trees -- "
+              "wrong log directories? ***")
         return 1
     return 0
 

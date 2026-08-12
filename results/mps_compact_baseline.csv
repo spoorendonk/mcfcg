@@ -26,7 +26,7 @@ Birmingham,highs,cpu,error,,215645.118,,,2011.767,1867.57,35.841,,probe3-partial
 Birmingham,mosek,cpu,error,,215645.118,,,357.078,,104.793,,probe3-partial:bench_runs/mps_probe/logs/Birmingham__mosek.log,,rc=-9 outcome=error
 ChicagoRegional,copt-cpu,cpu,error,,5513077.944,,,3712.536,,104.798,,probe3-partial:bench_runs/mps_probe/logs/ChicagoRegional__copt-cpu.log,,rc=-9 outcome=error
 ChicagoRegional,copt-gpu,gpu,error,,5513077.944,,,2101.720,,76.874,0.244,probe3-partial:bench_runs/mps_probe/logs/ChicagoRegional__copt-gpu.log,,rc=-9 outcome=error
-ChicagoRegional,cuopt,gpu,ok,,5513077.944,,,272.407,,31.036,14.721,probe3:bench_runs/mps_probe/logs/ChicagoRegional__cuopt.log,,rc=0 outcome=ok
+ChicagoRegional,cuopt,gpu,ok,,5513077.944,,,272.407,,31.036,14.721,probe3-partial:bench_runs/mps_probe/logs/ChicagoRegional__cuopt.log,,rc=0 outcome=ok
 ChicagoRegional,highs,cpu,error,0.0,5513077.944,,,8303.720,7978.14,,,,Model status        : Time limit reached,rc=1 outcome=error
 ChicagoRegional,mosek,cpu,error,,5513077.944,,,607.608,,104.793,,probe3-partial:bench_runs/mps_probe/logs/ChicagoRegional__mosek.log,,rc=-9 outcome=error
 ChicagoSketch,copt-cpu,cpu,ok,6705856.16,6705856.428,3.996506680898212e-08,True,40.165,38.15,1.677,,probe3:bench_runs/mps_probe/logs/ChicagoSketch__copt-cpu.log,Status: Optimal,
@@ -36,7 +36,7 @@ ChicagoSketch,highs,cpu,ok,6705856.1655,6705856.428,3.914488820401935e-08,True,8
 ChicagoSketch,mosek,cpu,ok,6705856.4277,6705856.428,4.4737077944320966e-11,True,39.264,34.98,2.214,,probe3:bench_runs/mps_probe/logs/ChicagoSketch__mosek.log,Interior-point solution summary,
 Philadelphia,copt-cpu,cpu,error,,25577590.145,,,2013.765,,104.799,,probe3-partial:bench_runs/mps_probe/logs/Philadelphia__copt-cpu.log,,rc=-9 outcome=error
 Philadelphia,copt-gpu,gpu,error,,25577590.145,,,877.796,,78.397,0.244,probe3-partial:bench_runs/mps_probe/logs/Philadelphia__copt-gpu.log,,rc=-9 outcome=error
-Philadelphia,cuopt,gpu,ok,,25577590.145,,,239.999,,27.134,14.721,probe3:bench_runs/mps_probe/logs/Philadelphia__cuopt.log,,rc=0 outcome=ok
+Philadelphia,cuopt,gpu,ok,,25577590.145,,,239.999,,27.134,14.721,probe3-partial:bench_runs/mps_probe/logs/Philadelphia__cuopt.log,,rc=0 outcome=ok
 Philadelphia,highs,cpu,error,,25577590.145,,,4461.499,4181.16,76.376,,probe3-partial:bench_runs/mps_probe/logs/Philadelphia__highs.log,Model status        : Not Set,rc=255 outcome=error
 Philadelphia,mosek,cpu,error,,25577590.145,,,521.310,,104.795,,probe3-partial:bench_runs/mps_probe/logs/Philadelphia__mosek.log,,rc=-9 outcome=error
 Sydney,copt-cpu,cpu,error,,4968208.895,,,934.179,,104.792,,measured,,rc=137 outcome=error
@@ -141,7 +141,7 @@ planar150,highs,cpu,ok,548087089.12,548087088.987,2.426621952695149e-10,True,64.
 planar150,mosek,cpu,ok,548087016.53,548087088.987,1.321997935603346e-07,True,5.113,4.63,0.529,,probe3:bench_runs/mps_probe/logs/planar150__mosek.log,Interior-point solution summary,
 planar2500,copt-cpu,cpu,ok,12694116800.0,12662328108.326,0.002510493441810074,False,7289.748,7247.97,54.25,,probe3:bench_runs/mps_probe/logs/planar2500__copt-cpu.log,Status: Timeout,
 planar2500,copt-gpu,gpu,error,,12662328108.326,,,442.071,,40.54,0.244,probe3-partial:bench_runs/mps_probe/logs/planar2500__copt-gpu.log,,COPT failed to solve (GPU memory issue / infeasible); rc=0 outcome=error
-planar2500,cuopt,gpu,ok,,12662328108.326,,,130.007,,16.671,14.723,probe3:bench_runs/mps_probe/logs/planar2500__cuopt.log,,rc=0 outcome=ok
+planar2500,cuopt,gpu,ok,,12662328108.326,,,130.007,,16.671,14.723,probe3-partial:bench_runs/mps_probe/logs/planar2500__cuopt.log,,rc=0 outcome=ok
 planar2500,highs,cpu,error,,12662328108.326,,,2773.022,2645.88,41.281,,probe3-partial:bench_runs/mps_probe/logs/planar2500__highs.log,Model status        : Not Set,rc=255 outcome=error
 planar2500,mosek,cpu,error,,12662328108.326,,,264.503,,104.793,,probe3-partial:bench_runs/mps_probe/logs/planar2500__mosek.log,,rc=-9 outcome=error
 planar30,copt-cpu,cpu,ok,44350624.0,44350624.0,0.0,True,0.608,0.06,0.022,,probe3:bench_runs/mps_probe/logs/planar30__copt-cpu.log,Status: Optimal,

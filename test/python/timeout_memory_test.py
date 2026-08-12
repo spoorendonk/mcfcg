@@ -125,11 +125,11 @@ class HarnessTimeoutMemoryTest(unittest.TestCase):
         RuntimeMaxSec teardown SIGTERMs the whole scope, `time` included. It must
         not be able to fire inside the flush window.
         """
-        # RuntimeMaxSec comes from the PRODUCTION formula, not a literal: it is
-        # half the fix, and a hardcoded value here would leave that half uncovered
-        # -- reverting benchmark_mps to the old `time_limit + 1800` would keep this
-        # test green while systemd raced the harness again in the real sweeps.
-        # With GRACE patched, this is seconds rather than hours.
+        # RuntimeMaxSec comes from the PRODUCTION formula so this case exercises
+        # it end to end -- but note what it does NOT prove: with GRACE patched
+        # down, the scope outlives the harness kill by minutes under EITHER the
+        # new formula or the old `time_limit + 1800`, so a revert keeps this case
+        # green. ScopeRuntimeMaxTest below is what pins the ordering invariant.
         with mock.patch.object(bm, "HARNESS_TIMEOUT_GRACE_SEC", GRACE):
             runtime_max = bm.scope_runtime_max_sec(TIME_LIMIT)
         guard = ["systemd-run", "--user", "--scope", "--quiet",

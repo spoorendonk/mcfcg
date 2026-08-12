@@ -56,10 +56,14 @@ KNOWN_SOLVERS = list(bm.CONFIGS)  # highs, mosek, cuopt, copt-cpu, copt-gpu
 
 
 # Return codes that mean "the process was killed", so the absence of any marker
-# in its output tells us nothing about how it was configured. 137 = 128+SIGKILL
-# (the cgroup OOM killer, or the harness), 9 = the bare signal number GNU `time`
-# reports for the same death, -1 = the harness's own timeout verdict.
-KILL_RCS = (137, 9, -1)
+# in its output tells us nothing about how it was configured. Two rcs describe
+# the SAME death, one per guard era: 137 = 128+SIGKILL, propagated by systemd-run
+# once `OOMPolicy=continue` lets it outlive the scope's OOM; -9 = Popen's
+# signalled-DIRECT-child convention, which is what the pre-OOMPolicy sweep
+# recorded (12 of the committed baseline logs, e.g. grid14/grid15 x highs).
+# 9 = the bare signal number some GNU `time` builds exit with. -1 = the harness's
+# own timeout verdict.
+KILL_RCS = (137, 9, -9, -1)
 
 
 def killed_before_solving(rc):

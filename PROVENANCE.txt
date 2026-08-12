@@ -73,7 +73,8 @@ shows up in the log instead of being silently misreported.
 -------------------------------------------
 
 Pins results/mps_compact_baseline.csv: 175 cells = 35 instances x 5, against
-`data/mps/*.mps.gz` (regenerable via scripts/write_mps.sh; gitignored, ~5.6 GB).
+`data/mps/*.mps.gz` (regenerable via scripts/write_mps.sh; gitignored, ~26 GB —
+BUS-2632-0 is 16.8 GB of that and Sydney 4.9 GB; the other 33 are ~5.9 GB).
 Two sweeps, both by scripts/benchmark_mps.py:
 
     33 instances x 5    2026-08-03..05   the original sweep, below
@@ -96,10 +97,10 @@ a side effect of unrelated work.
 Unlike the CG logs, these logs capture each vendor's own startup banner, so
 four of the five versions here are recorded rather than inferred:
 
-    highs      HiGHS 1.15.1 githash 04024d701f   [recorded in all 33 logs]
-    mosek      MOSEK 11.0.30 (build 2025-11-17)  [recorded in all 33 logs]
-    copt-cpu   COPT 8.0.1, build Oct 22 2025     [recorded in all 33 logs]
-    copt-gpu   COPT 8.0.1                        [recorded in all 33 logs]
+    highs      HiGHS 1.15.1 githash 04024d701f   [recorded in all 35 logs]
+    mosek      MOSEK 11.0.30 (build 2025-11-17)  [recorded in all 35 logs]
+    copt-cpu   COPT 8.0.1, build Oct 22 2025     [recorded in all 35 logs]
+    copt-gpu   COPT 8.0.1                        [recorded in all 35 logs]
     cuopt      NVIDIA cuOpt 26.2.0 — STOCK, not the fork
 
 Two differences from section 1 matter:
@@ -182,10 +183,12 @@ execution, not inspection: test/python/timeout_memory_test.py drives a synthetic
 1.5 GiB child through the real timeout path, guarded and unguarded, and asserts
 the peak survives — with a paired negative test that forces the OLD blunt kill
 and asserts the header is gone, so the suite fails if the fix is reverted. The
-RuntimeMaxSec half is covered too: the guarded case builds its scope from the
-production formula (benchmark_mps.scope_runtime_max_sec) rather than a literal,
-and a separate case asserts the ordering invariant directly, so reverting either
-half turns the suite red. Registered as the `Python.Scripts` ctest.
+RuntimeMaxSec half is pinned by a separate case asserting the ordering invariant
+directly; the guarded end-to-end case builds its scope from the production
+formula (benchmark_mps.scope_runtime_max_sec) but, with the grace period patched
+down to seconds, stays green under either formula, so it is not what covers that
+half. Reverting either half was checked by experiment, and each turns the suite
+red. Registered as the `Python.Scripts` ctest.
 
 This does NOT retroactively measure ChicagoRegional x highs, which predates the
 fix and stays blank. It means no FUTURE sweep loses a cell this way.
@@ -219,16 +222,16 @@ Per-row provenance is in the `mem_source` column, never inferred:
                              five grid1 re-runs of section 2, plus the ten
                              section 2.3 cells, which postdate the
                              instrumentation)
-    probe3:<log>        135  injected; the probe ran its three iterations and
-                             stopped at the cap, so the setup regime completed.
-                             The trailing path is the source log, the 3 is the
-                             iteration cap
-    probe3-partial:<log> 24  injected, but the probe DIED before finishing three
-                             iterations — OOM at the cgroup cap, or a backend
-                             error — so the peak is wherever it died. Still a
-                             lower bound, a weaker one. Ten of these sit at the
-                             ~105 GiB cap and are floors in the section 2.3
-                             sense: the cell needed more than the cap
+    probe3:<log>        132  injected; the probe reached its iteration cap, so
+                             the setup regime completed. The trailing path is
+                             the source log, the 3 is the iteration cap
+    probe3-partial:<log> 27  injected, but the probe stopped SHORT of three
+                             iterations — OOM at the cgroup cap, a backend
+                             error, or a clean rc=0 exit that never reached the
+                             barrier at all — so the peak is wherever it
+                             stopped. Still a lower bound, a weaker one. Ten of
+                             these sit at the ~105 GiB cap and are floors in the
+                             section 2.3 sense: the cell needed more than the cap
     (blank)               1  ChicagoRegional x highs, unmeasured in BOTH sweeps
 
 Deliberately absent: the time/outcome provenance gate that
@@ -251,8 +254,11 @@ bodies, and never overwrites a `measured` row):
 2.3 Sydney and BUS-2632-0 — the two instances nothing solves
 -------------------------------------------------------------
 
-Ten cells run 2026-08-12, same harness and barrier regime as section 2, 2 h
-solver limit, 105 GiB cgroup cap. Their MPS files postdate the original sweep.
+Ten cells run 2026-08-12, same barrier regime as section 2 and the memory guard
+of section 2.1, 2 h solver limit, 105 GiB cgroup cap. The guard is the one real
+difference from section 2, and it is load-bearing here: `OOMPolicy=continue` is
+why these ten carry `measured` peaks while section 2's own OOM deaths carry
+none. Their MPS files postdate the original sweep.
 Compact source LP dimensions, from `mcfcg_cli --stats-only`, against the largest
 instance section 2 attempted:
 
@@ -283,8 +289,9 @@ peak and says nothing about solving.
     a hypothesis because the two readings support different claims: "too big
     for this machine" versus "too big for this reader".
 
-For contrast, CG solves both. Sydney tree is 66-76 s at 9-13 GB across all five
-backends; BUS-2632-0 is under 4 s at ~0.5 GB (results/cg_benchmark.csv). The
+For contrast, CG solves both. Sydney tree is 63-76 s at 9-13 GB on four of the
+five backends and 255 s at 9.4 GB on highs; BUS-2632-0 is 1.6-3.4 s at
+0.45-0.90 GB across all five (results/cg_benchmark.csv). The
 compact LP being unsolvable at this scale is the result, not a gap in it.
 
 No cell reached the harness-timeout path — the memory cap always came first — so
@@ -488,9 +495,9 @@ vendors):
 
 All instance data for all four families is committed to the repository, so no
 download step is needed to reproduce any row of the CG benchmark. The compact
-baseline additionally needs the MPS exports, which are NOT committed (~5.6 GB of
-derived data); regenerate them with scripts/write_mps.sh before running
-scripts/benchmark_mps.py.
+baseline additionally needs the MPS exports, which are NOT committed (~26 GB of
+derived data across all 35, of which BUS-2632-0 alone is 16.8 GB); regenerate
+them with scripts/write_mps.sh before running scripts/benchmark_mps.py.
 
 Smoke test — reproduces the grid/highs rows of results/cg_benchmark.csv on the
 default HiGHS-only build, in roughly 15 minutes of solve time plus a from-scratch

@@ -355,11 +355,11 @@ def cuopt_solve_failed(text):
 # COPT bailed at 60 GB, well under the memory cap, so nothing else about the run
 # looked like a failure either. Without these markers that cell scores as `ok`
 # with no objective, i.e. a solver that read NOTHING is recorded as a clean run.
-COPT_FAIL_MARKERS = (
-    "Fail to solve",
+COPT_READ_FAIL_MARKERS = (
     "Reading failed",           # readmps gave up (size limit / malformed / OOM)
     "Must read problem first",  # optimize ran with no model loaded
 )
+COPT_FAIL_MARKERS = ("Fail to solve",) + COPT_READ_FAIL_MARKERS
 
 
 def copt_solve_failed(text):
@@ -392,7 +392,7 @@ def copt_read_failed(text):
     read" are different findings, and only the first says anything about the
     solver's ability to handle the problem.
     """
-    return "Reading failed" in text or "Must read problem first" in text
+    return any(m in text for m in COPT_READ_FAIL_MARKERS)
 
 
 # --probe-iters: how each backend reports "I stopped because you capped the
@@ -698,7 +698,13 @@ def kill_preserving_mem(proc, mem_path):
         except subprocess.TimeoutExpired:
             pass  # wrapper wedged too -- fall through and take the group down
         else:
-            for pid in stragglers:
+            # Re-verify membership before signalling. `stragglers` was observed up
+            # to KILL_FLUSH_SEC ago and the wrapper has since been reaped, so a pid
+            # on that list may already belong to someone else. Requiring it to be
+            # BOTH on the snapshot and still in the group closes that window: a
+            # recycled pid would have to land back in a group whose leader pid was
+            # itself recycled.
+            for pid in set(stragglers) & set(pgid_members(pgid, exclude=(proc.pid,))):
                 try:
                     os.kill(pid, signal.SIGKILL)
                 except OSError:

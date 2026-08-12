@@ -425,7 +425,9 @@ systemd's default policy the whole scope is torn down and the measurement of the
 most interesting runs is lost.
 
 Memory is the one metric that **cannot** be recovered by re-parsing a log, so
-cells solved before these headers existed show blank `mem_gb` and need a rerun.
+a cell solved before these headers existed has no peak of its own and needs a
+rerun — or the probe's number relocated into it (see `inject_probe_memory.py`
+below, which is what the committed table does for 159 of its 175 cells).
 `--probe-iters N` is the cheap rerun: it caps the barrier at N iterations
 (`ipm_iteration_limit` / `MSK_IPAR_INTPNT_MAX_ITERATIONS` / `BarIterLimit` /
 `--iteration-limit`) instead of solving. A barrier's peak is the symbolic +
@@ -449,3 +451,31 @@ Probe runs default to their **own** logdir/CSV, record **no objective**, and
 carry a `# probe_iters:` header; the consolidator keeps the two populations apart
 in either direction. A capped barrier's iterate is not a solution, and the point
 of the separation is that it can never be scored as one.
+
+### `inject_probe_memory.py` — and the baseline's `mem_source` column
+
+The 2026-08-03..05 baseline sweep predates the memory headers, so re-running it
+for memory alone would cost days. `inject_probe_memory.py` instead copies each
+probe cell's peak into the matching baseline log, keyed on `(instance, solver)`,
+and `consolidate_mps_logs.py` surfaces the provenance as a `mem_source` column in
+`results/mps_compact_baseline.csv`:
+
+| value | meaning |
+|---|---|
+| `measured` | the solve in that row reported its own peak (the five grid1 re-runs plus the ten Sydney / BUS-2632-0 cells). |
+| `probeN:<log>` | **injected** from the named probe log: the model-setup peak (read + presolve + N barrier iterations), a **lower bound** on this row's full-solve peak, from a different execution with a different `time_wall` and `outcome`. |
+| `probeN-partial:<log>` | injected from a probe that stopped short of its cap (cgroup OOM, backend error, or a clean exit that never reached the barrier) — a lower bound on a lower bound. |
+| *(empty)* | unmeasured in both sweeps. One cell: `ChicagoRegional x highs`. |
+
+Never quote an injected figure as the peak of the solve whose `time_wall` sits
+next to it. Unlike `backfill_log_memory.py` there is **no** time/outcome gate
+here, deliberately: the two runs are different executions and are *expected* to
+disagree (Austin x copt-cpu, 1106 s probed vs 7267 s solved). The only pairing
+evidence is `(instance, solver)` identity, which is why the tag names the source
+log. See PROVENANCE.txt section 2.2.
+
+```bash
+python3 scripts/inject_probe_memory.py --dry-run   # report only
+python3 scripts/inject_probe_memory.py
+python3 scripts/consolidate_mps_logs.py            # rebuild the results CSV
+```
