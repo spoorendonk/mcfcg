@@ -211,6 +211,20 @@ add_test(NAME CLI.UnknownFlag COMMAND mcfcg_cli dummy.txt --bogus val)
 set_tests_properties(CLI.UnknownFlag PROPERTIES
     PASS_REGULAR_EXPRESSION "Unknown option")
 
+# Python harness tests (stdlib unittest, no new dependency). scripts/ carries the
+# provenance of every committed result, and the teardown path these cover already
+# cost one benchmark cell its memory measurement SILENTLY — a blank column, no
+# error. The -p pattern matches the C++ `<module>_test` convention; unittest's
+# default of `test*.py` would discover nothing.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME Python.Scripts
+        COMMAND ${Python3_EXECUTABLE} -m unittest discover
+                -s ${CMAKE_SOURCE_DIR}/test/python -p "*_test.py")
+else()
+    message(STATUS "Python3 interpreter not found — skipping Python.Scripts tests")
+endif()
+
 add_executable(mcfcg_integration_tests
     test/integration_test.cpp
 )

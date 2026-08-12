@@ -46,7 +46,9 @@ uses for the CG runs, so one reader handles both. GPU configs additionally get
 `# peak_vram_mib:` sampled from `nvidia-smi` (see VramSampler): host RSS says
 nothing about the device-side factorization, which is precisely what OOMs on the
 giants. Memory is the one metric that cannot be recovered by re-parsing a log
-afterwards, so an unmeasured run means a rerun.
+afterwards, so an unmeasured run means a rerun — which is why both ways a solve
+can be killed preserve the reading: a cgroup OOM through the guard's
+OOMPolicy=continue, and a harness timeout through kill_preserving_mem.
 
 --probe-iters N caps the barrier at N iterations (each cmd_* builder injects its
 backend's knob: ipm_iteration_limit / MSK_IPAR_INTPNT_MAX_ITERATIONS /
@@ -127,6 +129,17 @@ BINARIES = {
 
 # Pinned barrier regime shared with the CG experiments (tolerances.h BARRIER_TOL).
 BARRIER_TOL = 1e-4
+
+# The solver's own --time-limit is the real stopping mechanism; the harness gives
+# it this much extra wall-clock before declaring a hang and killing the tree.
+HARNESS_TIMEOUT_GRACE_SEC = 1800
+# After that kill, how long the GNU `time` wrapper gets to reap the solver and
+# write its report before we escalate to a blunt killpg (see kill_preserving_mem).
+KILL_FLUSH_SEC = 120.0
+# Extra slack on the scope's RuntimeMaxSec so systemd's own teardown -- which
+# SIGTERMs every process in the scope, `time` included -- can never fire while
+# that flush window is still open.
+SCOPE_TEARDOWN_MARGIN_SEC = 60
 
 # Optional per-solve memory cgroup guard (set from CLI in main()). Wrapping each
 # solver in a transient systemd scope with MemoryMax + MemorySwapMax=0 means a
@@ -334,8 +347,52 @@ def cuopt_solve_failed(text):
 # rc=0. If COPT actually recovered (e.g. GPU->CPU fallback) it prints a valid
 # "Primal objective:" and no "Fail to solve", so keying on this marker only trips
 # on a genuine non-solve.
+#
+# `copt_cmd` is a SCRIPTED SHELL, which gives failure a second shape: when
+# `readmps` fails, the script does not abort -- the subsequent `optimize` runs
+# against an empty model, complains "Must read problem first", and `quit` exits
+# rc=0. Observed on BUS-2632-0, whose 2.64e9 nonzeros exceed the int32 range;
+# COPT bailed at 60 GB, well under the memory cap, so nothing else about the run
+# looked like a failure either. Without these markers that cell scores as `ok`
+# with no objective, i.e. a solver that read NOTHING is recorded as a clean run.
+COPT_FAIL_MARKERS = (
+    "Fail to solve",
+    "Reading failed",           # readmps gave up (size limit / malformed / OOM)
+    "Must read problem first",  # optimize ran with no model loaded
+)
+
+
 def copt_solve_failed(text):
-    return "Fail to solve" in text
+    return any(m in text for m in COPT_FAIL_MARKERS)
+
+
+def scope_runtime_max_sec(time_limit):
+    """RuntimeMaxSec for a solve's systemd scope.
+
+    Must land STRICTLY AFTER the harness has finished its own teardown, because
+    systemd's expiry SIGTERMs every process in the scope -- the GNU `time`
+    wrapper included -- which destroys the measurement kill_preserving_mem
+    exists to save. The harness needs `time_limit + HARNESS_TIMEOUT_GRACE_SEC`
+    to declare the hang and up to KILL_FLUSH_SEC more to let the wrapper flush;
+    SCOPE_TEARDOWN_MARGIN_SEC is the headroom on top. At the historical value of
+    exactly the subprocess timeout the two teardowns fired in the same instant
+    and systemd won often enough to matter.
+
+    Defined here rather than inline in main() so the ordering invariant is
+    testable without reimplementing it (test/python/timeout_memory_test.py).
+    """
+    return int(time_limit + HARNESS_TIMEOUT_GRACE_SEC
+               + KILL_FLUSH_SEC + SCOPE_TEARDOWN_MARGIN_SEC)
+
+
+def copt_read_failed(text):
+    """True when COPT never loaded the model, as opposed to failing to solve it.
+
+    Worth separating in the record: "the barrier gave up" and "the file was never
+    read" are different findings, and only the first says anything about the
+    solver's ability to handle the problem.
+    """
+    return "Reading failed" in text or "Must read problem first" in text
 
 
 # --probe-iters: how each backend reports "I stopped because you capped the
@@ -443,6 +500,28 @@ class VramSampler(threading.Thread):
         return self.peak_mib if self._measured else None
 
 
+# The per-run summary header. Writer and reader live together so the consolidator
+# and the injector cannot drift from what run_one emits.
+RUN_HEADER = re.compile(r"# wall=([\d.]+)s rc=(-?\d+) outcome=(\w+)")
+
+
+def format_run_header(wall, rc, outcome):
+    return f"# wall={wall:.3f}s rc={rc} outcome={outcome}\n"
+
+
+def parse_run_header(log_text):
+    """(wall, rc, outcome) from the run header; (None, None, "error") if absent.
+
+    A log with no readable summary header is treated as an errored run, not as an
+    unknown one: every complete log has this line, so its absence means the run
+    died before the writer got to it.
+    """
+    m = RUN_HEADER.search(log_text)
+    if not m:
+        return None, None, "error"
+    return float(m.group(1)), int(m.group(2)), m.group(3)
+
+
 # Log-header extras beyond benchmark_solvers' peak-RSS pair. Writer and readers
 # live together so consolidate_mps_logs.py cannot drift from what is emitted.
 def format_extra_headers(peak_vram_mib, probe_iters):
@@ -517,6 +596,142 @@ def parse_output(solver, text):
     return obj, tlast, status
 
 
+def pgid_members(pgid, exclude=()):
+    """Live pids whose process group is `pgid`, minus `exclude`. [] without /proc.
+
+    Read from /proc rather than tracked in Python because the solve's tree is
+    opaque to us: systemd-run's scope child, the solver, and any worker it forks
+    all inherit the group (start_new_session in run_one), and only the kernel
+    knows the current membership.
+    """
+    out = []
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return out
+    for d in entries:
+        if not d.isdigit() or int(d) in exclude:
+            continue
+        try:
+            with open(f"/proc/{d}/stat") as f:
+                stat = f.read()
+            # Fields after the comm field, which is parenthesized and may itself
+            # contain spaces/parens -- split after the LAST ')': [state, ppid, pgrp].
+            if int(stat.rsplit(")", 1)[1].split()[2]) == pgid:
+                out.append(int(d))
+        except (OSError, ValueError, IndexError):
+            continue  # exited, or unreadable: nothing to kill
+    return out
+
+
+def is_time_wrapper(pid, mem_path):
+    """True when `pid` is the GNU `time` process writing to `mem_path`.
+
+    Identified by its argv, not by name: mem_path is a per-solve mkstemp name, so
+    a match cannot be anything but this run's wrapper. Under the systemd guard
+    `systemd-run --scope` execs the wrapper in place (verified: the direct child's
+    cmdline IS `/usr/bin/time -o <mem_path> ...`), so the same check covers the
+    guarded and unguarded spawns. It is False in the window before that exec, and
+    False when GNU time is missing entirely -- both fall back to the blunt kill.
+    """
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            argv = f.read().split(b"\0")
+    except OSError:
+        return False
+    return (len(argv) > 2 and os.path.basename(argv[0].decode(errors="replace"))
+            == os.path.basename(bs.GNU_TIME)
+            and mem_path.encode() in argv)
+
+
+def kill_preserving_mem(proc, mem_path):
+    """Kill a hung solve on harness timeout, keeping its peak-RSS measurement.
+
+    Returns (stdout, stderr), having reaped `proc`.
+
+    A plain `killpg` loses the number: GNU `time` sits in the same process group
+    as the solver, so it dies alongside it and never writes its `-f %M` report --
+    and memory is the one metric that cannot be recovered by re-parsing a log
+    afterwards. The historical casualty is the compact-baseline probe cell
+    ChicagoRegional x highs, unmeasured for exactly this reason.
+
+    So kill every OTHER member of the group and let the wrapper -- our direct
+    child -- reap the corpse and flush. GNU time reports a signalled child
+    normally ("Command terminated by signal 9" then the peak), and read_peak_mem_kb
+    takes the last token, so the reading survives the kill intact.
+
+    Chosen over reading the cgroup's `memory.peak` (systemd-run --unit=<name> to
+    fix the scope path) for two reasons: `memory.peak` counts page cache and
+    kernel memory charged to the cgroup, so a timeout cell would carry a number
+    that is not comparable with the `time -f %M` RSS every other cell reports;
+    and it exists only under `--mem-max`, leaving `--mem-max off` runs unmeasured.
+    This path yields the same measurement, from the same instrument, as a cell
+    that finished.
+
+    Escalates to `killpg` whenever the wrapper cannot be identified or does not
+    exit within KILL_FLUSH_SEC: preserving a measurement never outranks making
+    sure a runaway solver is dead.
+    """
+    try:
+        pgid = os.getpgid(proc.pid)
+    except OSError:
+        return proc.communicate()  # already gone; nothing to signal
+    if mem_path and is_time_wrapper(proc.pid, mem_path):
+        for pid in pgid_members(pgid, exclude=(proc.pid,)):
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+        # Snapshot stragglers BEFORE reaping. Once communicate() reaps the
+        # wrapper, its pid -- which IS the pgid -- is free for the kernel to
+        # recycle, so scanning for "members of pgid" afterwards can match an
+        # unrelated new process group and SIGKILL somebody else's processes.
+        # Only pids observed while the group was still ours are eligible. The
+        # cost is that anything forked during the flush window is not swept up
+        # here; its parent has already been SIGKILLed, and under the memory
+        # guard the scope's RuntimeMaxSec is the backstop.
+        stragglers = pgid_members(pgid, exclude=(proc.pid,))
+        try:
+            out = proc.communicate(timeout=KILL_FLUSH_SEC)
+        except subprocess.TimeoutExpired:
+            pass  # wrapper wedged too -- fall through and take the group down
+        else:
+            for pid in stragglers:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+            return out
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+    return _drain(proc)
+
+
+def _drain(proc):
+    """communicate() with a bound, so teardown can never hang the sweep.
+
+    An unbounded communicate() waits for EOF on the inherited stdout/stderr
+    pipes, not for the child -- so any process still holding a write end blocks
+    it forever. SIGKILL to the process group normally covers that, but a solver
+    that setsid'd (or a helper systemd keeps in the scope) is outside the group
+    and keeps the pipe open. This is the one path whose entire purpose is
+    guaranteeing forward progress through a multi-hour sweep, so it must not be
+    the path that wedges it. Give up on the output rather than on the sweep: the
+    cell still gets its log, its outcome and -- the metric that cannot be
+    re-derived -- its peak RSS from the `time` wrapper's file.
+    """
+    try:
+        return proc.communicate(timeout=KILL_FLUSH_SEC)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            return proc.communicate(timeout=KILL_FLUSH_SEC)
+        except subprocess.TimeoutExpired:
+            return "", "[harness] output pipes never closed; solver output lost\n"
+
+
 def run_one(solver, mps, key, time_limit, logdir, probe_iters=0):
     builder, gpu = CONFIGS[solver]
     tag = f"{key}__{solver}"
@@ -546,6 +761,7 @@ def run_one(solver, mps, key, time_limit, logdir, probe_iters=0):
     else:
         sys.stderr.write(f"[mps] WARNING: {bs.GNU_TIME} missing; no memory for {tag}\n")
     t0 = time.monotonic()
+    wall_override = None  # set only on the timeout path; see below
     # start_new_session=True puts the child in its own process group so a timeout
     # can killpg the WHOLE tree -- subprocess.run would SIGKILL only its immediate
     # child, orphaning the actual solver (under the systemd guard the solver is a
@@ -575,19 +791,22 @@ def run_one(solver, mps, key, time_limit, logdir, probe_iters=0):
         try:
             # The solver's own --time-limit is the real stopping mechanism; this
             # generous subprocess timeout only guards a true hang.
-            stdout, stderr = proc.communicate(timeout=time_limit + 1800)
+            stdout, stderr = proc.communicate(
+                timeout=time_limit + HARNESS_TIMEOUT_GRACE_SEC)
             rc = proc.returncode
             outcome = "ok" if rc == 0 else "error"
         except subprocess.TimeoutExpired:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                pass
-            stdout, stderr = proc.communicate()
+            # Stamp the wall BEFORE the kill: teardown can take up to
+            # KILL_FLUSH_SEC, and folding that into time_wall would report a
+            # timed-out solve as having run minutes longer than it did.
+            wall_override = time.monotonic() - t0
+            # Kills the solver but spares the `time` wrapper, so a hang still
+            # yields peak RSS -- see kill_preserving_mem.
+            stdout, stderr = kill_preserving_mem(proc, mem_path)
             rc, outcome = -1, "timeout"
         vram_mib = sampler.stop() if sampler else None
         out = (stdout or "") + "\n" + (stderr or "")
-    wall = time.monotonic() - t0
+    wall = time.monotonic() - t0 if wall_override is None else wall_override
     peak_rss_kb = bs.read_peak_mem_kb(mem_path)
     # A probe stopped by its own iteration cap is a SUCCESS: it read, factored and
     # iterated, which is all the memory measurement needs. Recognize that before
@@ -607,7 +826,11 @@ def run_one(solver, mps, key, time_limit, logdir, probe_iters=0):
         note = "cuOpt barrier numerical error / VRAM OOM (#33) -- objective discarded"
     if solver.startswith("copt") and outcome == "ok" and copt_solve_failed(out):
         outcome = "error"
-        note = "COPT failed to solve (GPU memory issue / infeasible) -- objective discarded"
+        note = ("COPT never read the model (readmps failed) -- peak RSS is the "
+                "READER's, not a solve's"
+                if copt_read_failed(out) else
+                "COPT failed to solve (GPU memory issue / infeasible) -- "
+                "objective discarded")
     # Write atomically (temp + os.replace) so an interrupted driver can never leave
     # a truncated log carrying an intact "outcome=ok" header -- the consolidator
     # would otherwise re-parse the partial body and score a mid-barrier iterate as
@@ -615,7 +838,7 @@ def run_one(solver, mps, key, time_limit, logdir, probe_iters=0):
     tmp_path = log_path + ".partial"
     with open(tmp_path, "w") as f:
         f.write("# cmd: " + " ".join(run_argv) + "\n")
-        f.write(f"# wall={wall:.3f}s rc={rc} outcome={outcome}\n")
+        f.write(format_run_header(wall, rc, outcome))
         f.write(bs.format_peak_rss_headers(peak_rss_kb, "measured"))
         f.write(format_extra_headers(vram_mib, probe_iters))
         if note:
@@ -755,9 +978,12 @@ def main():
         # RuntimeMaxSec makes systemd tear down the ENTIRE scope (every process in
         # its cgroup) if a solve hangs past the subprocess timeout, so a runaway
         # barrier can't be orphaned and accumulate RSS against the box across the
-        # sweep. Set to the subprocess timeout (solver's own limit + 30 min grace),
-        # well beyond any legitimate solve.
-        runtime_max = int(args.time_limit + 1800)
+        # sweep. Set BEYOND the subprocess timeout (solver's own limit + 30 min
+        # grace) by the flush window plus a margin: at the old value of exactly the
+        # subprocess timeout the two teardowns fired in the same instant, and
+        # systemd's SIGTERMs the `time` wrapper -- destroying the very measurement
+        # kill_preserving_mem exists to save. The harness kill must get there first.
+        runtime_max = scope_runtime_max_sec(args.time_limit)
         # OOMPolicy=continue is what makes an OOM MEASURABLE. Under the default
         # policy systemd reacts to the cgroup OOM event by stopping the whole
         # scope -- SIGTERM to every process in it, including the GNU `time`

@@ -20,9 +20,13 @@ Result tables pinned by this record
                                     planar 10, intermodal 10, transportation 9)
                                     x {path,tree} x 5 backend configurations
     results/cg_iterations.csv       per-iteration CG trace for those runs
-    results/mps_compact_baseline.csv  direct (non-CG) barrier solves of the
-                                    compact source LP
-    results/mps_compact_memory.csv  peak RSS and VRAM of those same 165
+    results/mps_compact_baseline.csv  175 cells = 35 instances x 5 backend
+                                    configurations: direct (non-CG) barrier
+                                    solves of the compact source LP. Its mem_gb
+                                    is mostly INJECTED from the probe below and
+                                    is a lower bound — read mem_source per row,
+                                    and see section 2.2
+    results/mps_compact_memory.csv  peak RSS and VRAM of 165 of those
                                     (instance, backend) cells, measured by an
                                     iteration-capped probe — see section 2.1
 
@@ -68,9 +72,15 @@ shows up in the log instead of being silently misreported.
 2. Compact-model baseline — solver binaries
 -------------------------------------------
 
-Pins results/mps_compact_baseline.csv: 165 cells = 33 instances x 5, run
-2026-08-03 to 2026-08-05 by scripts/benchmark_mps.py against `data/mps/*.mps.gz`
-(regenerable via scripts/write_mps.sh; gitignored, ~5.6 GB).
+Pins results/mps_compact_baseline.csv: 175 cells = 35 instances x 5, against
+`data/mps/*.mps.gz` (regenerable via scripts/write_mps.sh; gitignored, ~5.6 GB).
+Two sweeps, both by scripts/benchmark_mps.py:
+
+    33 instances x 5    2026-08-03..05   the original sweep, below
+    2 instances x 5     2026-08-12       Sydney + BUS-2632-0, section 2.3
+
+The MPS files for those last two did not exist during the first sweep, which is
+the only reason they are absent from it.
 
 One exception to that window: the five grid1 cells were re-measured on
 2026-08-11 while validating the memory instrumentation of section 2.1, which
@@ -159,13 +169,126 @@ How the numbers are taken:
 
 The one unmeasured cell is ChicagoRegional x highs: it ran past the solver-side
 limit, and the harness's own subprocess timeout killed the process group before
-`time` could write. A cgroup OOM is recoverable this way; a harness kill is not.
+`time` could write. A cgroup OOM was recoverable this way; a harness kill was
+not.
+
+That hole is now closed. `benchmark_mps.kill_preserving_mem` kills every member
+of the process group EXCEPT the `time` wrapper, then gives the wrapper a flush
+window to reap the solver and write its report before escalating to a blunt
+killpg; the scope's RuntimeMaxSec was also pushed past the subprocess timeout by
+that window, because at its old value of exactly the timeout systemd's own
+teardown raced the harness and SIGTERM'd the wrapper regardless. Verified by
+execution, not inspection: test/python/timeout_memory_test.py drives a synthetic
+1.5 GiB child through the real timeout path, guarded and unguarded, and asserts
+the peak survives — with a paired negative test that forces the OLD blunt kill
+and asserts the header is gone, so the suite fails if the fix is reverted. The
+RuntimeMaxSec half is covered too: the guarded case builds its scope from the
+production formula (benchmark_mps.scope_runtime_max_sec) rather than a literal,
+and a separate case asserts the ordering invariant directly, so reverting either
+half turns the suite red. Registered as the `Python.Scripts` ctest.
+
+This does NOT retroactively measure ChicagoRegional x highs, which predates the
+fix and stays blank. It means no FUTURE sweep loses a cell this way.
 
 The 2026-08-03..05 baseline sweep of section 2 predates this instrumentation
-entirely, so its logs carry no memory and mem_gb is blank for all but the five
-grid1 rows noted above. Unlike objectives and timings, memory cannot be
-recovered by re-parsing a log — an unmeasured cell can only be re-run, which is
-what this table does.
+entirely, so its logs carried no memory of their own. Unlike objectives and
+timings, memory cannot be recovered by re-parsing a log — an unmeasured cell can
+only be re-run, which is what this table does. Section 2.2 relocates these
+numbers into that sweep's rows.
+
+
+2.2 How mem_gb reaches the baseline table — injection, not re-solving
+---------------------------------------------------------------------
+
+results/mps_compact_baseline.csv reports peak RSS on 174 of its 175 cells, but
+only 15 of those were measured during the solve the row describes. The rest were
+copied in from the section 2.1 probe by `scripts/inject_probe_memory.py`, which
+writes the probe's peak into the matching baseline log keyed on (instance,
+solver). Re-running the full sweep for memory alone costs days on the giants,
+almost all of it re-deriving failures already recorded in section 2.
+
+    An injected figure is the MODEL-SETUP PEAK, not the full solve's peak:
+    the high-water mark of reading the model, presolve, and three barrier
+    iterations — the regime containing the symbolic and numeric factorization
+    that dominates a barrier's footprint. Read it as a LOWER BOUND on the peak
+    of the full solve whose wall-clock sits in the same row.
+
+Per-row provenance is in the `mem_source` column, never inferred:
+
+    measured             15  the solve in that row reported its own peak (the
+                             five grid1 re-runs of section 2, plus the ten
+                             section 2.3 cells, which postdate the
+                             instrumentation)
+    probe3:<log>        135  injected; the probe ran its three iterations and
+                             stopped at the cap, so the setup regime completed.
+                             The trailing path is the source log, the 3 is the
+                             iteration cap
+    probe3-partial:<log> 24  injected, but the probe DIED before finishing three
+                             iterations — OOM at the cgroup cap, or a backend
+                             error — so the peak is wherever it died. Still a
+                             lower bound, a weaker one. Ten of these sit at the
+                             ~105 GiB cap and are floors in the section 2.3
+                             sense: the cell needed more than the cap
+    (blank)               1  ChicagoRegional x highs, unmeasured in BOTH sweeps
+
+Deliberately absent: the time/outcome provenance gate that
+scripts/backfill_log_memory.py applies. That gate is right there, because it
+relocates the SAME execution's number and a disagreement would prove a mixup.
+Here the two runs are different executions ON PURPOSE and are EXPECTED to
+disagree on both time and outcome — Austin x copt-cpu is 1106 s probed against
+7267 s solved. The only pairing evidence is (instance, solver) identity, which is
+why the tag names the source log: the claim is checkable by hand. Do not "fix"
+the missing gate.
+
+Reproduce (both idempotent; the injector rewrites only log headers, never
+bodies, and never overwrites a `measured` row):
+
+    python3 scripts/inject_probe_memory.py --dry-run   # report, write nothing
+    python3 scripts/inject_probe_memory.py
+    python3 scripts/consolidate_mps_logs.py
+
+
+2.3 Sydney and BUS-2632-0 — the two instances nothing solves
+-------------------------------------------------------------
+
+Ten cells run 2026-08-12, same harness and barrier regime as section 2, 2 h
+solver limit, 105 GiB cgroup cap. Their MPS files postdate the original sweep.
+Compact source LP dimensions, from `mcfcg_cli --stats-only`, against the largest
+instance section 2 attempted:
+
+    ChicagoRegional    23.0 M rows    69.1 M cols     207 M nnz    ~9 GB MPS
+    Sydney              108 M rows     246 M cols     736 M nnz   ~28 GB MPS
+    BUS-2632-0          315 M rows    1.04 B cols    2.64 B nnz   ~96 GB MPS
+
+    Every one of the ten cells failed. No backend produced an objective for
+    either instance.
+
+Eight were SIGKILLed by the cgroup at the cap (rc=137) with peak RSS pinned at
+~104.8 GB. Those figures are FLOORS in a second sense from the injected ones:
+the cell needed more than 105 GiB and how much more was not measured.
+
+The two exceptions are BUS x copt-cpu and BUS x copt-gpu, which are not memory
+failures at all. COPT's reader printed "Reading failed" at 60.2 GB — well under
+the cap — after which `copt_cmd`, being a scripted shell rather than a program
+that aborts, ran `optimize` against an empty model ("Must read problem first")
+and exited rc=0. Recorded as errors only because benchmark_mps now recognizes
+those two markers; before that they scored as `ok` with no objective, i.e. a
+solver that read NOTHING presented as a clean run. Their 60.2 GB is the READER's
+peak and says nothing about solving.
+
+    Why COPT's reader gave up is NOT established. BUS has 2.64e9 nonzeros,
+    past the int32 limit of 2.147e9, which makes a 32-bit count in the free-MPS
+    reader the obvious suspect — but this was not confirmed against COPT, and
+    the alternative (an internal size/memory limit) is not excluded. Stated as
+    a hypothesis because the two readings support different claims: "too big
+    for this machine" versus "too big for this reader".
+
+For contrast, CG solves both. Sydney tree is 66-76 s at 9-13 GB across all five
+backends; BUS-2632-0 is under 4 s at ~0.5 GB (results/cg_benchmark.csv). The
+compact LP being unsolvable at this scale is the result, not a gap in it.
+
+No cell reached the harness-timeout path — the memory cap always came first — so
+the section 2.1 timeout fix is covered by its test, not by this sweep.
 
 
 3. Benchmark host
