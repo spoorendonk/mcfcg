@@ -39,9 +39,30 @@ CLI's --help. Validate objective/time parsing on one small instance (e.g. grid1)
 when the machine is free before trusting a full sweep; parsing regexes are
 centralized in PARSERS for easy adjustment.
 
+Memory. Every solve is wrapped in GNU `time -f %M` (inside the cgroup guard, so
+it measures the solver and not `systemd-run`) and the peak RSS is written into
+the log header as `# peak_rss_kb:` — the same serialization benchmark_solvers.py
+uses for the CG runs, so one reader handles both. GPU configs additionally get
+`# peak_vram_mib:` sampled from `nvidia-smi` (see VramSampler): host RSS says
+nothing about the device-side factorization, which is precisely what OOMs on the
+giants. Memory is the one metric that cannot be recovered by re-parsing a log
+afterwards, so an unmeasured run means a rerun.
+
+--probe-iters N caps the barrier at N iterations (each cmd_* builder injects its
+backend's knob: ipm_iteration_limit / MSK_IPAR_INTPNT_MAX_ITERATIONS /
+BarIterLimit / --iteration-limit) instead of solving. That is the cheap way to get memory for cells
+whose full solve costs hours: a barrier's peak RSS is dominated by the symbolic +
+numeric ADAT factorization, which is allocated on the first iteration and reused,
+so a few iterations reach a tight lower bound on the full-solve peak: measured
+0.88-1.00 of it (0.95-1.00 at N=3) across all 5 backends on grid7/planar300/grid10,
+for 1.6-12x less runtime. Report it as the lower bound it is.
+Probe runs write to their own logdir/CSV, carry a `# probe_iters:` header, and
+report NO objective — an iterate one step off the central path is not a solution
+and must never reach a results table.
+
 CSV columns:
   instance,solver,gpu,outcome,objective,ref,rel_err,pass,time_wall,time_solve,
-  status,detail
+  mem_gb,vram_gb,status,detail
 """
 
 import argparse
@@ -51,7 +72,11 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
+import threading
 import time
+
+import benchmark_solvers as bs  # sibling module: peak-RSS log header + GNU time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -138,7 +163,7 @@ def load_refs():
 # (path -> contents), e.g. a HiGHS options file or a MOSEK parameter file.
 
 
-def cmd_highs(mps, time_limit, logdir, tag):
+def cmd_highs(mps, time_limit, logdir, tag, probe_iters=0):
     opts = os.path.join(logdir, f"{tag}.highs-opts")
     # Match the CG HiGHS backend exactly (src/lp/highs_solver.cpp): the HiPO
     # interior-point solver, crossover off, primal/dual feasibility tol = 1e-4.
@@ -150,11 +175,13 @@ def cmd_highs(mps, time_limit, logdir, tag):
         f"dual_feasibility_tolerance = {BARRIER_TOL}\n"
         f"time_limit = {time_limit}\n"
     )
+    if probe_iters:
+        contents += f"ipm_iteration_limit = {probe_iters}\n"
     argv = [BINARIES["highs"], "--model_file", mps, "--options_file", opts]
     return argv, {opts: contents}
 
 
-def cmd_mosek(mps, time_limit, logdir, tag):
+def cmd_mosek(mps, time_limit, logdir, tag, probe_iters=0):
     # -itro /dev/null: MOSEK writes the interior solution to <input>.sol next to
     # the input by default (would land in data/mps and be multi-GB on the giants);
     # redirect it to the bit bucket. Barrier tol pinned on all three components to
@@ -169,12 +196,14 @@ def cmd_mosek(mps, time_limit, logdir, tag):
         "-d", "MSK_DPAR_INTPNT_TOL_REL_GAP", str(BARRIER_TOL),
         "-d", "MSK_DPAR_OPTIMIZER_MAX_TIME", str(time_limit),
         "-itro", "/dev/null",
-        mps,
     ]
+    if probe_iters:
+        argv += ["-d", "MSK_IPAR_INTPNT_MAX_ITERATIONS", str(probe_iters)]
+    argv.append(mps)
     return argv, {}
 
 
-def cmd_copt(mps, time_limit, logdir, tag, gpu_mode):
+def cmd_copt(mps, time_limit, logdir, tag, gpu_mode, probe_iters=0):
     # readmps reads .mps and .mps.gz. FeasTol+DualTol are the barrier stopping
     # tolerances used by the CG backend (src/lp/copt_solver.cpp); COPT 8.0 has NO
     # "BarConvTol" parameter (it errors "Unknown COPT parameter"). Presolve left at
@@ -190,13 +219,14 @@ def cmd_copt(mps, time_limit, logdir, tag, gpu_mode):
         f"set FeasTol {BARRIER_TOL}; "
         f"set DualTol {BARRIER_TOL}; "
         f"set TimeLimit {time_limit}; "
-        "optimize; "
+        + (f"set BarIterLimit {probe_iters}; " if probe_iters else "")
+        + "optimize; "
         "quit"
     )
     return [BINARIES["copt"], "-c", script], {}
 
 
-def cmd_cuopt(mps, time_limit, logdir, tag):
+def cmd_cuopt(mps, time_limit, logdir, tag, probe_iters=0):
     # Discard the primal solution: on the giant instances a converged solution has
     # tens of millions of entries (multi-GB per file), and we only ever read the
     # objective/time from stdout. Mirrors MOSEK's `-itro /dev/null`.
@@ -215,16 +245,18 @@ def cmd_cuopt(mps, time_limit, logdir, tag):
         "--time-limit", str(time_limit),
         "--solution-file", sol,
     ]
+    if probe_iters:
+        argv += ["--iteration-limit", str(probe_iters)]
     return argv, {}
 
 
 # Config label -> (command builder, gpu annotation).
 CONFIGS = {
-    "highs": (lambda m, t, d, g: cmd_highs(m, t, d, g), "cpu"),
-    "mosek": (lambda m, t, d, g: cmd_mosek(m, t, d, g), "cpu"),
-    "copt-cpu": (lambda m, t, d, g: cmd_copt(m, t, d, g, 0), "cpu"),
-    "copt-gpu": (lambda m, t, d, g: cmd_copt(m, t, d, g, 2), "gpu"),
-    "cuopt": (lambda m, t, d, g: cmd_cuopt(m, t, d, g), "gpu"),
+    "highs": (lambda m, t, d, g, p: cmd_highs(m, t, d, g, p), "cpu"),
+    "mosek": (lambda m, t, d, g, p: cmd_mosek(m, t, d, g, p), "cpu"),
+    "copt-cpu": (lambda m, t, d, g, p: cmd_copt(m, t, d, g, 0, p), "cpu"),
+    "copt-gpu": (lambda m, t, d, g, p: cmd_copt(m, t, d, g, 2, p), "gpu"),
+    "cuopt": (lambda m, t, d, g, p: cmd_cuopt(m, t, d, g, p), "gpu"),
 }
 
 # Objective + solver-reported solve-time parsers (best-effort; centralized so a
@@ -306,6 +338,151 @@ def copt_solve_failed(text):
     return "Fail to solve" in text
 
 
+# --probe-iters: how each backend reports "I stopped because you capped the
+# barrier iterations". A probe that hits its cap did exactly what was asked --
+# read the model, presolve, factor, iterate -- so its peak RSS is the datum we
+# came for, even though highs (rc 1) and mosek (rc 160) call that a nonzero exit.
+# Without these markers every probe would be recorded as an `error` and the
+# memory would look untrustworthy. A probe missing its marker really did fail
+# (OOM, crash, time limit) and stays an error.
+PROBE_LIMIT_MARKERS = {
+    "highs": ("Iteration limit reached", "Reached maximum iterations"),
+    "mosek": ("MSK_RES_TRM_MAX_ITERATIONS",),
+    "copt": ("ITER_LIMIT", "Status: IterLimit"),
+    "cuopt": ("Iteration Limit",),
+}
+
+
+def probe_hit_iter_limit(solver, text):
+    return any(m in text for m in PROBE_LIMIT_MARKERS[parser_key(solver)])
+
+
+NVIDIA_SMI = "nvidia-smi"
+
+
+def gpu_pid_memory():
+    """{pid: MiB} for every current CUDA compute app, or None if the query failed.
+
+    Empty dict and None are deliberately different: {} means nvidia-smi answered
+    and nothing is on the GPU, None means we could not measure at all. Collapsing
+    them would let a host with no nvidia-smi report every GPU solve as using 0 MiB
+    of VRAM, which reads as a measurement rather than the absence of one.
+    """
+    try:
+        r = subprocess.run(
+            [NVIDIA_SMI, "--query-compute-apps=pid,used_gpu_memory",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0:
+        return None
+    out = {}
+    for line in r.stdout.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+            out[int(parts[0])] = int(parts[1])
+    return out
+
+
+class VramSampler(threading.Thread):
+    """Poll peak device memory of one solve, in MiB, for the GPU backends.
+
+    GNU time's %M is host RSS only, so for cuopt/copt-gpu it misses the thing
+    that actually decides whether a giant fits: the device-side normal-equations
+    factorization. nvidia-smi reports per-PID compute memory, so we sample it and
+    keep the high-water mark.
+
+    Attribution is by process group, not by name or by whole-GPU usage: run_one
+    spawns the solver with start_new_session=True, so every process in the solve
+    (systemd-run's scope child, the solver, any worker it forks) shares pgid ==
+    proc.pid, while the user's desktop/browser do not. Summing whole-GPU usage
+    instead would silently fold a compositor's VRAM into the measurement.
+
+    Sampling is a floor, not a bound: an allocation that comes and goes entirely
+    within one interval is invisible. That is acceptable here because the barrier
+    holds its pool for the duration of the solve, which is what we are measuring.
+
+    The interval backs off from `interval` to MAX_INTERVAL. Each sample forks an
+    nvidia-smi, so a fixed 0.1s would spend ~72k process spawns on a 2h solve and
+    perturb the wall-clock this harness also records; the pool is allocated during
+    setup and the first factorization, so sample that densely and then coast.
+    """
+
+    MAX_INTERVAL = 2.0
+
+    def __init__(self, pgid, interval=0.1):
+        super().__init__(daemon=True)
+        self.pgid = pgid
+        self.interval = interval
+        self.peak_mib = 0
+        self._measured = False
+        self._done = threading.Event()
+
+    def run(self):
+        wait = self.interval
+        while not self._done.is_set():
+            sample = gpu_pid_memory()
+            if sample is not None:
+                self._measured = True
+                total = 0
+                for pid, mib in sample.items():
+                    try:
+                        if os.getpgid(pid) == self.pgid:
+                            total += mib
+                    except OSError:
+                        continue  # exited between the query and the getpgid
+                self.peak_mib = max(self.peak_mib, total)
+            self._done.wait(wait)
+            wait = min(wait * 1.5, self.MAX_INTERVAL)
+
+    def stop(self):
+        """Peak MiB, or None when nvidia-smi never answered (never a bare 0)."""
+        self._done.set()
+        self.join(timeout=30)
+        return self.peak_mib if self._measured else None
+
+
+# Log-header extras beyond benchmark_solvers' peak-RSS pair. Writer and readers
+# live together so consolidate_mps_logs.py cannot drift from what is emitted.
+def format_extra_headers(peak_vram_mib, probe_iters):
+    s = ""
+    if peak_vram_mib is not None:
+        s += f"# peak_vram_mib: {peak_vram_mib}\n"
+    if probe_iters:
+        s += f"# probe_iters: {probe_iters}\n"
+    return s
+
+
+def _parse_int_header(log_text, prefix):
+    val = None
+    for line in bs.iter_header_lines(log_text):
+        if line.startswith(prefix):
+            try:
+                val = int(line.split(":", 1)[1].strip())
+            except ValueError:
+                val = None
+    return val
+
+
+def parse_peak_vram_mib(log_text):
+    """Peak device memory in MiB from the log header, or None (CPU config / no smi)."""
+    return _parse_int_header(log_text, "# peak_vram_mib:")
+
+
+def parse_probe_iters(log_text):
+    """Barrier iteration cap this log was produced under, or None for a real solve.
+
+    Any non-None value means the run was STOPPED EARLY on purpose: its objective
+    is a mid-barrier iterate and must not be scored against a reference.
+    """
+    return _parse_int_header(log_text, "# probe_iters:")
+
+
+def gb_from_mib(mib):
+    return "" if mib is None else round(mib / 1024.0, 3)
+
+
 def parse_output(solver, text):
     pk = parser_key(solver)
     pats = PARSERS[pk]
@@ -340,18 +517,34 @@ def parse_output(solver, text):
     return obj, tlast, status
 
 
-def run_one(solver, mps, key, time_limit, logdir):
+def run_one(solver, mps, key, time_limit, logdir, probe_iters=0):
     builder, gpu = CONFIGS[solver]
     tag = f"{key}__{solver}"
-    argv, extra_files = builder(mps, time_limit, logdir, tag)
+    argv, extra_files = builder(mps, time_limit, logdir, tag, probe_iters)
     for path, contents in extra_files.items():
         with open(path, "w") as f:
             f.write(contents)
     log_path = os.path.join(logdir, f"{tag}.log")
     # Prepend the memory-cgroup guard (if configured). systemd-run --scope runs the
     # child synchronously and propagates its exit status; a MemoryMax kill surfaces
-    # as rc 137 (SIGKILL) which we record as an OOM error rather than a crash.
+    # as rc 137 (128+SIGKILL, via the `time` wrapper below) which we record as an
+    # OOM error rather than a crash.
+    #
+    # GNU time goes INSIDE the guard: `systemd-run --scope` execs the solver as its
+    # own child, so wrapping the guard would time systemd-run (and, worse, measure
+    # nothing when the scope is torn down wholesale). Inside, `time` is a ~2 MB
+    # bystander in the same cgroup -- the OOM killer picks the multi-GB solver, so
+    # `time` survives to report the RSS the solve reached AT the cap, which is the
+    # whole point of measuring the runs that die. Note the return-code vocabulary
+    # changes: GNU time reports a signal death as the bare signal number.
+    mem_path = None
     run_argv = MEM_GUARD + argv
+    if os.path.exists(bs.GNU_TIME):
+        fd, mem_path = tempfile.mkstemp(prefix="mcfcg_mps_mem_", suffix=".txt")
+        os.close(fd)
+        run_argv = MEM_GUARD + [bs.GNU_TIME, "-o", mem_path, "-f", "%M"] + argv
+    else:
+        sys.stderr.write(f"[mps] WARNING: {bs.GNU_TIME} missing; no memory for {tag}\n")
     t0 = time.monotonic()
     # start_new_session=True puts the child in its own process group so a timeout
     # can killpg the WHOLE tree -- subprocess.run would SIGKILL only its immediate
@@ -372,7 +565,13 @@ def run_one(solver, mps, key, time_limit, logdir):
         # than aborting the whole run.
         out = f"[harness] failed to launch: {e}\n"
         rc, outcome = 127, "error"
+        vram_mib = None
     else:
+        # start_new_session put the child in a new process group == its pid; the
+        # sampler attributes device memory by that pgid (see VramSampler).
+        sampler = VramSampler(proc.pid) if gpu == "gpu" else None
+        if sampler:
+            sampler.start()
         try:
             # The solver's own --time-limit is the real stopping mechanism; this
             # generous subprocess timeout only guards a true hang.
@@ -386,8 +585,15 @@ def run_one(solver, mps, key, time_limit, logdir):
                 pass
             stdout, stderr = proc.communicate()
             rc, outcome = -1, "timeout"
+        vram_mib = sampler.stop() if sampler else None
         out = (stdout or "") + "\n" + (stderr or "")
     wall = time.monotonic() - t0
+    peak_rss_kb = bs.read_peak_mem_kb(mem_path)
+    # A probe stopped by its own iteration cap is a SUCCESS: it read, factored and
+    # iterated, which is all the memory measurement needs. Recognize that before
+    # the failure guards below, which are about solves that produced nothing.
+    if probe_iters and outcome == "error" and probe_hit_iter_limit(solver, out):
+        outcome = "ok"
     # Guard against a silent HiGHS solver fallback: if we asked for HiPO but the
     # log shows the extras-unavailable abort (or never reports "Running HiPO"),
     # flag it so a dual-simplex/other result never masquerades as the HiPO baseline.
@@ -410,6 +616,8 @@ def run_one(solver, mps, key, time_limit, logdir):
     with open(tmp_path, "w") as f:
         f.write("# cmd: " + " ".join(run_argv) + "\n")
         f.write(f"# wall={wall:.3f}s rc={rc} outcome={outcome}\n")
+        f.write(bs.format_peak_rss_headers(peak_rss_kb, "measured"))
+        f.write(format_extra_headers(vram_mib, probe_iters))
         if note:
             f.write(f"# WARN {note}\n")
         f.write("# === solver output ===\n")
@@ -419,9 +627,12 @@ def run_one(solver, mps, key, time_limit, logdir):
     if outcome == "error" and note:
         obj = None      # never surface an objective from a guarded failure
         status = note
+    if probe_iters:
+        obj = None      # a capped barrier's iterate is not a solution
     return {
         "outcome": outcome, "objective": obj, "time_wall": wall,
         "time_solve": tsolve, "status": status, "gpu": gpu, "rc": rc,
+        "mem_gb": bs.mem_gb_from_kb(peak_rss_kb), "vram_gb": gb_from_mib(vram_mib),
     }
 
 
@@ -491,12 +702,22 @@ def main():
                     help="solver-side wall-clock budget in seconds (default 2h).")
     ap.add_argument("--tol", type=float, default=1e-3,
                     help="relative objective tolerance for pass.")
-    ap.add_argument("--out", default="bench_runs/mps/results.csv",
-                    help="results CSV; default lives under the gitignored "
-                         "bench_runs/ tree, not repo root.")
-    ap.add_argument("--logdir", default="bench_runs/mps/logs",
-                    help="per-cell solver logs; default under gitignored "
-                         "bench_runs/, not repo root.")
+    ap.add_argument("--out", default=None,
+                    help="results CSV; default bench_runs/mps/results.csv "
+                         "(bench_runs/mps_probe/results.csv under --probe-iters), "
+                         "under the gitignored bench_runs/ tree, not repo root.")
+    ap.add_argument("--logdir", default=None,
+                    help="per-cell solver logs; default bench_runs/mps/logs "
+                         "(bench_runs/mps_probe/logs under --probe-iters), under "
+                         "gitignored bench_runs/, not repo root.")
+    ap.add_argument("--probe-iters", type=int, default=0, metavar="N",
+                    help="MEMORY PROBE: cap the barrier at N iterations instead of "
+                         "solving, to measure peak memory at a fraction of the cost "
+                         "(a barrier's peak is the ADAT factorization, allocated on "
+                         "iteration 1 and reused). Probe runs report no objective, "
+                         "carry a `# probe_iters:` log header, and default to their "
+                         "own logdir so they can never be consolidated as solves. "
+                         "0 (default) = solve normally.")
     ap.add_argument("--mem-max", default="105G",
                     help="per-solve RSS cap enforced via `systemd-run --user "
                          "--scope -p MemoryMax=... -p MemorySwapMax=0` so a runaway "
@@ -514,6 +735,20 @@ def main():
 
     if not os.path.isdir(args.mps_dir):
         sys.exit(f"[mps] ABORT: --mps-dir is not a directory: {args.mps_dir}")
+    if args.probe_iters < 0:
+        sys.exit("[mps] ABORT: --probe-iters must be >= 0")
+    # Probe output defaults to a SEPARATE tree. Sharing bench_runs/mps/logs would
+    # overwrite a real solve's log with an iteration-capped one -- destroying an
+    # hours-long measurement and leaving a log whose objective is a mid-barrier
+    # iterate. The consolidator also refuses to mix the two, but the strongest
+    # protection is not writing them to the same place.
+    base = "bench_runs/mps_probe" if args.probe_iters else "bench_runs/mps"
+    args.out = args.out or f"{base}/results.csv"
+    args.logdir = args.logdir or f"{base}/logs"
+    if args.probe_iters:
+        sys.stderr.write(
+            f"[mps] MEMORY PROBE: barrier capped at {args.probe_iters} iteration(s); "
+            "objectives are NOT recorded\n")
 
     global MEM_GUARD
     if args.mem_max and args.mem_max.lower() != "off":
@@ -523,9 +758,19 @@ def main():
         # sweep. Set to the subprocess timeout (solver's own limit + 30 min grace),
         # well beyond any legitimate solve.
         runtime_max = int(args.time_limit + 1800)
+        # OOMPolicy=continue is what makes an OOM MEASURABLE. Under the default
+        # policy systemd reacts to the cgroup OOM event by stopping the whole
+        # scope -- SIGTERM to every process in it, including the GNU `time`
+        # wrapper, which then dies before writing its report and the run's peak
+        # RSS is lost exactly where it matters most. With `continue`, systemd
+        # stays out of it: the kernel OOM killer takes the multi-GB solver (the
+        # cap still binds), `time` survives as a ~2 MB bystander and records the
+        # high-water mark the solve reached at the cap. Runaways are still bounded
+        # by MemoryMax and RuntimeMaxSec.
         MEM_GUARD = [
             "systemd-run", "--user", "--scope", "--quiet",
             "-p", f"MemoryMax={args.mem_max}", "-p", "MemorySwapMax=0",
+            "-p", "OOMPolicy=continue",
             "-p", f"RuntimeMaxSec={runtime_max}",
         ]
         ok, detail = verify_mem_guard(MEM_GUARD)
@@ -557,7 +802,8 @@ def main():
     refs = load_refs()
     rows = []
     fields = ["instance", "solver", "gpu", "outcome", "objective", "ref",
-              "rel_err", "pass", "time_wall", "time_solve", "status", "detail"]
+              "rel_err", "pass", "time_wall", "time_solve", "mem_gb", "vram_gb",
+              "status", "detail"]
     summary = {s: {"pass": 0, "fail": 0, "error": 0, "noref": 0} for s in solvers}
 
     # Write the CSV INCREMENTALLY (header first, then flush after every cell) so a
@@ -576,13 +822,25 @@ def main():
         for solver in solvers:
             sys.stderr.write(f"[mps] {key} :: {solver} ... ")
             sys.stderr.flush()
-            r = run_one(solver, mps, key, args.time_limit, args.logdir)
+            r = run_one(solver, mps, key, args.time_limit, args.logdir,
+                        args.probe_iters)
             rec = {"instance": key, "solver": solver, "gpu": r["gpu"],
                    "outcome": r["outcome"], "objective": r["objective"],
                    "ref": "" if ref is None else ref, "rel_err": "", "pass": "",
                    "time_wall": f"{r['time_wall']:.3f}", "time_solve": r["time_solve"],
+                   "mem_gb": r["mem_gb"], "vram_gb": r["vram_gb"],
                    "status": r["status"], "detail": ""}
-            if r["outcome"] != "ok" or r["objective"] is None:
+            if args.probe_iters:
+                # Nothing to score: the verdict is whether the probe got far enough
+                # to yield a memory number.
+                rec["detail"] = f"memory probe, barrier capped at {args.probe_iters}"
+                ok = r["outcome"] == "ok" and r["mem_gb"] != ""
+                summary[solver]["pass" if ok else "error"] += 1
+                verdict = f"MEM {r['mem_gb'] or 'NA'} GB" if ok else \
+                    (r["outcome"] or "error").upper()
+                if r["vram_gb"] not in ("", 0.0):
+                    verdict += f" vram={r['vram_gb']} GB"
+            elif r["outcome"] != "ok" or r["objective"] is None:
                 summary[solver]["error"] += 1
                 rec["detail"] = f"rc={r['rc']} status={r['status']}"
                 verdict = (r["outcome"] or "error").upper()
@@ -598,19 +856,22 @@ def main():
                 summary[solver]["pass" if ok else "fail"] += 1
                 verdict = "PASS" if ok else f"FAIL rel={rel:.2e}"
             ow = r["objective"]
+            obj_part = "" if args.probe_iters else \
+                f"obj={ow if ow is not None else 'NA'} "
+            mem_part = "" if args.probe_iters else f"mem={r['mem_gb'] or 'NA'}GB "
             sys.stderr.write(
-                f"{verdict} obj={ow if ow is not None else 'NA'} "
-                f"t={r['time_wall']:.1f}s\n")
+                f"{verdict} {obj_part}{mem_part}t={r['time_wall']:.1f}s\n")
             writer.writerow(rec)
             out_f.flush()
             rows.append(rec)
     out_f.close()
 
     print(f"\nWrote {len(rows)} rows to {args.out} (flushed incrementally)\n")
-    print(f"{'solver':<10}{'pass':>5}{'fail':>5}{'error':>6}{'noref':>6}")
+    first = "measured" if args.probe_iters else "pass"
+    print(f"{'solver':<10}{first:>9}{'fail':>5}{'error':>6}{'noref':>6}")
     for s in solvers:
         c = summary[s]
-        print(f"{s:<10}{c['pass']:>5}{c['fail']:>5}{c['error']:>6}{c['noref']:>6}")
+        print(f"{s:<10}{c['pass']:>9}{c['fail']:>5}{c['error']:>6}{c['noref']:>6}")
 
 
 if __name__ == "__main__":

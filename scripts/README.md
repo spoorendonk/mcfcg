@@ -410,3 +410,42 @@ python3 scripts/consolidate_mps_logs.py    # bench_runs/mps/logs -> results/mps_
 Its default `--out` writes straight to the tracked `results/mps_compact_baseline.csv`
 — the committed one truth. The bulky per-cell logs under `bench_runs/mps/` stay
 local/regenerable.
+
+### Memory (`mem_gb`, `vram_gb`) and the `--probe-iters` shortcut
+
+Every solve is wrapped in GNU `time -f %M` **inside** the cgroup guard, and its
+peak RSS is written into the log header as `# peak_rss_kb:` — the same
+serialization `benchmark_solvers.py` uses for the CG runs, so the two tables'
+memory columns mean the same thing and one parser reads both. GPU configs also
+get `# peak_vram_mib:`, sampled from `nvidia-smi` per process group (host RSS
+says nothing about the device-side factorization, which is what OOMs on the
+giants). The guard passes `OOMPolicy=continue` so that on a cap hit the kernel
+kills only the solver and `time` survives to report the peak it reached — under
+systemd's default policy the whole scope is torn down and the measurement of the
+most interesting runs is lost.
+
+Memory is the one metric that **cannot** be recovered by re-parsing a log, so
+cells solved before these headers existed show blank `mem_gb` and need a rerun.
+`--probe-iters N` is the cheap rerun: it caps the barrier at N iterations
+(`ipm_iteration_limit` / `MSK_IPAR_INTPNT_MAX_ITERATIONS` / `BarIterLimit` /
+`--iteration-limit`) instead of solving. A barrier's peak is the symbolic +
+numeric ADAT factorization, allocated on the first iteration and reused, so the
+iteration-1 high-water mark is a tight lower bound on the full-solve peak at a
+fraction of the runtime.
+
+```
+python3 scripts/benchmark_mps.py --probe-iters 3        # -> bench_runs/mps_probe/
+python3 scripts/consolidate_mps_logs.py --probe         # -> results/mps_compact_memory.csv
+```
+
+Measured against full solves on grid7 / planar300 / grid10 (all 5 backends), the
+probe recovers **0.88–1.00** of the full-solve peak RSS at 1.6–12× less runtime,
+and peak VRAM to within 2%. Three iterations is the better default: the only cell
+below 0.93 was HiPO, which goes 0.88 → 0.95 for ~1.6× the probe time (still 7×
+cheaper than its full solve); every other backend moves <1%. Report probe memory
+as the lower bound it is, never as the full solve's footprint.
+
+Probe runs default to their **own** logdir/CSV, record **no objective**, and
+carry a `# probe_iters:` header; the consolidator keeps the two populations apart
+in either direction. A capped barrier's iterate is not a solution, and the point
+of the separation is that it can never be scored as one.

@@ -10,8 +10,23 @@ small instances solved in one pass and the large tail solved in another, or a
 giant pass that was interrupted/OOM'd partway. That's exactly what we need to
 avoid re-solving already-converged instances just to get one clean CSV.
 
+Memory (`mem_gb`, `vram_gb`) comes from the log's `# peak_rss_kb:` /
+`# peak_vram_mib:` headers, so it survives re-consolidation like everything else.
+Logs from before those headers existed simply leave the columns empty -- unlike
+the objective, memory CANNOT be re-derived from the body, so a blank there means
+that cell was never measured and needs a rerun (see --probe for the cheap one).
+
+--probe consolidates the memory-probe sweep (benchmark_mps.py --probe-iters)
+instead: iteration-capped runs, written to their own tree, whose peak RSS stands
+in for the full solve's. It emits a memory-only CSV with the cap recorded per
+row. The two modes never mix -- a probe log encountered in normal mode is
+skipped, because its objective is a mid-barrier iterate that would score as a
+wildly failing solve.
+
 Usage:
   python3 scripts/consolidate_mps_logs.py   # bench_runs/mps/logs -> results/mps_compact_baseline.csv
+  python3 scripts/consolidate_mps_logs.py --probe
+      # bench_runs/mps_probe/logs -> results/mps_compact_memory.csv
 """
 
 import argparse
@@ -21,6 +36,7 @@ import re
 import sys
 
 import benchmark_mps as bm  # sibling module; run from scripts/ or repo root
+import benchmark_solvers as bs  # peak-RSS header parser, shared with the CG logs
 
 HDR = re.compile(r"# wall=([\d.]+)s rc=(-?\d+) outcome=(\w+)")
 MARKER = "# === solver output ==="
@@ -36,7 +52,13 @@ def parse_log(path):
     outcome = m.group(3) if m else "error"
     warn = "# WARN " in text
     body = text.split(MARKER, 1)[1] if MARKER in text else text
-    return wall, rc, outcome, warn, body
+    rss_kb, _ = bs.parse_peak_rss(text)
+    return {
+        "wall": wall, "rc": rc, "outcome": outcome, "warn": warn, "body": body,
+        "mem_gb": bs.mem_gb_from_kb(rss_kb),
+        "vram_gb": bm.gb_from_mib(bm.parse_peak_vram_mib(text)),
+        "probe_iters": bm.parse_probe_iters(text),
+    }
 
 
 def split_key_solver(stem):
@@ -48,18 +70,37 @@ def split_key_solver(stem):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--logdir", default="bench_runs/mps/logs")
-    ap.add_argument("--out", default="results/mps_compact_baseline.csv",
+    ap.add_argument("--logdir", default=None,
+                    help="default bench_runs/mps/logs, or bench_runs/mps_probe/logs "
+                         "under --probe.")
+    ap.add_argument("--out", default=None,
                     help="the committed 'one truth' results CSV (tracked in "
-                         "results/); rebuilt from the gitignored per-cell logs.")
+                         "results/); rebuilt from the gitignored per-cell logs. "
+                         "Default results/mps_compact_baseline.csv, or "
+                         "results/mps_compact_memory.csv under --probe.")
+    ap.add_argument("--probe", action="store_true",
+                    help="consolidate memory-probe logs (benchmark_mps.py "
+                         "--probe-iters) into a memory-only CSV instead.")
     ap.add_argument("--tol", type=float, default=1e-3)
     args = ap.parse_args()
 
+    args.logdir = args.logdir or (
+        "bench_runs/mps_probe/logs" if args.probe else "bench_runs/mps/logs")
+    args.out = args.out or (
+        "results/mps_compact_memory.csv" if args.probe
+        else "results/mps_compact_baseline.csv")
+
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     refs = bm.load_refs()
-    fields = ["instance", "solver", "gpu", "outcome", "objective", "ref",
-              "rel_err", "pass", "time_wall", "time_solve", "status", "detail"]
+    if args.probe:
+        fields = ["instance", "solver", "gpu", "outcome", "probe_iters",
+                  "mem_gb", "vram_gb", "time_wall", "status", "detail"]
+    else:
+        fields = ["instance", "solver", "gpu", "outcome", "objective", "ref",
+                  "rel_err", "pass", "time_wall", "time_solve", "mem_gb",
+                  "vram_gb", "status", "detail"]
     rows = []
+    wrong_mode = 0
     logs = sorted(f for f in os.listdir(args.logdir) if f.endswith(".log"))
     for fn in logs:
         stem = fn[:-4]
@@ -67,7 +108,33 @@ def main():
         if solver not in KNOWN_SOLVERS:
             sys.stderr.write(f"skip {fn}: unknown solver '{solver}'\n")
             continue
-        wall, rc, outcome, warn, body = parse_log(os.path.join(args.logdir, fn))
+        p = parse_log(os.path.join(args.logdir, fn))
+        wall, rc, outcome, warn, body = (p["wall"], p["rc"], p["outcome"],
+                                         p["warn"], p["body"])
+        # Keep the two populations apart no matter which directory they were found
+        # in: a probe row has no solution to score, a solve row has no cap to
+        # report, and silently mixing them is how a mid-barrier iterate ends up in
+        # a results table.
+        if bool(p["probe_iters"]) != args.probe:
+            wrong_mode += 1
+            continue
+        if args.probe:
+            if p["mem_gb"] == "":
+                detail = f"unmeasured (rc={rc})"
+            elif outcome != "ok":
+                # e.g. OOM-killed at the cgroup cap: the number is where the run
+                # DIED, a lower bound on what the solve needs -- not its footprint.
+                detail = f"peak at failure, not at completion (rc={rc})"
+            else:
+                detail = ""
+            rows.append({
+                "instance": inst, "solver": solver, "gpu": bm.CONFIGS[solver][1],
+                "outcome": outcome, "probe_iters": p["probe_iters"],
+                "mem_gb": p["mem_gb"], "vram_gb": p["vram_gb"],
+                "time_wall": "" if wall is None else f"{wall:.3f}",
+                "status": bm.parse_output(solver, body)[2], "detail": detail,
+            })
+            continue
         obj, tsolve, status = bm.parse_output(solver, body)
         # Swallowed-failure guards: a GPU backend can exit rc=0 after a VRAM OOM /
         # "fail to solve" and (cuOpt #33) may even hand back a garbage incumbent.
@@ -97,7 +164,8 @@ def main():
                "outcome": outcome, "objective": obj,
                "ref": "" if ref is None else ref, "rel_err": "", "pass": "",
                "time_wall": "" if wall is None else f"{wall:.3f}",
-               "time_solve": tsolve, "status": status,
+               "time_solve": tsolve, "mem_gb": p["mem_gb"],
+               "vram_gb": p["vram_gb"], "status": status,
                "detail": guard_detail or ""}
         if outcome != "ok" or obj is None:
             rec["detail"] = (rec["detail"] + "; " if rec["detail"] else "") + \
@@ -118,11 +186,23 @@ def main():
         w.writerows(rows)
 
     insts = sorted({r["instance"] for r in rows})
-    npass = sum(1 for r in rows if r["pass"] is True)
-    nerr = sum(1 for r in rows if r["outcome"] != "ok" or r["objective"] is None)
     print(f"Consolidated {len(rows)} cells across {len(insts)} instances -> {args.out}")
-    print(f"  pass={npass}  error/timeout={nerr}  "
-          f"other={len(rows) - npass - nerr}")
+    if args.probe:
+        nmem = sum(1 for r in rows if r["mem_gb"] != "")
+        print(f"  measured={nmem}  unmeasured={len(rows) - nmem}")
+    else:
+        npass = sum(1 for r in rows if r["pass"] is True)
+        nerr = sum(1 for r in rows
+                   if r["outcome"] != "ok" or r["objective"] is None)
+        nmem = sum(1 for r in rows if r["mem_gb"] != "")
+        print(f"  pass={npass}  error/timeout={nerr}  "
+              f"other={len(rows) - npass - nerr}")
+        print(f"  peak RSS measured on {nmem}/{len(rows)} cells "
+              f"(pre-header runs carry none; `--probe-iters` re-measures cheaply)")
+    if wrong_mode:
+        kind = "solve" if args.probe else "probe"
+        print(f"  skipped {wrong_mode} {kind} log(s) found in this logdir "
+              f"(wrong population for --probe={args.probe})")
     # Coverage matrix: which (instance x solver) cells are missing.
     have = {(r["instance"], r["solver"]) for r in rows}
     missing = [(i, s) for i in insts for s in KNOWN_SOLVERS if (i, s) not in have]
