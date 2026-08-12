@@ -191,6 +191,7 @@ add_executable(mcfcg_tests
     test/path_cg_test.cpp
     test/tree_cg_test.cpp
     test/reduced_cost_test.cpp
+    test/source_lp_test.cpp
     test/thread_pool_test.cpp
 )
 target_link_libraries(mcfcg_tests PRIVATE mcfcg GTest::gtest_main)

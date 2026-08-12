@@ -45,6 +45,28 @@ void append_source_column(SourceLP& lp, uint32_t base, uint32_t from, uint32_t t
 
 }  // namespace
 
+SourceLPSize source_lp_size(const Instance& inst) {
+    const auto& g = inst.graph;
+    SourceLPSize s;
+    for (uint32_t a : g.arcs()) {
+        if (inst.capacity[a] < INF) {
+            ++s.capacitated_arcs;
+        }
+        if (g.arc_source(a) == g.arc_target(a)) {
+            ++s.self_loop_arcs;
+        }
+    }
+    const uint64_t n_sources = inst.sources.size();
+    const uint64_t n_arcs = g.num_arcs();
+    s.cols = n_sources * n_arcs;
+    s.rows = n_sources * g.num_vertices() + s.capacitated_arcs;
+    // Mirrors append_source_column entry for entry: +1 at the tail and -1 at the
+    // head unless both land on the same row (self-loop -> cancels to nothing),
+    // plus one capacity entry per capacitated arc. Every source repeats it.
+    s.nnz = n_sources * (2 * (n_arcs - s.self_loop_arcs) + s.capacitated_arcs);
+    return s;
+}
+
 SourceLP build_source_lp(const Instance& inst) {
     const auto& g = inst.graph;
     const uint32_t n_sources = static_cast<uint32_t>(inst.sources.size());

@@ -305,15 +305,25 @@ int main(int argc, char* argv[]) {
             ceiling = master.slack_cost_ceiling();
             mode = master.slack_mode();
         }
+        // Compact source LP dimensions come from source_lp_size, which sizes the
+        // model without building it — so these columns are reported even for the
+        // instances --write-mps refuses as too large, which is exactly where a
+        // hand-derived formula would otherwise have to be trusted.
+        const mcfcg::SourceLPSize slp_size = mcfcg::source_lp_size(inst);
         std::printf(
-            "instance,formulation,vertices,arcs,commodities,sources,max_arc_cost,"
+            "instance,formulation,vertices,arcs,capacitated_arcs,self_loop_arcs,"
+            "commodities,sources,max_arc_cost,"
             "sum_arc_costs,max_src_demand_sum,total_demand,slack_cost_upper_bound,"
-            "slack_cost_ceiling,slack_mode\n");
-        std::printf("%s,%s,%u,%u,%zu,%zu,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%s\n", instance_path.c_str(),
-                    formulation.c_str(), inst.graph.num_vertices(), inst.graph.num_arcs(),
+            "slack_cost_ceiling,slack_mode,source_lp_cols,source_lp_rows,source_lp_nnz\n");
+        std::printf("%s,%s,%u,%u,%u,%u,%zu,%zu,%.6g,%.6g,%.6g,%.6g,%.6g,%.6g,%s,%llu,%llu,%llu\n",
+                    instance_path.c_str(), formulation.c_str(), inst.graph.num_vertices(),
+                    inst.graph.num_arcs(), slp_size.capacitated_arcs, slp_size.self_loop_arcs,
                     inst.commodities.size(), inst.sources.size(), max_arc, sum_arc_costs,
                     max_src_demand_sum, total_demand, ub_val, ceiling,
-                    mode == mcfcg::SlackMode::EdgeRows ? "EdgeRows" : "CommodityRows");
+                    mode == mcfcg::SlackMode::EdgeRows ? "EdgeRows" : "CommodityRows",
+                    static_cast<unsigned long long>(slp_size.cols),
+                    static_cast<unsigned long long>(slp_size.rows),
+                    static_cast<unsigned long long>(slp_size.nnz));
         return EXIT_SUCCESS;
     }
 

@@ -33,6 +33,28 @@ struct SourceLP {
     std::vector<double> value;        // size nnz
 };
 
+// Dimensions of the compact source LP, from one pass over the arcs and without
+// materializing it, so it also answers for instances too large to build.
+//
+// nnz is exact, not the 3*|S|*|E| bound build_source_lp guards on: a column
+// holds +1 at the tail and -1 at the head unless both land on the same row (a
+// self-loop, which cancels), plus a capacity entry only when the arc is
+// capacitated. Uncapacitated arcs (CommaLab's negative-capacity sentinel, read
+// as INF) have no capacity row; on intermodal instances they can be half the
+// arcs.
+struct SourceLPSize {
+    uint64_t cols = 0;  // |S| * |E|
+    uint64_t rows = 0;  // |S| * |V| + capacitated arcs
+    uint64_t nnz = 0;   // |S| * (2*(|E| - self-loops) + capacitated arcs)
+    uint32_t capacitated_arcs = 0;
+    uint32_t self_loop_arcs = 0;
+};
+
+// Size the compact source LP without building it. Never throws: it has no
+// 32-bit index limit to respect, so unlike build_source_lp it also answers for
+// instances the exporter refuses.
+SourceLPSize source_lp_size(const Instance& inst);
+
 // Build the compact source LP for an instance.
 SourceLP build_source_lp(const Instance& inst);
 
