@@ -22,6 +22,9 @@ Result tables pinned by this record
     results/cg_iterations.csv       per-iteration CG trace for those runs
     results/mps_compact_baseline.csv  direct (non-CG) barrier solves of the
                                     compact source LP
+    results/mps_compact_memory.csv  peak RSS and VRAM of those same 165
+                                    (instance, backend) cells, measured by an
+                                    iteration-capped probe — see section 2.1
 
 The two experiments do NOT share a solver stack. The CG benchmark links each
 vendor's library into `mcfcg_cli`; the compact baseline drives each vendor's
@@ -69,6 +72,17 @@ Pins results/mps_compact_baseline.csv: 165 cells = 33 instances x 5, run
 2026-08-03 to 2026-08-05 by scripts/benchmark_mps.py against `data/mps/*.mps.gz`
 (regenerable via scripts/write_mps.sh; gitignored, ~5.6 GB).
 
+One exception to that window: the five grid1 cells were re-measured on
+2026-08-11 while validating the memory instrumentation of section 2.1, which
+overwrote their logs. Because the CSV is rebuilt from the logs and never from a
+prior CSV, those five rows now carry the re-run's timings (all five moved, none
+by more than 0.05 s — e.g. copt-cpu time_wall 0.561 -> 0.563) and are the only
+baseline rows with a memory figure. Objectives, references and pass verdicts are
+byte-identical to the original sweep on all 165 rows; grid1 is the smallest
+instance in the suite and solves in under two seconds on every backend. Recorded
+here because a re-measured benchmark row should be a decision on the record, not
+a side effect of unrelated work.
+
 Unlike the CG logs, these logs capture each vendor's own startup banner, so
 four of the five versions here are recorded rather than inferred:
 
@@ -99,6 +113,59 @@ Barrier regime, deliberately NOT identical to section 1: crossover off and tol
 1e-4 as before, but presolve is left at each solver's default. A direct
 monolithic solve genuinely benefits from presolve, and forcing it off would
 handicap the baseline the CG results are compared against.
+
+
+2.1 Compact-model memory — iteration-capped probe
+--------------------------------------------------
+
+Pins results/mps_compact_memory.csv: the same 165 cells, run 2026-08-11 to
+2026-08-12 by `scripts/benchmark_mps.py --probe-iters 3` (instrumentation added
+in commit 97b289a). 164 cells carry a peak; 66 of them — the two GPU configs —
+also carry peak VRAM.
+
+These are NOT full solves. Each backend's barrier is capped at three iterations
+(highs `ipm_iteration_limit`, MOSEK `MSK_IPAR_INTPNT_MAX_ITERATIONS`, COPT
+`BarIterLimit`, cuOpt `--iteration-limit`), so the runs read the model,
+presolve, factor, iterate three times and stop. No objective is recorded, and
+the probe logs live in their own tree and consolidate through a separate mode so
+a capped iterate can never be scored as a solution.
+
+    Read every figure in this table as a LOWER BOUND on the full solve's peak.
+
+The justification for the cap is that a barrier's high-water mark is the
+symbolic plus numeric factorization of the normal equations, allocated on the
+first iteration and reused. Measured against full solves on grid7, planar300 and
+grid10 across all five backends, three iterations reach 0.95-1.00 of the
+full-solve peak (0.88-1.00 at one iteration; HiPO is the cell that needs three)
+for 1.5-7x less runtime, and peak VRAM to within 2%. That is the whole reason
+the table exists: a full-solve memory sweep costs days on the giants, most of it
+spent re-deriving failures already recorded in section 2.
+
+How the numbers are taken:
+
+    Host RSS   GNU `time -f %M`, wrapped INSIDE the systemd cgroup scope. The
+               guard runs with `OOMPolicy=continue`, without which systemd stops
+               the entire scope on a cgroup OOM event and kills the `time`
+               wrapper before it writes — losing the measurement on exactly the
+               runs worth measuring. With it, the kernel takes the multi-GB
+               solver and `time` survives to report the peak reached AT the
+               105 GiB cap. Nine cells report that cap; they need more than it,
+               how much more is not measured.
+    VRAM       Sampled from `nvidia-smi` per process group, so a desktop
+               session's usage is never folded in. Sampling is a floor: an
+               allocation that comes and goes inside one interval is invisible.
+               A blank vram_gb means unmeasured, never zero — a genuine zero
+               from a working query is recorded as 0.
+
+The one unmeasured cell is ChicagoRegional x highs: it ran past the solver-side
+limit, and the harness's own subprocess timeout killed the process group before
+`time` could write. A cgroup OOM is recoverable this way; a harness kill is not.
+
+The 2026-08-03..05 baseline sweep of section 2 predates this instrumentation
+entirely, so its logs carry no memory and mem_gb is blank for all but the five
+grid1 rows noted above. Unlike objectives and timings, memory cannot be
+recovered by re-parsing a log — an unmeasured cell can only be re-run, which is
+what this table does.
 
 
 3. Benchmark host
