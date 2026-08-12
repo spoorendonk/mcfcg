@@ -149,7 +149,7 @@ How the numbers are taken:
                wrapper before it writes — losing the measurement on exactly the
                runs worth measuring. With it, the kernel takes the multi-GB
                solver and `time` survives to report the peak reached AT the
-               105 GiB cap. Nine cells report that cap; they need more than it,
+               105 GiB cap. Ten cells report that cap; they need more than it,
                how much more is not measured.
     VRAM       Sampled from `nvidia-smi` per process group, so a desktop
                session's usage is never folded in. Sampling is a floor: an
