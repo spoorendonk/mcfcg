@@ -176,6 +176,36 @@ def format_peak_rss_headers(peak_rss_kb, peak_rss_source):
             f"# peak_rss_source: {peak_rss_source}\n")
 
 
+def rewrite_header_block(log_text, drop_prefixes, add_block):
+    """Return `log_text` with header lines re-stated: drop, then append.
+
+    Header lines starting with any of `drop_prefixes` are removed and `add_block`
+    (already-serialized `# ...` lines, e.g. from format_peak_rss_headers) is
+    appended at the end of the leading `#` block, before the `# ===` marker. The
+    body is returned untouched.
+
+    Shared by every tool that adds a measurement to a log after the fact
+    (backfill_log_memory.py, inject_probe_memory.py) so the header block has
+    exactly one rewriter, next to the writer whose format it has to match. Only
+    the ORDER within the block can differ from a live write — nothing reads
+    position, since iter_header_lines scans the whole block.
+
+    A log is the only surviving record of a run that costs hours to reproduce, so
+    callers must persist the result by write-then-rename, never in place.
+    """
+    lines = log_text.splitlines(keepends=True)
+    kept, i = [], 0
+    while (i < len(lines) and lines[i].startswith("#")
+           and not lines[i].startswith(HEADER_END_PREFIX)):
+        if not any(lines[i].startswith(p) for p in drop_prefixes):
+            kept.append(lines[i])
+        i += 1
+    if kept and not kept[-1].endswith("\n"):
+        kept[-1] += "\n"  # truncated log: never fuse our header onto its last line
+    kept.append(add_block)
+    return "".join(kept) + "".join(lines[i:])
+
+
 def write_log(log_path, cmd, stdout, stderr, returncode, outcome, peak_rss_kb=None,
               peak_rss_source="measured"):
     """Persist a run's full console output for later forensic reconstruction.

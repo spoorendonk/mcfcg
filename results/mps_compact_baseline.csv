@@ -1,166 +1,176 @@
-instance,solver,gpu,outcome,objective,ref,rel_err,pass,time_wall,time_solve,mem_gb,vram_gb,status,detail
-Austin,copt-cpu,cpu,ok,5438888.15,5438762.784,2.305046294153421e-05,True,7267.274,7235.62,,,Status: Timeout,
-Austin,copt-gpu,gpu,error,,5438762.784,,,769.374,,,,,COPT failed to solve (GPU memory issue / infeasible); rc=0 outcome=error
-Austin,cuopt,gpu,error,,5438762.784,,,118.764,39.93,,,,cuOpt #33 VRAM-OOM / numerical error; rc=0 outcome=error
-Austin,highs,cpu,error,,5438762.784,,,1425.889,1334.98,,,Model status        : Not Set,rc=255 outcome=error
-Austin,mosek,cpu,error,,5438762.784,,,424.009,,,,,rc=-9 outcome=error
-Barcelona,copt-cpu,cpu,ok,243.505729,243.506,1.1129089221535067e-06,True,11.992,11.09,,,Status: Optimal,
-Barcelona,copt-gpu,gpu,ok,243.505729,243.506,1.1129089221535067e-06,True,6.466,5.2,,,Status: Optimal,
-Barcelona,cuopt,gpu,ok,243.518174,243.506,4.999466132246217e-05,True,17.968,16.26,,,Optimal,
-Barcelona,highs,cpu,ok,243.50572941,243.506,1.111225185472745e-06,True,558.529,557.41,,,Model status        : Optimal,
-Barcelona,mosek,cpu,ok,243.50616515,243.506,6.782173744656173e-07,True,24.650,23.41,,,Interior-point solution summary,
-BerlinCenter,copt-cpu,cpu,ok,44812063.9,27529204.544,0.6278008988010082,False,7379.765,7341.78,,,Status: Timeout,
-BerlinCenter,copt-gpu,gpu,error,,27529204.544,,,1111.518,,,,,COPT failed to solve (GPU memory issue / infeasible); rc=0 outcome=error
-BerlinCenter,cuopt,gpu,error,,27529204.544,,,147.162,51.27,,,,cuOpt #33 VRAM-OOM / numerical error; rc=0 outcome=error
-BerlinCenter,highs,cpu,error,,27529204.544,,,1450.901,1341.78,,,Model status        : Not Set,rc=255 outcome=error
-BerlinCenter,mosek,cpu,error,,27529204.544,,,266.822,,,,,rc=-9 outcome=error
-Birmingham,copt-cpu,cpu,ok,321591.811,215645.118,0.4913011432051061,False,7424.835,7375.9,,,Status: Timeout,
-Birmingham,copt-gpu,gpu,error,,215645.118,,,1275.682,,,,,COPT failed to solve (GPU memory issue / infeasible); rc=0 outcome=error
-Birmingham,cuopt,gpu,ok,,215645.118,,,162.060,,,,,rc=0 outcome=ok
-Birmingham,highs,cpu,error,,215645.118,,,2011.767,1867.57,,,Model status        : Not Set,rc=255 outcome=error
-Birmingham,mosek,cpu,error,,215645.118,,,357.078,,,,,rc=-9 outcome=error
-ChicagoRegional,copt-cpu,cpu,error,,5513077.944,,,3712.536,,,,,rc=-9 outcome=error
-ChicagoRegional,copt-gpu,gpu,error,,5513077.944,,,2101.720,,,,,rc=-9 outcome=error
-ChicagoRegional,cuopt,gpu,ok,,5513077.944,,,272.407,,,,,rc=0 outcome=ok
-ChicagoRegional,highs,cpu,error,0.0,5513077.944,,,8303.720,7978.14,,,Model status        : Time limit reached,rc=1 outcome=error
-ChicagoRegional,mosek,cpu,error,,5513077.944,,,607.608,,,,,rc=-9 outcome=error
-ChicagoSketch,copt-cpu,cpu,ok,6705856.16,6705856.428,3.996506680898212e-08,True,40.165,38.15,,,Status: Optimal,
-ChicagoSketch,copt-gpu,gpu,ok,6705856.17,6705856.428,3.847383300702834e-08,True,19.610,17.27,,,Status: Optimal,
-ChicagoSketch,cuopt,gpu,ok,6708578.33,6705856.428,0.0004058992358730781,True,129.758,124.69,,,Optimal,
-ChicagoSketch,highs,cpu,ok,6705856.1655,6705856.428,3.914488820401935e-08,True,853.407,848.83,,,Model status        : Optimal,
-ChicagoSketch,mosek,cpu,ok,6705856.4277,6705856.428,4.4737077944320966e-11,True,39.264,34.98,,,Interior-point solution summary,
-Philadelphia,copt-cpu,cpu,error,,25577590.145,,,2013.765,,,,,rc=-9 outcome=error
-Philadelphia,copt-gpu,gpu,error,,25577590.145,,,877.796,,,,,rc=-9 outcome=error
-Philadelphia,cuopt,gpu,ok,,25577590.145,,,239.999,,,,,rc=0 outcome=ok
-Philadelphia,highs,cpu,error,,25577590.145,,,4461.499,4181.16,,,Model status        : Not Set,rc=255 outcome=error
-Philadelphia,mosek,cpu,error,,25577590.145,,,521.310,,,,,rc=-9 outcome=error
-Winnipeg,copt-cpu,cpu,ok,420.162002,420.162,4.760068723374521e-09,True,15.625,14.57,,,Status: Optimal,
-Winnipeg,copt-gpu,gpu,ok,420.162002,420.162,4.760068723374521e-09,True,7.937,6.52,,,Status: Optimal,
-Winnipeg,cuopt,gpu,ok,420.177654,420.162,3.7257057992013724e-05,True,19.221,17.08,,,Optimal,
-Winnipeg,highs,cpu,ok,420.16199294,420.162,1.6803042571865773e-08,True,437.866,436.27,,,Model status        : Optimal,
-Winnipeg,mosek,cpu,ok,420.16200025,420.162,5.950086580664604e-10,True,21.158,19.54,,,Interior-point solution summary,
-grid1,copt-cpu,cpu,ok,827319.004,827319.0,4.834894348079957e-09,True,0.563,0.03,0.016,,Status: Optimal,
-grid1,copt-gpu,gpu,ok,827319.004,827319.0,4.834894348079957e-09,True,1.028,0.2,0.415,0.246,Status: Optimal,
-grid1,cuopt,gpu,ok,827319.38,827319.0,4.5931496799258404e-07,True,0.808,0.28,0.572,0.41,Optimal,
-grid1,highs,cpu,ok,827319.00056,827319.0,6.768851637027309e-10,True,0.138,0.09,0.016,,Model status        : Optimal,
-grid1,mosek,cpu,ok,827313.55591,827319.0,6.580400063342565e-06,True,0.058,0.02,0.022,,Interior-point solution summary,
-grid10,copt-cpu,cpu,ok,164110897.0,164110897.177,1.0785388978820892e-09,True,62.516,59.96,,,Status: Optimal,
-grid10,copt-gpu,gpu,ok,164110898.0,164110897.177,5.014901679201961e-09,True,29.619,26.71,,,Status: Optimal,
-grid10,cuopt,gpu,ok,164184444.0,164110897.177,0.00044815319558390277,True,263.613,257.23,,,Optimal,
-grid10,highs,cpu,ok,164110897.9,164110897.177,4.405557657813292e-09,True,1075.212,1067.89,,,Model status        : Optimal,
-grid10,mosek,cpu,ok,164110904.68,164110897.177,4.57190847777071e-08,True,56.910,52.02,,,Interior-point solution summary,
-grid11,copt-cpu,cpu,ok,329258290.0,329258288.49,4.5860652358615335e-09,True,65.676,63.06,,,Status: Optimal,
-grid11,copt-gpu,gpu,ok,329258289.0,329258288.49,1.5489359214073246e-09,True,27.921,25.0,,,Status: Optimal,
-grid11,cuopt,gpu,ok,329315032.0,329258288.49,0.0001723373776259966,True,291.294,284.59,,,Optimal,
-grid11,highs,cpu,ok,329258288.31,329258288.49,5.466832983249993e-10,True,1151.970,1144.36,,,Model status        : Optimal,
-grid11,mosek,cpu,ok,329258337.41,329258288.49,1.485763661137875e-07,True,58.960,53.77,,,Interior-point solution summary,
-grid12,copt-cpu,cpu,ok,577186509.0,577186503.577,9.395576550140229e-09,True,283.817,278.93,,,Status: Optimal,
-grid12,copt-gpu,gpu,ok,577186507.0,577186503.577,5.930492062534589e-09,True,85.241,79.96,,,Status: Optimal,
-grid12,cuopt,gpu,ok,577187350.0,577186503.577,1.4664636035883119e-06,True,208.042,194.6,,,Optimal,
-grid12,highs,cpu,ok,577186503.08,577186503.577,8.610734588198186e-10,True,3372.127,3360.26,,,Model status        : Optimal,
-grid12,mosek,cpu,ok,577186617.66,577186503.577,1.976536167039248e-07,True,174.024,163.69,,,Interior-point solution summary,
-grid13,copt-cpu,cpu,ok,1159320960.0,1159320960.713,6.150152402051816e-10,True,234.568,229.62,,,Status: Optimal,
-grid13,copt-gpu,gpu,ok,1159320960.0,1159320960.713,6.150152402051816e-10,True,83.233,78.07,,,Status: Optimal,
-grid13,cuopt,gpu,ok,1159627660.0,1159320960.713,0.00026455079947085243,True,202.947,189.39,,,Optimal,
-grid13,highs,cpu,ok,1159320949.9,1159320960.713,9.32701152673908e-09,True,4175.583,4163.53,,,Model status        : Optimal,
-grid13,mosek,cpu,ok,1159321342.6,1159320960.713,3.2940575801427626e-07,True,200.717,190.38,,,Interior-point solution summary,
-grid14,copt-cpu,cpu,ok,1802672990.0,1802673008.461,1.0240903302495484e-08,True,582.241,573.6,,,Status: Optimal,
-grid14,copt-gpu,gpu,ok,1802672990.0,1802673008.461,1.0240903302495484e-08,True,200.063,191.12,,,Status: Optimal,
-grid14,cuopt,gpu,ok,1802672716.628,1802673008.461,1.6188903843067698e-07,True,7218.823,7202.75,,,time limit,
-grid14,highs,cpu,error,,1802673008.461,,,221.691,,,,,rc=-9 outcome=error
-grid14,mosek,cpu,ok,1802674223.3,1802673008.461,6.739097963328334e-07,True,460.234,440.32,,,Interior-point solution summary,
-grid15,copt-cpu,cpu,ok,3593521780.0,3593521779.918,2.281877883857705e-11,True,595.321,586.55,,,Status: Optimal,
-grid15,copt-gpu,gpu,ok,3593521780.0,3593521779.918,2.281877883857705e-11,True,203.151,194.24,,,Status: Optimal,
-grid15,cuopt,gpu,ok,3593518599.784,3593521779.918,8.84963051587217e-07,True,7219.116,7202.9,,,time limit,
-grid15,highs,cpu,error,,3593521779.918,,,220.597,,,,,rc=-9 outcome=error
-grid15,mosek,cpu,ok,3593523291.5,3593521779.918,4.2064083435532703e-07,True,522.654,502.08,,,Interior-point solution summary,
-grid2,copt-cpu,cpu,ok,1705378.0,1705378.0,0.0,True,0.562,0.04,,,Status: Optimal,
-grid2,copt-gpu,gpu,ok,1705378.0,1705378.0,0.0,True,1.074,0.2,,,Status: Optimal,
-grid2,cuopt,gpu,ok,1705378.34,1705378.0,1.993692894383644e-07,True,0.768,0.25,,,Optimal,
-grid2,highs,cpu,ok,1705378.0021,1705378.0,1.231398508202677e-09,True,0.172,0.12,,,Model status        : Optimal,
-grid2,mosek,cpu,ok,1705375.5586,1705378.0,1.4315887738051046e-06,True,0.063,0.02,,,Interior-point solution summary,
-grid3,copt-cpu,cpu,ok,1524642.0,1524642.0,0.0,True,0.869,0.31,,,Status: Optimal,
-grid3,copt-gpu,gpu,ok,1524642.0,1524642.0,0.0,True,1.197,0.31,,,Status: Optimal,
-grid3,cuopt,gpu,ok,1524656.52,1524642.0,9.52354716715047e-06,True,1.072,0.48,,,Optimal,
-grid3,highs,cpu,ok,1524642.001,1524642.0,6.558916329749078e-10,True,2.816,2.7,,,Model status        : Optimal,
-grid3,mosek,cpu,ok,1524641.9998,1524642.0,1.3117826551030892e-10,True,0.356,0.27,,,Interior-point solution summary,
-grid4,copt-cpu,cpu,ok,3031695.02,3031695.0,6.596969688120491e-09,True,1.071,0.51,,,Status: Optimal,
-grid4,copt-gpu,gpu,ok,3031695.02,3031695.0,6.596969688120491e-09,True,1.344,0.4,,,Status: Optimal,
-grid4,cuopt,gpu,ok,3031699.4,3031695.0,1.451333330004129e-06,True,1.228,0.65,,,Optimal,
-grid4,highs,cpu,ok,3031695.0012,3031695.0,3.9581812292011495e-10,True,3.921,3.78,,,Model status        : Optimal,
-grid4,mosek,cpu,ok,3031694.9987,3031695.0,4.2880306889523767e-10,True,0.712,0.59,,,Interior-point solution summary,
-grid5,copt-cpu,cpu,ok,5049688.5,5049688.5,0.0,True,2.224,1.6,,,Status: Optimal,
-grid5,copt-gpu,gpu,ok,5049688.5,5049688.5,0.0,True,1.862,0.83,,,Status: Optimal,
-grid5,cuopt,gpu,ok,5049708.47,5049688.5,3.9546993838806555e-06,True,2.249,1.38,,,Optimal,
-grid5,highs,cpu,ok,5049688.5055,5049688.5,1.0891760888216526e-09,True,14.405,14.14,,,Model status        : Optimal,
-grid5,mosek,cpu,ok,5049686.1155,5049688.5,4.7220734500643477e-07,True,1.887,1.59,,,Interior-point solution summary,
-grid6,copt-cpu,cpu,ok,10401782.0,10401782.0,0.0,True,3.459,2.78,,,Status: Optimal,
-grid6,copt-gpu,gpu,ok,10401782.0,10401782.0,0.0,True,2.299,1.26,,,Status: Optimal,
-grid6,cuopt,gpu,ok,10403908.2,10401782.0,0.0002044072832904261,True,3.807,2.83,,,Optimal,
-grid6,highs,cpu,ok,10401782.04,10401782.0,3.845494849433523e-09,True,26.180,25.75,,,Model status        : Optimal,
-grid6,mosek,cpu,ok,10401779.75,10401782.0,2.163090901155206e-07,True,2.881,2.43,,,Interior-point solution summary,
-grid7,copt-cpu,cpu,ok,25864036.6,25864036.571,1.1212481397177372e-09,True,11.079,10.01,,,Status: Optimal,
-grid7,copt-gpu,gpu,ok,25864036.6,25864036.571,1.1212481397177372e-09,True,6.077,4.7,,,Status: Optimal,
-grid7,cuopt,gpu,ok,25868545.4,25864036.571,0.00017432812498631504,True,23.912,21.93,,,Optimal,
-grid7,highs,cpu,ok,25864036.637,25864036.571,2.55180584288125e-09,True,155.505,153.87,,,Model status        : Optimal,
-grid7,mosek,cpu,ok,25864037.136,25864036.571,2.1845004734280715e-08,True,12.283,10.86,,,Interior-point solution summary,
-grid8,copt-cpu,cpu,ok,41711156.8,41711150.624,1.4806592258072937e-07,True,106.812,105.11,,,Status: Imprecise,
-grid8,copt-gpu,gpu,ok,41711151.0,41711150.624,9.014376165643652e-09,True,19.125,17.08,,,Status: Optimal,
-grid8,cuopt,gpu,ok,41724759.9,41711150.624,0.00032627428868313104,True,130.359,126.59,,,Optimal,
-grid8,highs,cpu,ok,41711150.689,41711150.624,1.5583364182956568e-09,True,495.785,491.6,,,Model status        : Optimal,
-grid8,mosek,cpu,ok,41711152.169,41711150.624,3.7040455098334506e-08,True,102.594,99.7,,,Interior-point solution summary,
-grid9,copt-cpu,cpu,ok,82652982.3,82652982.047,3.0609904798673325e-09,True,121.656,119.49,,,Status: Optimal,
-grid9,copt-gpu,gpu,ok,82652982.0,82652982.047,5.686425907117179e-10,True,24.790,22.32,,,Status: Optimal,
-grid9,cuopt,gpu,ok,82690651.6,82652982.047,0.00045575552226981584,True,145.050,139.96,,,Optimal,
-grid9,highs,cpu,ok,82652982.238,82652982.047,2.3108664068981974e-09,True,816.085,810.47,,,Model status        : Optimal,
-grid9,mosek,cpu,ok,82652994.233,82652982.047,1.4743569666464185e-07,True,48.000,43.84,,,Interior-point solution summary,
-planar100,copt-cpu,cpu,ok,231339582.0,231339581.854,6.311068632706979e-10,True,1.741,1.13,,,Status: Optimal,
-planar100,copt-gpu,gpu,ok,231339582.0,231339581.854,6.311068632706979e-10,True,1.634,0.66,,,Status: Optimal,
-planar100,cuopt,gpu,ok,231346657.0,231339581.854,3.058337852647727e-05,True,1.932,1.19,,,Optimal,
-planar100,highs,cpu,ok,231339582.74,231339581.854,3.829867765344785e-09,True,13.549,13.3,,,Model status        : Optimal,
-planar100,mosek,cpu,ok,231339581.85,231339581.854,1.729063428823919e-11,True,1.275,1.05,,,Interior-point solution summary,
-planar1000,copt-cpu,cpu,ok,3449610930.0,3449610922.073,2.297940325691205e-09,True,442.632,434.76,,,Status: Optimal,
-planar1000,copt-gpu,gpu,ok,3449610940.0,3449610922.073,5.196817974765503e-09,True,261.651,253.46,,,Status: Optimal,
-planar1000,cuopt,gpu,ok,3450109170.0,3449610922.073,0.0001444359779278035,True,744.877,723.35,,,Optimal,
-planar1000,highs,cpu,error,0.0,3449610922.073,,,7426.419,7407.26,,,Model status        : Time limit reached,rc=1 outcome=error
-planar1000,mosek,cpu,ok,3449610305.0,3449610922.073,1.7888191274145243e-07,True,438.487,419.65,,,Interior-point solution summary,
-planar150,copt-cpu,cpu,ok,548087093.0,548087088.987,7.321829125479137e-09,True,3.802,3.11,,,Status: Optimal,
-planar150,copt-gpu,gpu,ok,548087089.0,548087088.987,2.3718879180531366e-11,True,2.466,1.4,,,Status: Optimal,
-planar150,cuopt,gpu,ok,548098889.0,548087088.987,2.1529448945460065e-05,True,3.341,2.41,,,Optimal,
-planar150,highs,cpu,ok,548087089.12,548087088.987,2.426621952695149e-10,True,64.597,64.08,,,Model status        : Optimal,
-planar150,mosek,cpu,ok,548087016.53,548087088.987,1.321997935603346e-07,True,5.113,4.63,,,Interior-point solution summary,
-planar2500,copt-cpu,cpu,ok,12694116800.0,12662328108.326,0.002510493441810074,False,7289.748,7247.97,,,Status: Timeout,
-planar2500,copt-gpu,gpu,error,,12662328108.326,,,442.071,,,,,COPT failed to solve (GPU memory issue / infeasible); rc=0 outcome=error
-planar2500,cuopt,gpu,ok,,12662328108.326,,,130.007,,,,,rc=0 outcome=ok
-planar2500,highs,cpu,error,,12662328108.326,,,2773.022,2645.88,,,Model status        : Not Set,rc=255 outcome=error
-planar2500,mosek,cpu,error,,12662328108.326,,,264.503,,,,,rc=-9 outcome=error
-planar30,copt-cpu,cpu,ok,44350624.0,44350624.0,0.0,True,0.608,0.06,,,Status: Optimal,
-planar30,copt-gpu,gpu,ok,44350624.0,44350624.0,0.0,True,1.094,0.22,,,Status: Optimal,
-planar30,cuopt,gpu,ok,44350684.8,44350624.0,1.3708939021245738e-06,True,0.867,0.29,,,Optimal,
-planar30,highs,cpu,ok,44350624.027,44350624.0,6.087851788285938e-10,True,0.389,0.33,,,Model status        : Optimal,
-planar30,mosek,cpu,ok,44350570.568,44350624.0,1.2047632068559963e-06,True,0.100,0.04,,,Interior-point solution summary,
-planar300,copt-cpu,cpu,ok,689979138.0,689979137.991,1.3043791091162999e-11,True,13.936,12.71,,,Status: Optimal,
-planar300,copt-gpu,gpu,ok,689979138.0,689979137.991,1.3043791091162999e-11,True,7.886,6.24,,,Status: Optimal,
-planar300,cuopt,gpu,ok,690046158.0,689979137.991,9.713338463404081e-05,True,17.514,15.07,,,Optimal,
-planar300,highs,cpu,ok,689979139.27,689979137.991,1.8536791248265422e-09,True,326.174,324.04,,,Model status        : Optimal,
-planar300,mosek,cpu,ok,689978211.71,689979137.991,1.3424768214226819e-06,True,25.744,23.9,,,Interior-point solution summary,
-planar50,copt-cpu,cpu,ok,122199689.0,122199689.0,0.0,True,0.780,0.23,,,Status: Optimal,
-planar50,copt-gpu,gpu,ok,122199689.0,122199689.0,0.0,True,1.225,0.31,,,Status: Optimal,
-planar50,cuopt,gpu,ok,122200527.0,122199689.0,6.857627927350945e-06,True,1.076,0.46,,,Optimal,
-planar50,highs,cpu,ok,122199689.25,122199689.0,2.0458317205700908e-09,True,1.704,1.6,,,Model status        : Optimal,
-planar50,mosek,cpu,ok,122199437.16,122199689.0,2.0608890420627527e-06,True,0.264,0.18,,,Interior-point solution summary,
-planar500,copt-cpu,cpu,ok,481982340.0,481982340.002,4.149476204429312e-12,True,66.113,63.57,,,Status: Optimal,
-planar500,copt-gpu,gpu,ok,481982340.0,481982340.002,4.149476204429312e-12,True,29.253,26.43,,,Status: Optimal,
-planar500,cuopt,gpu,ok,482024893.0,481982340.002,8.828746298017719e-05,True,122.833,116.7,,,Optimal,
-planar500,highs,cpu,ok,481982353.99,481982340.002,2.9021810291281434e-08,True,1763.521,1757.64,,,Model status        : Optimal,
-planar500,mosek,cpu,ok,481982367.39,481982340.002,5.682365874926132e-08,True,70.308,65.47,,,Interior-point solution summary,
-planar80,copt-cpu,cpu,ok,182438134.0,182438133.402,3.277823439843767e-09,True,1.232,0.65,,,Status: Optimal,
-planar80,copt-gpu,gpu,ok,182438134.0,182438133.402,3.277823439843767e-09,True,1.456,0.52,,,Status: Optimal,
-planar80,cuopt,gpu,ok,182442357.0,182438133.402,2.315085076365775e-05,True,1.513,0.85,,,Optimal,
-planar80,highs,cpu,ok,182438134.03,182438133.402,3.442262752133749e-09,True,9.280,9.1,,,Model status        : Optimal,
-planar80,mosek,cpu,ok,182438133.4,182438133.402,1.0962642600101933e-11,True,0.798,0.64,,,Interior-point solution summary,
-planar800,copt-cpu,cpu,ok,1167371390.0,1167371383.098,5.91242859842275e-09,True,220.933,215.48,,,Status: Optimal,
-planar800,copt-gpu,gpu,ok,1167371380.0,1167371383.098,2.6538255900787225e-09,True,127.480,121.81,,,Status: Optimal,
-planar800,cuopt,gpu,ok,1167541730.0,1167371383.098,0.00014592348627553251,True,403.487,388.84,,,Optimal,
-planar800,highs,cpu,ok,1167371386.5,1167371383.098,2.914239632447235e-09,True,6603.981,6588.06,,,Model status        : Optimal,
-planar800,mosek,cpu,ok,1167373320.6,1167371383.098,1.659713462148823e-06,True,238.339,227.03,,,Interior-point solution summary,
+instance,solver,gpu,outcome,objective,ref,rel_err,pass,time_wall,time_solve,mem_gb,vram_gb,mem_source,status,detail
+Austin,copt-cpu,cpu,ok,5438888.15,5438762.784,2.305046294153421e-05,True,7267.274,7235.62,41.262,,probe3:bench_runs/mps_probe/logs/Austin__copt-cpu.log,Status: Timeout,
+Austin,copt-gpu,gpu,error,,5438762.784,,,769.374,,28.252,0.244,probe3-partial:bench_runs/mps_probe/logs/Austin__copt-gpu.log,,COPT failed to solve (GPU memory issue / infeasible); rc=0 outcome=error
+Austin,cuopt,gpu,error,,5438762.784,,,118.764,39.93,21.828,14.723,probe3-partial:bench_runs/mps_probe/logs/Austin__cuopt.log,,cuOpt #33 VRAM-OOM / numerical error; rc=0 outcome=error
+Austin,highs,cpu,error,,5438762.784,,,1425.889,1334.98,24.597,,probe3-partial:bench_runs/mps_probe/logs/Austin__highs.log,Model status        : Not Set,rc=255 outcome=error
+Austin,mosek,cpu,error,,5438762.784,,,424.009,,104.793,,probe3-partial:bench_runs/mps_probe/logs/Austin__mosek.log,,rc=-9 outcome=error
+BUS-2632-0,copt-cpu,cpu,error,,,,,636.997,,60.185,,measured,,"COPT never read the model (readmps failed); peak RSS is the reader's, not a solve's; rc=0 outcome=error"
+BUS-2632-0,copt-gpu,gpu,error,,,,,636.511,,60.186,0.0,measured,,"COPT never read the model (readmps failed); peak RSS is the reader's, not a solve's; rc=0 outcome=error"
+BUS-2632-0,cuopt,gpu,error,,,,,213.441,,104.84,0.217,measured,,rc=137 outcome=error
+BUS-2632-0,highs,cpu,error,,,,,1773.938,,104.779,,measured,,rc=137 outcome=error
+BUS-2632-0,mosek,cpu,error,,,,,659.110,,104.795,,measured,,rc=137 outcome=error
+Barcelona,copt-cpu,cpu,ok,243.505729,243.506,1.1129089221535067e-06,True,11.992,11.09,0.655,,probe3:bench_runs/mps_probe/logs/Barcelona__copt-cpu.log,Status: Optimal,
+Barcelona,copt-gpu,gpu,ok,243.505729,243.506,1.1129089221535067e-06,True,6.466,5.2,0.802,0.469,probe3:bench_runs/mps_probe/logs/Barcelona__copt-gpu.log,Status: Optimal,
+Barcelona,cuopt,gpu,ok,243.518174,243.506,4.999466132246217e-05,True,17.968,16.26,1.068,1.225,probe3:bench_runs/mps_probe/logs/Barcelona__cuopt.log,Optimal,
+Barcelona,highs,cpu,ok,243.50572941,243.506,1.111225185472745e-06,True,558.529,557.41,1.675,,probe3:bench_runs/mps_probe/logs/Barcelona__highs.log,Model status        : Optimal,
+Barcelona,mosek,cpu,ok,243.50616515,243.506,6.782173744656173e-07,True,24.650,23.41,1.747,,probe3:bench_runs/mps_probe/logs/Barcelona__mosek.log,Interior-point solution summary,
+BerlinCenter,copt-cpu,cpu,ok,44812063.9,27529204.544,0.6278008988010082,False,7379.765,7341.78,51.03,,probe3:bench_runs/mps_probe/logs/BerlinCenter__copt-cpu.log,Status: Timeout,
+BerlinCenter,copt-gpu,gpu,error,,27529204.544,,,1111.518,,31.471,0.244,probe3-partial:bench_runs/mps_probe/logs/BerlinCenter__copt-gpu.log,,COPT failed to solve (GPU memory issue / infeasible); rc=0 outcome=error
+BerlinCenter,cuopt,gpu,error,,27529204.544,,,147.162,51.27,24.23,14.723,probe3-partial:bench_runs/mps_probe/logs/BerlinCenter__cuopt.log,,cuOpt #33 VRAM-OOM / numerical error; rc=0 outcome=error
+BerlinCenter,highs,cpu,error,,27529204.544,,,1450.901,1341.78,29.098,,probe3-partial:bench_runs/mps_probe/logs/BerlinCenter__highs.log,Model status        : Not Set,rc=255 outcome=error
+BerlinCenter,mosek,cpu,error,,27529204.544,,,266.822,,104.792,,probe3-partial:bench_runs/mps_probe/logs/BerlinCenter__mosek.log,,rc=-9 outcome=error
+Birmingham,copt-cpu,cpu,ok,321591.811,215645.118,0.4913011432051061,False,7424.835,7375.9,67.389,,probe3:bench_runs/mps_probe/logs/Birmingham__copt-cpu.log,Status: Timeout,
+Birmingham,copt-gpu,gpu,error,,215645.118,,,1275.682,,39.818,0.244,probe3-partial:bench_runs/mps_probe/logs/Birmingham__copt-gpu.log,,COPT failed to solve (GPU memory issue / infeasible); rc=0 outcome=error
+Birmingham,cuopt,gpu,ok,,215645.118,,,162.060,,31.092,14.723,probe3-partial:bench_runs/mps_probe/logs/Birmingham__cuopt.log,,rc=0 outcome=ok
+Birmingham,highs,cpu,error,,215645.118,,,2011.767,1867.57,35.841,,probe3-partial:bench_runs/mps_probe/logs/Birmingham__highs.log,Model status        : Not Set,rc=255 outcome=error
+Birmingham,mosek,cpu,error,,215645.118,,,357.078,,104.793,,probe3-partial:bench_runs/mps_probe/logs/Birmingham__mosek.log,,rc=-9 outcome=error
+ChicagoRegional,copt-cpu,cpu,error,,5513077.944,,,3712.536,,104.798,,probe3-partial:bench_runs/mps_probe/logs/ChicagoRegional__copt-cpu.log,,rc=-9 outcome=error
+ChicagoRegional,copt-gpu,gpu,error,,5513077.944,,,2101.720,,76.874,0.244,probe3-partial:bench_runs/mps_probe/logs/ChicagoRegional__copt-gpu.log,,rc=-9 outcome=error
+ChicagoRegional,cuopt,gpu,ok,,5513077.944,,,272.407,,31.036,14.721,probe3:bench_runs/mps_probe/logs/ChicagoRegional__cuopt.log,,rc=0 outcome=ok
+ChicagoRegional,highs,cpu,error,0.0,5513077.944,,,8303.720,7978.14,,,,Model status        : Time limit reached,rc=1 outcome=error
+ChicagoRegional,mosek,cpu,error,,5513077.944,,,607.608,,104.793,,probe3-partial:bench_runs/mps_probe/logs/ChicagoRegional__mosek.log,,rc=-9 outcome=error
+ChicagoSketch,copt-cpu,cpu,ok,6705856.16,6705856.428,3.996506680898212e-08,True,40.165,38.15,1.677,,probe3:bench_runs/mps_probe/logs/ChicagoSketch__copt-cpu.log,Status: Optimal,
+ChicagoSketch,copt-gpu,gpu,ok,6705856.17,6705856.428,3.847383300702834e-08,True,19.610,17.27,1.647,0.777,probe3:bench_runs/mps_probe/logs/ChicagoSketch__copt-gpu.log,Status: Optimal,
+ChicagoSketch,cuopt,gpu,ok,6708578.33,6705856.428,0.0004058992358730781,True,129.758,124.69,1.924,2.725,probe3:bench_runs/mps_probe/logs/ChicagoSketch__cuopt.log,Optimal,
+ChicagoSketch,highs,cpu,ok,6705856.1655,6705856.428,3.914488820401935e-08,True,853.407,848.83,5.489,,probe3:bench_runs/mps_probe/logs/ChicagoSketch__highs.log,Model status        : Optimal,
+ChicagoSketch,mosek,cpu,ok,6705856.4277,6705856.428,4.4737077944320966e-11,True,39.264,34.98,2.214,,probe3:bench_runs/mps_probe/logs/ChicagoSketch__mosek.log,Interior-point solution summary,
+Philadelphia,copt-cpu,cpu,error,,25577590.145,,,2013.765,,104.799,,probe3-partial:bench_runs/mps_probe/logs/Philadelphia__copt-cpu.log,,rc=-9 outcome=error
+Philadelphia,copt-gpu,gpu,error,,25577590.145,,,877.796,,78.397,0.244,probe3-partial:bench_runs/mps_probe/logs/Philadelphia__copt-gpu.log,,rc=-9 outcome=error
+Philadelphia,cuopt,gpu,ok,,25577590.145,,,239.999,,27.134,14.721,probe3:bench_runs/mps_probe/logs/Philadelphia__cuopt.log,,rc=0 outcome=ok
+Philadelphia,highs,cpu,error,,25577590.145,,,4461.499,4181.16,76.376,,probe3-partial:bench_runs/mps_probe/logs/Philadelphia__highs.log,Model status        : Not Set,rc=255 outcome=error
+Philadelphia,mosek,cpu,error,,25577590.145,,,521.310,,104.795,,probe3-partial:bench_runs/mps_probe/logs/Philadelphia__mosek.log,,rc=-9 outcome=error
+Sydney,copt-cpu,cpu,error,,4968208.895,,,934.179,,104.792,,measured,,rc=137 outcome=error
+Sydney,copt-gpu,gpu,error,,4968208.895,,,920.018,,104.847,0.217,measured,,rc=137 outcome=error
+Sydney,cuopt,gpu,error,,4968208.895,,,959.766,,104.847,0.217,measured,,rc=137 outcome=error
+Sydney,highs,cpu,error,,4968208.895,,,1365.272,,104.792,,measured,,rc=137 outcome=error
+Sydney,mosek,cpu,error,,4968208.895,,,686.932,,104.785,,measured,,rc=137 outcome=error
+Winnipeg,copt-cpu,cpu,ok,420.162002,420.162,4.760068723374521e-09,True,15.625,14.57,0.864,,probe3:bench_runs/mps_probe/logs/Winnipeg__copt-cpu.log,Status: Optimal,
+Winnipeg,copt-gpu,gpu,ok,420.162002,420.162,4.760068723374521e-09,True,7.937,6.52,0.985,0.504,probe3:bench_runs/mps_probe/logs/Winnipeg__copt-gpu.log,Status: Optimal,
+Winnipeg,cuopt,gpu,ok,420.177654,420.162,3.7257057992013724e-05,True,19.221,17.08,1.191,1.287,probe3:bench_runs/mps_probe/logs/Winnipeg__cuopt.log,Optimal,
+Winnipeg,highs,cpu,ok,420.16199294,420.162,1.6803042571865773e-08,True,437.866,436.27,1.425,,probe3:bench_runs/mps_probe/logs/Winnipeg__highs.log,Model status        : Optimal,
+Winnipeg,mosek,cpu,ok,420.16200025,420.162,5.950086580664604e-10,True,21.158,19.54,2.095,,probe3:bench_runs/mps_probe/logs/Winnipeg__mosek.log,Interior-point solution summary,
+grid1,copt-cpu,cpu,ok,827319.004,827319.0,4.834894348079957e-09,True,0.563,0.03,0.016,,measured,Status: Optimal,
+grid1,copt-gpu,gpu,ok,827319.004,827319.0,4.834894348079957e-09,True,1.028,0.2,0.415,0.246,measured,Status: Optimal,
+grid1,cuopt,gpu,ok,827319.38,827319.0,4.5931496799258404e-07,True,0.808,0.28,0.572,0.41,measured,Optimal,
+grid1,highs,cpu,ok,827319.00056,827319.0,6.768851637027309e-10,True,0.138,0.09,0.016,,measured,Model status        : Optimal,
+grid1,mosek,cpu,ok,827313.55591,827319.0,6.580400063342565e-06,True,0.058,0.02,0.022,,measured,Interior-point solution summary,
+grid10,copt-cpu,cpu,ok,164110897.0,164110897.177,1.0785388978820892e-09,True,62.516,59.96,2.597,,probe3:bench_runs/mps_probe/logs/grid10__copt-cpu.log,Status: Optimal,
+grid10,copt-gpu,gpu,ok,164110898.0,164110897.177,5.014901679201961e-09,True,29.619,26.71,2.291,1.266,probe3:bench_runs/mps_probe/logs/grid10__copt-gpu.log,Status: Optimal,
+grid10,cuopt,gpu,ok,164184444.0,164110897.177,0.00044815319558390277,True,263.613,257.23,2.42,4.85,probe3:bench_runs/mps_probe/logs/grid10__cuopt.log,Optimal,
+grid10,highs,cpu,ok,164110897.9,164110897.177,4.405557657813292e-09,True,1075.212,1067.89,17.21,,probe3:bench_runs/mps_probe/logs/grid10__highs.log,Model status        : Optimal,
+grid10,mosek,cpu,ok,164110904.68,164110897.177,4.57190847777071e-08,True,56.910,52.02,3.085,,probe3:bench_runs/mps_probe/logs/grid10__mosek.log,Interior-point solution summary,
+grid11,copt-cpu,cpu,ok,329258290.0,329258288.49,4.5860652358615335e-09,True,65.676,63.06,2.638,,probe3:bench_runs/mps_probe/logs/grid11__copt-cpu.log,Status: Optimal,
+grid11,copt-gpu,gpu,ok,329258289.0,329258288.49,1.5489359214073246e-09,True,27.921,25.0,2.361,1.299,probe3:bench_runs/mps_probe/logs/grid11__copt-gpu.log,Status: Optimal,
+grid11,cuopt,gpu,ok,329315032.0,329258288.49,0.0001723373776259966,True,291.294,284.59,2.506,5.068,probe3:bench_runs/mps_probe/logs/grid11__cuopt.log,Optimal,
+grid11,highs,cpu,ok,329258288.31,329258288.49,5.466832983249993e-10,True,1151.970,1144.36,18.565,,probe3:bench_runs/mps_probe/logs/grid11__highs.log,Model status        : Optimal,
+grid11,mosek,cpu,ok,329258337.41,329258288.49,1.485763661137875e-07,True,58.960,53.77,3.214,,probe3:bench_runs/mps_probe/logs/grid11__mosek.log,Interior-point solution summary,
+grid12,copt-cpu,cpu,ok,577186509.0,577186503.577,9.395576550140229e-09,True,283.817,278.93,5.588,,probe3:bench_runs/mps_probe/logs/grid12__copt-cpu.log,Status: Optimal,
+grid12,copt-gpu,gpu,ok,577186507.0,577186503.577,5.930492062534589e-09,True,85.241,79.96,4.537,2.811,probe3:bench_runs/mps_probe/logs/grid12__copt-gpu.log,Status: Optimal,
+grid12,cuopt,gpu,ok,577187350.0,577186503.577,1.4664636035883119e-06,True,208.042,194.6,4.499,5.881,probe3:bench_runs/mps_probe/logs/grid12__cuopt.log,Optimal,
+grid12,highs,cpu,ok,577186503.08,577186503.577,8.610734588198186e-10,True,3372.127,3360.26,48.904,,probe3:bench_runs/mps_probe/logs/grid12__highs.log,Model status        : Optimal,
+grid12,mosek,cpu,ok,577186617.66,577186503.577,1.976536167039248e-07,True,174.024,163.69,6.368,,probe3:bench_runs/mps_probe/logs/grid12__mosek.log,Interior-point solution summary,
+grid13,copt-cpu,cpu,ok,1159320960.0,1159320960.713,6.150152402051816e-10,True,234.568,229.62,5.626,,probe3:bench_runs/mps_probe/logs/grid13__copt-cpu.log,Status: Optimal,
+grid13,copt-gpu,gpu,ok,1159320960.0,1159320960.713,6.150152402051816e-10,True,83.233,78.07,4.598,2.818,probe3:bench_runs/mps_probe/logs/grid13__copt-gpu.log,Status: Optimal,
+grid13,cuopt,gpu,ok,1159627660.0,1159320960.713,0.00026455079947085243,True,202.947,189.39,4.534,5.881,probe3:bench_runs/mps_probe/logs/grid13__cuopt.log,Optimal,
+grid13,highs,cpu,ok,1159320949.9,1159320960.713,9.32701152673908e-09,True,4175.583,4163.53,49.775,,probe3:bench_runs/mps_probe/logs/grid13__highs.log,Model status        : Optimal,
+grid13,mosek,cpu,ok,1159321342.6,1159320960.713,3.2940575801427626e-07,True,200.717,190.38,6.443,,probe3:bench_runs/mps_probe/logs/grid13__mosek.log,Interior-point solution summary,
+grid14,copt-cpu,cpu,ok,1802672990.0,1802673008.461,1.0240903302495484e-08,True,582.241,573.6,10.751,,probe3:bench_runs/mps_probe/logs/grid14__copt-cpu.log,Status: Optimal,
+grid14,copt-gpu,gpu,ok,1802672990.0,1802673008.461,1.0240903302495484e-08,True,200.063,191.12,8.199,5.506,probe3:bench_runs/mps_probe/logs/grid14__copt-gpu.log,Status: Optimal,
+grid14,cuopt,gpu,ok,1802672716.628,1802673008.461,1.6188903843067698e-07,True,7218.823,7202.75,7.881,11.287,probe3:bench_runs/mps_probe/logs/grid14__cuopt.log,time limit,
+grid14,highs,cpu,error,,1802673008.461,,,221.691,,104.8,,probe3-partial:bench_runs/mps_probe/logs/grid14__highs.log,,rc=-9 outcome=error
+grid14,mosek,cpu,ok,1802674223.3,1802673008.461,6.739097963328334e-07,True,460.234,440.32,12.652,,probe3:bench_runs/mps_probe/logs/grid14__mosek.log,Interior-point solution summary,
+grid15,copt-cpu,cpu,ok,3593521780.0,3593521779.918,2.281877883857705e-11,True,595.321,586.55,10.753,,probe3:bench_runs/mps_probe/logs/grid15__copt-cpu.log,Status: Optimal,
+grid15,copt-gpu,gpu,ok,3593521780.0,3593521779.918,2.281877883857705e-11,True,203.151,194.24,8.2,5.506,probe3:bench_runs/mps_probe/logs/grid15__copt-gpu.log,Status: Optimal,
+grid15,cuopt,gpu,ok,3593518599.784,3593521779.918,8.84963051587217e-07,True,7219.116,7202.9,7.876,11.287,probe3:bench_runs/mps_probe/logs/grid15__cuopt.log,time limit,
+grid15,highs,cpu,error,,3593521779.918,,,220.597,,104.799,,probe3-partial:bench_runs/mps_probe/logs/grid15__highs.log,,rc=-9 outcome=error
+grid15,mosek,cpu,ok,3593523291.5,3593521779.918,4.2064083435532703e-07,True,522.654,502.08,12.671,,probe3:bench_runs/mps_probe/logs/grid15__mosek.log,Interior-point solution summary,
+grid2,copt-cpu,cpu,ok,1705378.0,1705378.0,0.0,True,0.562,0.04,0.017,,probe3:bench_runs/mps_probe/logs/grid2__copt-cpu.log,Status: Optimal,
+grid2,copt-gpu,gpu,ok,1705378.0,1705378.0,0.0,True,1.074,0.2,0.415,0.219,probe3:bench_runs/mps_probe/logs/grid2__copt-gpu.log,Status: Optimal,
+grid2,cuopt,gpu,ok,1705378.34,1705378.0,1.993692894383644e-07,True,0.768,0.25,0.587,0.41,probe3:bench_runs/mps_probe/logs/grid2__cuopt.log,Optimal,
+grid2,highs,cpu,ok,1705378.0021,1705378.0,1.231398508202677e-09,True,0.172,0.12,0.018,,probe3:bench_runs/mps_probe/logs/grid2__highs.log,Model status        : Optimal,
+grid2,mosek,cpu,ok,1705375.5586,1705378.0,1.4315887738051046e-06,True,0.063,0.02,0.02,,probe3:bench_runs/mps_probe/logs/grid2__mosek.log,Interior-point solution summary,
+grid3,copt-cpu,cpu,ok,1524642.0,1524642.0,0.0,True,0.869,0.31,0.057,,probe3:bench_runs/mps_probe/logs/grid3__copt-cpu.log,Status: Optimal,
+grid3,copt-gpu,gpu,ok,1524642.0,1524642.0,0.0,True,1.197,0.31,0.437,0.244,probe3:bench_runs/mps_probe/logs/grid3__copt-gpu.log,Status: Optimal,
+grid3,cuopt,gpu,ok,1524656.52,1524642.0,9.52354716715047e-06,True,1.072,0.48,0.626,0.41,probe3:bench_runs/mps_probe/logs/grid3__cuopt.log,Optimal,
+grid3,highs,cpu,ok,1524642.001,1524642.0,6.558916329749078e-10,True,2.816,2.7,0.078,,probe3:bench_runs/mps_probe/logs/grid3__highs.log,Model status        : Optimal,
+grid3,mosek,cpu,ok,1524641.9998,1524642.0,1.3117826551030892e-10,True,0.356,0.27,0.061,,probe3:bench_runs/mps_probe/logs/grid3__mosek.log,Interior-point solution summary,
+grid4,copt-cpu,cpu,ok,3031695.02,3031695.0,6.596969688120491e-09,True,1.071,0.51,0.076,,probe3:bench_runs/mps_probe/logs/grid4__copt-cpu.log,Status: Optimal,
+grid4,copt-gpu,gpu,ok,3031695.02,3031695.0,6.596969688120491e-09,True,1.344,0.4,0.44,0.244,probe3:bench_runs/mps_probe/logs/grid4__copt-gpu.log,Status: Optimal,
+grid4,cuopt,gpu,ok,3031699.4,3031695.0,1.451333330004129e-06,True,1.228,0.65,0.634,0.41,probe3:bench_runs/mps_probe/logs/grid4__cuopt.log,Optimal,
+grid4,highs,cpu,ok,3031695.0012,3031695.0,3.9581812292011495e-10,True,3.921,3.78,0.112,,probe3:bench_runs/mps_probe/logs/grid4__highs.log,Model status        : Optimal,
+grid4,mosek,cpu,ok,3031694.9987,3031695.0,4.2880306889523767e-10,True,0.712,0.59,0.093,,probe3:bench_runs/mps_probe/logs/grid4__mosek.log,Interior-point solution summary,
+grid5,copt-cpu,cpu,ok,5049688.5,5049688.5,0.0,True,2.224,1.6,0.197,,probe3:bench_runs/mps_probe/logs/grid5__copt-cpu.log,Status: Optimal,
+grid5,copt-gpu,gpu,ok,5049688.5,5049688.5,0.0,True,1.862,0.83,0.477,0.287,probe3:bench_runs/mps_probe/logs/grid5__copt-gpu.log,Status: Optimal,
+grid5,cuopt,gpu,ok,5049708.47,5049688.5,3.9546993838806555e-06,True,2.249,1.38,0.836,0.537,probe3:bench_runs/mps_probe/logs/grid5__cuopt.log,Optimal,
+grid5,highs,cpu,ok,5049688.5055,5049688.5,1.0891760888216526e-09,True,14.405,14.14,0.39,,probe3:bench_runs/mps_probe/logs/grid5__highs.log,Model status        : Optimal,
+grid5,mosek,cpu,ok,5049686.1155,5049688.5,4.7220734500643477e-07,True,1.887,1.59,0.318,,probe3:bench_runs/mps_probe/logs/grid5__mosek.log,Interior-point solution summary,
+grid6,copt-cpu,cpu,ok,10401782.0,10401782.0,0.0,True,3.459,2.78,0.245,,probe3:bench_runs/mps_probe/logs/grid6__copt-cpu.log,Status: Optimal,
+grid6,copt-gpu,gpu,ok,10401782.0,10401782.0,0.0,True,2.299,1.26,0.53,0.307,probe3:bench_runs/mps_probe/logs/grid6__copt-gpu.log,Status: Optimal,
+grid6,cuopt,gpu,ok,10403908.2,10401782.0,0.0002044072832904261,True,3.807,2.83,0.89,0.662,probe3:bench_runs/mps_probe/logs/grid6__cuopt.log,Optimal,
+grid6,highs,cpu,ok,10401782.04,10401782.0,3.845494849433523e-09,True,26.180,25.75,0.684,,probe3:bench_runs/mps_probe/logs/grid6__highs.log,Model status        : Optimal,
+grid6,mosek,cpu,ok,10401779.75,10401782.0,2.163090901155206e-07,True,2.881,2.43,0.545,,probe3:bench_runs/mps_probe/logs/grid6__mosek.log,Interior-point solution summary,
+grid7,copt-cpu,cpu,ok,25864036.6,25864036.571,1.1212481397177372e-09,True,11.079,10.01,0.806,,probe3:bench_runs/mps_probe/logs/grid7__copt-cpu.log,Status: Optimal,
+grid7,copt-gpu,gpu,ok,25864036.6,25864036.571,1.1212481397177372e-09,True,6.077,4.7,0.953,0.486,probe3:bench_runs/mps_probe/logs/grid7__copt-gpu.log,Status: Optimal,
+grid7,cuopt,gpu,ok,25868545.4,25864036.571,0.00017432812498631504,True,23.912,21.93,1.168,1.6,probe3:bench_runs/mps_probe/logs/grid7__cuopt.log,Optimal,
+grid7,highs,cpu,ok,25864036.637,25864036.571,2.55180584288125e-09,True,155.505,153.87,3.26,,probe3:bench_runs/mps_probe/logs/grid7__highs.log,Model status        : Optimal,
+grid7,mosek,cpu,ok,25864037.136,25864036.571,2.1845004734280715e-08,True,12.283,10.86,1.848,,probe3:bench_runs/mps_probe/logs/grid7__mosek.log,Interior-point solution summary,
+grid8,copt-cpu,cpu,ok,41711156.8,41711150.624,1.4806592258072937e-07,True,106.812,105.11,1.61,,probe3:bench_runs/mps_probe/logs/grid8__copt-cpu.log,Status: Imprecise,
+grid8,copt-gpu,gpu,ok,41711151.0,41711150.624,9.014376165643652e-09,True,19.125,17.08,1.512,0.861,probe3:bench_runs/mps_probe/logs/grid8__copt-gpu.log,Status: Optimal,
+grid8,cuopt,gpu,ok,41724759.9,41711150.624,0.00032627428868313104,True,130.359,126.59,1.751,3.631,probe3:bench_runs/mps_probe/logs/grid8__cuopt.log,Optimal,
+grid8,highs,cpu,ok,41711150.689,41711150.624,1.5583364182956568e-09,True,495.785,491.6,10.194,,probe3:bench_runs/mps_probe/logs/grid8__highs.log,Model status        : Optimal,
+grid8,mosek,cpu,ok,41711152.169,41711150.624,3.7040455098334506e-08,True,102.594,99.7,1.821,,probe3:bench_runs/mps_probe/logs/grid8__mosek.log,Interior-point solution summary,
+grid9,copt-cpu,cpu,ok,82652982.3,82652982.047,3.0609904798673325e-09,True,121.656,119.49,2.14,,probe3:bench_runs/mps_probe/logs/grid9__copt-cpu.log,Status: Optimal,
+grid9,copt-gpu,gpu,ok,82652982.0,82652982.047,5.686425907117179e-10,True,24.790,22.32,1.965,1.107,probe3:bench_runs/mps_probe/logs/grid9__copt-gpu.log,Status: Optimal,
+grid9,cuopt,gpu,ok,82690651.6,82652982.047,0.00045575552226981584,True,145.050,139.96,2.085,3.787,probe3:bench_runs/mps_probe/logs/grid9__cuopt.log,Optimal,
+grid9,highs,cpu,ok,82652982.238,82652982.047,2.3108664068981974e-09,True,816.085,810.47,13.749,,probe3:bench_runs/mps_probe/logs/grid9__highs.log,Model status        : Optimal,
+grid9,mosek,cpu,ok,82652994.233,82652982.047,1.4743569666464185e-07,True,48.000,43.84,2.726,,probe3:bench_runs/mps_probe/logs/grid9__mosek.log,Interior-point solution summary,
+planar100,copt-cpu,cpu,ok,231339582.0,231339581.854,6.311068632706979e-10,True,1.741,1.13,0.145,,probe3:bench_runs/mps_probe/logs/planar100__copt-cpu.log,Status: Optimal,
+planar100,copt-gpu,gpu,ok,231339582.0,231339581.854,6.311068632706979e-10,True,1.634,0.66,0.472,0.268,probe3:bench_runs/mps_probe/logs/planar100__copt-gpu.log,Status: Optimal,
+planar100,cuopt,gpu,ok,231346657.0,231339581.854,3.058337852647727e-05,True,1.932,1.19,0.665,0.475,probe3:bench_runs/mps_probe/logs/planar100__cuopt.log,Optimal,
+planar100,highs,cpu,ok,231339582.74,231339581.854,3.829867765344785e-09,True,13.549,13.3,0.261,,probe3:bench_runs/mps_probe/logs/planar100__highs.log,Model status        : Optimal,
+planar100,mosek,cpu,ok,231339581.85,231339581.854,1.729063428823919e-11,True,1.275,1.05,0.236,,probe3:bench_runs/mps_probe/logs/planar100__mosek.log,Interior-point solution summary,
+planar1000,copt-cpu,cpu,ok,3449610930.0,3449610922.073,2.297940325691205e-09,True,442.632,434.76,8.039,,probe3:bench_runs/mps_probe/logs/planar1000__copt-cpu.log,Status: Optimal,
+planar1000,copt-gpu,gpu,ok,3449610940.0,3449610922.073,5.196817974765503e-09,True,261.651,253.46,6.732,3.502,probe3:bench_runs/mps_probe/logs/planar1000__copt-gpu.log,Status: Optimal,
+planar1000,cuopt,gpu,ok,3450109170.0,3449610922.073,0.0001444359779278035,True,744.877,723.35,7.16,10.1,probe3:bench_runs/mps_probe/logs/planar1000__cuopt.log,Optimal,
+planar1000,highs,cpu,error,0.0,3449610922.073,,,7426.419,7407.26,36.382,,probe3:bench_runs/mps_probe/logs/planar1000__highs.log,Model status        : Time limit reached,rc=1 outcome=error
+planar1000,mosek,cpu,ok,3449610305.0,3449610922.073,1.7888191274145243e-07,True,438.487,419.65,24.313,,probe3:bench_runs/mps_probe/logs/planar1000__mosek.log,Interior-point solution summary,
+planar150,copt-cpu,cpu,ok,548087093.0,548087088.987,7.321829125479137e-09,True,3.802,3.11,0.262,,probe3:bench_runs/mps_probe/logs/planar150__copt-cpu.log,Status: Optimal,
+planar150,copt-gpu,gpu,ok,548087089.0,548087088.987,2.3718879180531366e-11,True,2.466,1.4,0.57,0.305,probe3:bench_runs/mps_probe/logs/planar150__copt-gpu.log,Status: Optimal,
+planar150,cuopt,gpu,ok,548098889.0,548087088.987,2.1529448945460065e-05,True,3.341,2.41,0.74,0.6,probe3:bench_runs/mps_probe/logs/planar150__cuopt.log,Optimal,
+planar150,highs,cpu,ok,548087089.12,548087088.987,2.426621952695149e-10,True,64.597,64.08,0.759,,probe3:bench_runs/mps_probe/logs/planar150__highs.log,Model status        : Optimal,
+planar150,mosek,cpu,ok,548087016.53,548087088.987,1.321997935603346e-07,True,5.113,4.63,0.529,,probe3:bench_runs/mps_probe/logs/planar150__mosek.log,Interior-point solution summary,
+planar2500,copt-cpu,cpu,ok,12694116800.0,12662328108.326,0.002510493441810074,False,7289.748,7247.97,54.25,,probe3:bench_runs/mps_probe/logs/planar2500__copt-cpu.log,Status: Timeout,
+planar2500,copt-gpu,gpu,error,,12662328108.326,,,442.071,,40.54,0.244,probe3-partial:bench_runs/mps_probe/logs/planar2500__copt-gpu.log,,COPT failed to solve (GPU memory issue / infeasible); rc=0 outcome=error
+planar2500,cuopt,gpu,ok,,12662328108.326,,,130.007,,16.671,14.723,probe3:bench_runs/mps_probe/logs/planar2500__cuopt.log,,rc=0 outcome=ok
+planar2500,highs,cpu,error,,12662328108.326,,,2773.022,2645.88,41.281,,probe3-partial:bench_runs/mps_probe/logs/planar2500__highs.log,Model status        : Not Set,rc=255 outcome=error
+planar2500,mosek,cpu,error,,12662328108.326,,,264.503,,104.793,,probe3-partial:bench_runs/mps_probe/logs/planar2500__mosek.log,,rc=-9 outcome=error
+planar30,copt-cpu,cpu,ok,44350624.0,44350624.0,0.0,True,0.608,0.06,0.022,,probe3:bench_runs/mps_probe/logs/planar30__copt-cpu.log,Status: Optimal,
+planar30,copt-gpu,gpu,ok,44350624.0,44350624.0,0.0,True,1.094,0.22,0.419,0.219,probe3:bench_runs/mps_probe/logs/planar30__copt-gpu.log,Status: Optimal,
+planar30,cuopt,gpu,ok,44350684.8,44350624.0,1.3708939021245738e-06,True,0.867,0.29,0.602,0.41,probe3:bench_runs/mps_probe/logs/planar30__cuopt.log,Optimal,
+planar30,highs,cpu,ok,44350624.027,44350624.0,6.087851788285938e-10,True,0.389,0.33,0.023,,probe3:bench_runs/mps_probe/logs/planar30__highs.log,Model status        : Optimal,
+planar30,mosek,cpu,ok,44350570.568,44350624.0,1.2047632068559963e-06,True,0.100,0.04,0.025,,probe3:bench_runs/mps_probe/logs/planar30__mosek.log,Interior-point solution summary,
+planar300,copt-cpu,cpu,ok,689979138.0,689979137.991,1.3043791091162999e-11,True,13.936,12.71,0.971,,probe3:bench_runs/mps_probe/logs/planar300__copt-cpu.log,Status: Optimal,
+planar300,copt-gpu,gpu,ok,689979138.0,689979137.991,1.3043791091162999e-11,True,7.886,6.24,1.149,0.488,probe3:bench_runs/mps_probe/logs/planar300__copt-gpu.log,Status: Optimal,
+planar300,cuopt,gpu,ok,690046158.0,689979137.991,9.713338463404081e-05,True,17.514,15.07,1.289,1.381,probe3:bench_runs/mps_probe/logs/planar300__cuopt.log,Optimal,
+planar300,highs,cpu,ok,689979139.27,689979137.991,1.8536791248265422e-09,True,326.174,324.04,2.045,,probe3:bench_runs/mps_probe/logs/planar300__highs.log,Model status        : Optimal,
+planar300,mosek,cpu,ok,689978211.71,689979137.991,1.3424768214226819e-06,True,25.744,23.9,2.351,,probe3:bench_runs/mps_probe/logs/planar300__mosek.log,Interior-point solution summary,
+planar50,copt-cpu,cpu,ok,122199689.0,122199689.0,0.0,True,0.780,0.23,0.04,,probe3:bench_runs/mps_probe/logs/planar50__copt-cpu.log,Status: Optimal,
+planar50,copt-gpu,gpu,ok,122199689.0,122199689.0,0.0,True,1.225,0.31,0.434,0.248,probe3:bench_runs/mps_probe/logs/planar50__copt-gpu.log,Status: Optimal,
+planar50,cuopt,gpu,ok,122200527.0,122199689.0,6.857627927350945e-06,True,1.076,0.46,0.612,0.41,probe3:bench_runs/mps_probe/logs/planar50__cuopt.log,Optimal,
+planar50,highs,cpu,ok,122199689.25,122199689.0,2.0458317205700908e-09,True,1.704,1.6,0.05,,probe3:bench_runs/mps_probe/logs/planar50__highs.log,Model status        : Optimal,
+planar50,mosek,cpu,ok,122199437.16,122199689.0,2.0608890420627527e-06,True,0.264,0.18,0.041,,probe3:bench_runs/mps_probe/logs/planar50__mosek.log,Interior-point solution summary,
+planar500,copt-cpu,cpu,ok,481982340.0,481982340.002,4.149476204429312e-12,True,66.113,63.57,2.237,,probe3:bench_runs/mps_probe/logs/planar500__copt-cpu.log,Status: Optimal,
+planar500,copt-gpu,gpu,ok,481982340.0,481982340.002,4.149476204429312e-12,True,29.253,26.43,2.145,1.047,probe3:bench_runs/mps_probe/logs/planar500__copt-gpu.log,Status: Optimal,
+planar500,cuopt,gpu,ok,482024893.0,481982340.002,8.828746298017719e-05,True,122.833,116.7,2.307,3.506,probe3:bench_runs/mps_probe/logs/planar500__cuopt.log,Optimal,
+planar500,highs,cpu,ok,481982353.99,481982340.002,2.9021810291281434e-08,True,1763.521,1757.64,9.649,,probe3:bench_runs/mps_probe/logs/planar500__highs.log,Model status        : Optimal,
+planar500,mosek,cpu,ok,481982367.39,481982340.002,5.682365874926132e-08,True,70.308,65.47,2.851,,probe3:bench_runs/mps_probe/logs/planar500__mosek.log,Interior-point solution summary,
+planar80,copt-cpu,cpu,ok,182438134.0,182438133.402,3.277823439843767e-09,True,1.232,0.65,0.104,,probe3:bench_runs/mps_probe/logs/planar80__copt-cpu.log,Status: Optimal,
+planar80,copt-gpu,gpu,ok,182438134.0,182438133.402,3.277823439843767e-09,True,1.456,0.52,0.453,0.264,probe3:bench_runs/mps_probe/logs/planar80__copt-gpu.log,Status: Optimal,
+planar80,cuopt,gpu,ok,182442357.0,182438133.402,2.315085076365775e-05,True,1.513,0.85,0.645,0.443,probe3:bench_runs/mps_probe/logs/planar80__cuopt.log,Optimal,
+planar80,highs,cpu,ok,182438134.03,182438133.402,3.442262752133749e-09,True,9.280,9.1,0.169,,probe3:bench_runs/mps_probe/logs/planar80__highs.log,Model status        : Optimal,
+planar80,mosek,cpu,ok,182438133.4,182438133.402,1.0962642600101933e-11,True,0.798,0.64,0.104,,probe3:bench_runs/mps_probe/logs/planar80__mosek.log,Interior-point solution summary,
+planar800,copt-cpu,cpu,ok,1167371390.0,1167371383.098,5.91242859842275e-09,True,220.933,215.48,5.438,,probe3:bench_runs/mps_probe/logs/planar800__copt-cpu.log,Status: Optimal,
+planar800,copt-gpu,gpu,ok,1167371380.0,1167371383.098,2.6538255900787225e-09,True,127.480,121.81,4.595,2.441,probe3:bench_runs/mps_probe/logs/planar800__copt-gpu.log,Status: Optimal,
+planar800,cuopt,gpu,ok,1167541730.0,1167371383.098,0.00014592348627553251,True,403.487,388.84,4.993,6.881,probe3:bench_runs/mps_probe/logs/planar800__cuopt.log,Optimal,
+planar800,highs,cpu,ok,1167371386.5,1167371383.098,2.914239632447235e-09,True,6603.981,6588.06,31.351,,probe3:bench_runs/mps_probe/logs/planar800__highs.log,Model status        : Optimal,
+planar800,mosek,cpu,ok,1167373320.6,1167371383.098,1.659713462148823e-06,True,238.339,227.03,6.545,,probe3:bench_runs/mps_probe/logs/planar800__mosek.log,Interior-point solution summary,

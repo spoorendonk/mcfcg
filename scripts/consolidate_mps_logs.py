@@ -16,6 +16,20 @@ Logs from before those headers existed simply leave the columns empty -- unlike
 the objective, memory CANNOT be re-derived from the body, so a blank there means
 that cell was never measured and needs a rerun (see --probe for the cheap one).
 
+`mem_source` says which regime that memory came from, and the distinction is not
+cosmetic:
+    measured    the full solve's own peak, from GNU `time` on this very run.
+    probeN:...  INJECTED by inject_probe_memory.py from the iteration-capped
+                probe sweep (N barrier iterations). It is the model-setup /
+                initial peak -- read, presolve, symbolic+numeric factorization,
+                N iterations -- and therefore a LOWER BOUND on this row's
+                full-solve peak, measured in a different execution with a
+                different wall time and outcome. Never quote it as the peak of
+                the solve whose time_wall sits next to it.
+    probeN-partial:...  the same, from a probe that died (cgroup OOM at the cap,
+                or a backend error) before finishing its N iterations: a lower
+                bound on a lower bound.
+
 --probe consolidates the memory-probe sweep (benchmark_mps.py --probe-iters)
 instead: iteration-capped runs, written to their own tree, whose peak RSS stands
 in for the full solve's. It emits a memory-only CSV with the cap recorded per
@@ -32,30 +46,39 @@ Usage:
 import argparse
 import csv
 import os
-import re
 import sys
 
 import benchmark_mps as bm  # sibling module; run from scripts/ or repo root
 import benchmark_solvers as bs  # peak-RSS header parser, shared with the CG logs
 
-HDR = re.compile(r"# wall=([\d.]+)s rc=(-?\d+) outcome=(\w+)")
 MARKER = "# === solver output ==="
 KNOWN_SOLVERS = list(bm.CONFIGS)  # highs, mosek, cuopt, copt-cpu, copt-gpu
+
+
+# Return codes that mean "the process was killed", so the absence of any marker
+# in its output tells us nothing about how it was configured. 137 = 128+SIGKILL
+# (the cgroup OOM killer, or the harness), 9 = the bare signal number GNU `time`
+# reports for the same death, -1 = the harness's own timeout verdict.
+KILL_RCS = (137, 9, -1)
+
+
+def killed_before_solving(rc):
+    return rc is None or rc in KILL_RCS
 
 
 def parse_log(path):
     with open(path, errors="replace") as f:
         text = f.read()
-    m = HDR.search(text)
-    wall = float(m.group(1)) if m else None
-    rc = int(m.group(2)) if m else None
-    outcome = m.group(3) if m else "error"
+    wall, rc, outcome = bm.parse_run_header(text)
     warn = "# WARN " in text
     body = text.split(MARKER, 1)[1] if MARKER in text else text
-    rss_kb, _ = bs.parse_peak_rss(text)
+    rss_kb, rss_source = bs.parse_peak_rss(text)
     return {
         "wall": wall, "rc": rc, "outcome": outcome, "warn": warn, "body": body,
         "mem_gb": bs.mem_gb_from_kb(rss_kb),
+        # Provenance of BOTH memory columns: the peak-RSS and peak-VRAM headers are
+        # written, and rewritten, as one block (see inject_probe_memory.py).
+        "mem_source": rss_source,
         "vram_gb": bm.gb_from_mib(bm.parse_peak_vram_mib(text)),
         "probe_iters": bm.parse_probe_iters(text),
     }
@@ -96,9 +119,17 @@ def main():
         fields = ["instance", "solver", "gpu", "outcome", "probe_iters",
                   "mem_gb", "vram_gb", "time_wall", "status", "detail"]
     else:
+        # `mem_source` covers mem_gb AND vram_gb (one header block, one
+        # provenance). It exists only in this mode: probe logs are live readings
+        # by construction -- the probe sweep postdates the headers and nothing
+        # injects into it -- so the column would be the constant "measured" there,
+        # and mps_compact_memory.csv is pinned in PROVENANCE section 2.1.
+        # `probe_iters` is deliberately NOT carried across: on a full-solve row it
+        # would read as "this solve was capped", which is the opposite of true.
+        # The cap lives inside the mem_source tag (`probe3:`) instead.
         fields = ["instance", "solver", "gpu", "outcome", "objective", "ref",
                   "rel_err", "pass", "time_wall", "time_solve", "mem_gb",
-                  "vram_gb", "status", "detail"]
+                  "vram_gb", "mem_source", "status", "detail"]
     rows = []
     wrong_mode = 0
     logs = sorted(f for f in os.listdir(args.logdir) if f.endswith(".log"))
@@ -147,13 +178,27 @@ def main():
             guard_detail = "cuOpt #33 VRAM-OOM / numerical error"
         elif solver.startswith("copt") and bm.copt_solve_failed(body):
             outcome, obj = "error", None
-            guard_detail = "COPT failed to solve (GPU memory issue / infeasible)"
-        elif solver == "highs" and (
+            guard_detail = ("COPT never read the model (readmps failed); peak RSS "
+                            "is the reader's, not a solve's"
+                            if bm.copt_read_failed(body) else
+                            "COPT failed to solve (GPU memory issue / infeasible)")
+        elif solver == "highs" and not killed_before_solving(rc) and (
                 "features are unavailable" in body or "Running HiPO" not in body):
             # Re-derive the HiPO-fallback guard from the body (mirrors
             # benchmark_mps.run_one) so a log from an older/unguarded run where HiPO
             # SILENTLY fell back to dual simplex -- no `# WARN` line, header
             # outcome=ok -- is never consolidated as a valid HiPO baseline result.
+            #
+            # Gated on HOW the run died, not on whether it succeeded. The marker
+            # is equally absent from a run killed before HiPO could start, so
+            # ungated an OOM-killed cell (Sydney/BUS x highs: model read, then
+            # SIGKILL at the memory cap) gets relabelled "HiPO did not run" --
+            # blaming a config fallback for what is actually a memory failure.
+            # But gating on `outcome == "ok"` would be too strong in the other
+            # direction: HiGHS can silently fall back to dual simplex AND THEN
+            # blow its own time limit (rc=1, outcome=error), and that log must
+            # still have its objective discarded rather than consolidated as a
+            # HiPO result. Only a signal death is genuinely uninformative.
             outcome, obj = "error", None
             guard_detail = "HiPO did not run (extras unavailable / fallback)"
         elif warn:
@@ -165,8 +210,8 @@ def main():
                "ref": "" if ref is None else ref, "rel_err": "", "pass": "",
                "time_wall": "" if wall is None else f"{wall:.3f}",
                "time_solve": tsolve, "mem_gb": p["mem_gb"],
-               "vram_gb": p["vram_gb"], "status": status,
-               "detail": guard_detail or ""}
+               "vram_gb": p["vram_gb"], "mem_source": p["mem_source"],
+               "status": status, "detail": guard_detail or ""}
         if outcome != "ok" or obj is None:
             rec["detail"] = (rec["detail"] + "; " if rec["detail"] else "") + \
                 f"rc={rc} outcome={outcome}"
@@ -195,10 +240,16 @@ def main():
         nerr = sum(1 for r in rows
                    if r["outcome"] != "ok" or r["objective"] is None)
         nmem = sum(1 for r in rows if r["mem_gb"] != "")
+        nfull = sum(1 for r in rows if r["mem_source"] == "measured")
         print(f"  pass={npass}  error/timeout={nerr}  "
               f"other={len(rows) - npass - nerr}")
-        print(f"  peak RSS measured on {nmem}/{len(rows)} cells "
-              f"(pre-header runs carry none; `--probe-iters` re-measures cheaply)")
+        # Split the memory count by regime: lumping the two together would report
+        # an injected lower bound as if the full solve had been measured.
+        print(f"  peak RSS on {nmem}/{len(rows)} cells: {nfull} from the full solve, "
+              f"{nmem - nfull} injected from the probe sweep (lower bounds)")
+        if nmem < len(rows):
+            print(f"  {len(rows) - nmem} cell(s) unmeasured in both sweeps "
+                  f"(`--probe-iters` re-measures cheaply)")
     if wrong_mode:
         kind = "solve" if args.probe else "probe"
         print(f"  skipped {wrong_mode} {kind} log(s) found in this logdir "

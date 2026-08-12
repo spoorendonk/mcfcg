@@ -112,21 +112,13 @@ def parse_outcome(log_text):
 def inject_header(text, kb, source):
     """Insert (or replace) the peak-RSS headers in a saved log's header block.
 
-    Uses benchmark_solvers.format_peak_rss_headers so a backfilled log is
-    byte-identical to one write_log produces live.
+    Rewriting is benchmark_solvers.rewrite_header_block and the lines themselves
+    are format_peak_rss_headers, so a backfilled log carries exactly what write_log
+    produces live — and the sibling injector (inject_probe_memory.py) shares both.
     """
-    lines = text.splitlines(keepends=True)
-    kept, i = [], 0
-    while (i < len(lines) and lines[i].startswith("#")
-           and not lines[i].startswith(bs.HEADER_END_PREFIX)):
-        if not (lines[i].startswith("# peak_rss_kb:")
-                or lines[i].startswith("# peak_rss_source:")):
-            kept.append(lines[i])
-        i += 1
-    if kept and not kept[-1].endswith("\n"):
-        kept[-1] += "\n"  # truncated log: never fuse our header onto its last line
-    kept.append(bs.format_peak_rss_headers(kb, source))
-    return "".join(kept) + "".join(lines[i:])
+    return bs.rewrite_header_block(
+        text, ("# peak_rss_kb:", "# peak_rss_source:"),
+        bs.format_peak_rss_headers(kb, source))
 
 
 def main():
