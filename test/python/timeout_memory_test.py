@@ -84,22 +84,28 @@ class HarnessTimeoutMemoryTest(unittest.TestCase):
     def _run_cell(self, guard=()):
         """One run_one call that is guaranteed to hit the timeout; returns the log.
 
-        Stands in for a solver by replacing the `mosek` config's command builder
-        (mosek is used because it carries none of run_one's post-hoc output guards,
-        so nothing else rewrites the outcome). Everything downstream of the builder
-        -- GNU time wrapping, the cgroup guard, the timeout, the kill, the log
-        writer -- is the production code path, unmocked.
+        NO SOLVER IS INVOLVED — not HiGHS, and none of the licensed backends. The
+        stand-in is a registered `synthetic` config whose command builder returns
+        the hog's argv; its name matches none of run_one's solver-specific output
+        guards (highs / cuopt / copt*), so nothing rewrites the outcome behind the
+        test's back. Everything downstream of the builder -- GNU time wrapping,
+        the cgroup guard, the timeout, the kill, the log writer -- is the
+        production code path, unmocked.
         """
         argv = [sys.executable, self.hog, str(HOG_BYTES)]
-        cfg = dict(bm.CONFIGS, mosek=(lambda m, t, d, g, p: (argv, {}), "cpu"))
+        cfg = dict(bm.CONFIGS, synthetic=(lambda m, t, d, g, p: (argv, {}), "cpu"))
+        # parse_output looks the solver up in PARSERS; the hog prints nothing any
+        # of them would match, so which patterns it gets is immaterial.
+        parsers = dict(bm.PARSERS, synthetic=bm.PARSERS["mosek"])
         with mock.patch.object(bm, "CONFIGS", cfg), \
+                mock.patch.object(bm, "PARSERS", parsers), \
                 mock.patch.object(bm, "HARNESS_TIMEOUT_GRACE_SEC", GRACE), \
                 mock.patch.object(bm, "KILL_FLUSH_SEC", FLUSH), \
                 mock.patch.object(bm, "MEM_GUARD", list(guard)):
-            res = bm.run_one("mosek", "unused.mps", "synthetic", TIME_LIMIT, self.tmp)
+            res = bm.run_one("synthetic", "unused.mps", "hog", TIME_LIMIT, self.tmp)
         self.assertEqual(res["outcome"], "timeout",
                          "the cell did not take the timeout path")
-        with open(os.path.join(self.tmp, "synthetic__mosek.log")) as f:
+        with open(os.path.join(self.tmp, "hog__synthetic.log")) as f:
             return res, f.read()
 
     def _assert_hog_sized(self, kb, source):
