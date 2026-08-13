@@ -375,10 +375,13 @@ Prerequisites:
 
 - The `.mps.gz` dumps must exist — regenerable via `scripts/write_mps.sh`; they are
   gitignored (`*.mps.gz`, ~5.6 GB) as derived/downloadable data, not committed.
-- Native solver binaries on the expected paths, overridable via env: **HiGHS 1.15.1
-  built with working HiPO** (`-DBUILD_SHARED_EXTRAS_LIB=OFF`; the stock 1.15.1 CLI
-  aborts HiPO with `features unavailable: amd, blas, metis, rcm`) via `HIGHS_BIN`;
-  `$MOSEK_HOME/bin/mosek`; `$COPT_HOME/bin/copt_cmd`; `cuopt_cli` via `CUOPT_BIN`.
+- Native solver binaries. HiGHS needs no setup: `cmake --build build` produces a
+  HiPO-capable `build/bin/highs` (same patched source and
+  `-DBUILD_SHARED_EXTRAS_LIB=OFF` as the linked library), which is the default —
+  a stock 1.15.x CLI aborts HiPO with `features unavailable: amd, blas, metis,
+  rcm`, so `$HIGHS_BIN` and the `PATH`/`/usr/local` fallbacks are for a binary you
+  built yourself. The rest come from `$MOSEK_HOME/bin/mosek`,
+  `$COPT_HOME/bin/copt_cmd`, and `cuopt_cli` via `$CUOPT_BIN`.
 
 | default | value |
 |---------|-------|

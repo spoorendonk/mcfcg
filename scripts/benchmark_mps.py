@@ -71,6 +71,7 @@ import argparse
 import csv
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -99,25 +100,26 @@ def _first_existing(*paths):
     return paths[-1]  # report the preferred default even if missing (warns later)
 
 
-# HiPO-capable standalone HiGHS v1.15.1 (matches CMakeLists' GIT_TAG). The stock
-# system /usr/local/bin/highs at v1.15.1 CANNOT run HiPO from the CLI — it aborts
+# HiPO-capable standalone HiGHS. `cmake --build build` produces one at
+# build/bin/highs as a side effect of the FetchContent'd HiGHS (same GIT_TAG, same
+# HiPO patch, and BUILD_SHARED_EXTRAS_LIB=OFF), so the default needs no install
+# step and matches the library linked into mcfcg_cli exactly.
+#
+# A distro/stock `highs` at 1.15.x generally CANNOT run HiPO from the CLI — it
+# aborts with
 #   "The HiPO solver ... features are unavailable: amd, blas, metis, rcm" (rc 255)
 # because the 1.15 standalone resolves its numerical extras by dlopen'ing
-# libhighs_extras.so at runtime and that .so is not shipped/linked (even placing it
-# on LD_LIBRARY_PATH does not fix the standalone). We build a fixed 1.15.1 `highs`
-# from the SAME patched source the repo fetches (build/_deps/highs-src) with
-# BUILD_SHARED_EXTRAS_LIB=OFF + BUILD_SHARED_LIBS=OFF, so the extras (AMD/METIS/
-# RCM/BLAS) are compiled into a static libhighs and baked into a self-contained
-# exe (only dynamic dep is system BLAS). Validated: "Running HiPO" -> Optimal,
-# objectives match MOSEK/COPT/cuOpt. Install it over /usr/local/bin/highs (sudo) to
-# fix the box globally; until then the harness prefers the known-good build output.
-# Override with HIGHS_BIN. run_one asserts HiPO actually ran (guards a silent
-# dual-simplex/other fallback slipping into the results).
+# libhighs_extras.so at runtime and that .so is usually neither shipped nor found
+# (putting it on LD_LIBRARY_PATH does not fix the standalone). Hence the ordering
+# below: this repo's own build first, PATH/`/usr/local` only as fallbacks, and
+# HIGHS_BIN to override everything. run_one asserts HiPO actually ran, so a
+# fallback binary that silently drops to dual simplex fails the cell instead of
+# quietly entering the results.
 HIGHS_BIN = _first_existing(
     os.environ.get("HIGHS_BIN"),
-    "/home/simon/opt/highs-1.15.1/bin/highs",         # our fixed 1.15.1 (HiPO works)
-    "/home/simon/opt/highs-1.15.1-build/bin/highs",   # build-tree copy
-    "/usr/local/bin/highs",                           # after sudo reinstall, this too
+    os.path.join(REPO, "build", "bin", "highs"),  # built by this repo (preferred)
+    shutil.which("highs"),
+    "/usr/local/bin/highs",
 )
 
 BINARIES = {
