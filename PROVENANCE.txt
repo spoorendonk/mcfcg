@@ -1,9 +1,8 @@
 PROVENANCE — mcfcg computational artifact
 =========================================
 
-This file pins the software stack that produced the committed result tables
-under `results/`, so the accompanying manuscript can cite a fixed artifact
-rather than a moving branch.
+Pins the software stack behind the committed result tables under `results/`, so
+the manuscript can cite a fixed artifact rather than a moving branch.
 
 Companion paper
     S. Spoorendonk and B. Petersen,
@@ -20,22 +19,21 @@ Result tables pinned by this record
                                     10, intermodal 10, transportation 9)
                                     x {path,tree} x 5 backend configurations
     results/cg_iterations.csv       per-iteration CG trace for those runs
-    results/mps_compact_baseline.csv  175 cells = 35 instances x 5 backend
-                                    configurations: direct (non-CG) barrier
-                                    solves of the compact source LP
-    results/mps_compact_memory.csv  peak RSS and VRAM for 165 of those
-                                    (instance, backend) cells, from the
-                                    iteration-capped probe of section 2.1
+    results/mps_compact_baseline.csv  175 cells = 35 instances x 5: direct
+                                    (non-CG) barrier solves of the compact
+                                    source LP
+    results/mps_compact_memory.csv  peak RSS and VRAM for 165 of those cells,
+                                    from the iteration-capped probe of 2.1
 
-The two experiments do NOT share a solver stack. The CG benchmark links each
-vendor's library into `mcfcg_cli`; the compact baseline drives each vendor's own
-command-line barrier on an exported MPS file, because `mcfcg_cli` does not read
-external MPS. Sections 1 and 2 pin them separately — the cuOpt build differs
-between them.
+The two experiments do NOT share a solver stack: the CG benchmark links each
+vendor's library into `mcfcg_cli`, the compact baseline drives each vendor's own
+command-line barrier on an exported MPS file (`mcfcg_cli` does not read external
+MPS). Sections 1 and 2 pin them separately — the cuOpt build differs between
+them. Section 4 covers the two non-stock builds; both are load-bearing.
 
-Read `mem_gb` in either table through its `mem_source` column. Most of those
-figures are lower bounds, or were measured by a different execution than the one
-the row describes; sections 1.1 and 2.2 say exactly which, per row.
+Read `mem_gb` in either table through its `mem_source` column: most figures are
+lower bounds, or were measured by a different execution than the row describes.
+Sections 1.1 and 2.2 say which, per row.
 
 
 1. Column generation benchmark — LP backend versions
@@ -44,11 +42,11 @@ the row describes; sections 1.1 and 2.2 say exactly which, per row.
 Pins results/cg_benchmark.csv and results/cg_iterations.csv. Versions are of the
 library loaded into `mcfcg_cli`:
 
-    highs      HiGHS 1.15.1, githash 04024d701f      + local patch, see 4.1
+    highs      HiGHS 1.15.1, githash 04024d701f      + local patch, see 4
     mosek      MOSEK 11.0.30 (build date 2025-11-17)
     copt-cpu   COPT 8.0.1, build date 2025-10-22
     copt-gpu   COPT 8.0.1 — same library, GPUMode 2 instead of 0
-    cuopt      NVIDIA cuOpt 26.8.0, from the delta-API fork in 4.2
+    cuopt      NVIDIA cuOpt 26.8.0, from the delta-API fork in 4
 
 `copt-cpu` and `copt-gpu` are one library exercised two ways (COPT_INTPARAM_
 GPUMODE 0 vs 2), not two products; the CPU config is the GPU-off control.
@@ -60,7 +58,7 @@ requests a certified (vertex) solution; see README.md.
 
 Every run since v0.1.0 self-reports its backend version in the one-line
 `[lp-config]` banner written to stderr at solver construction and captured in
-the run log, e.g.
+the run log:
 
     [lp-config] backend=mosek version=11.0.30 method=barrier exec=CPU \
         presolve=off crossover=off tol=0.0001 threads=auto(32)
@@ -69,32 +67,31 @@ The version is queried from the loaded library, never from the vendor header's
 compile-time macros, so a stale LD_LIBRARY_PATH pointing at a second install
 shows up in the log instead of being silently misreported.
 
-How the five versions above were established, since that banner field was added
-while preparing this artifact and is therefore absent from the committed CG
-logs: HiGHS is pinned by GIT_TAG v1.15.1 in CMakeLists.txt and written down by
-the single 2026-08-05 sweep that produced all 88 HiGHS cells; cuOpt by a fixed
-fork commit whose build predates the window. MOSEK and COPT are INFERRED — the
-installed libraries are dated 2025-11-17 and 2025-10-22, both before the first
-run on 2026-06-22, and the compact baseline, run on this host inside the CG
-window, records exactly MOSEK 11.0.30 and COPT 8.0.1 in its own logs. That is a
-strong reading of file timestamps, not a measurement taken at run time. From
-v0.1.0 on the banner removes the inference.
+That field was added while preparing this artifact, so it is absent from the
+committed CG logs, and the five versions above were established as follows.
+HiGHS: pinned by GIT_TAG v1.15.1 in CMakeLists.txt and written down by the
+single 2026-08-05 sweep that produced all 88 HiGHS cells. cuOpt: a fixed fork
+commit whose build predates the window. MOSEK and COPT: INFERRED — the installed
+libraries are dated 2025-11-17 and 2025-10-22, both before the first run on
+2026-06-22, and the compact baseline, run on this host inside the CG window,
+records exactly MOSEK 11.0.30 and COPT 8.0.1 in its own logs. A strong reading of
+file timestamps, not a run-time measurement; from v0.1.0 the banner removes the
+inference.
 
 
 1.1 mem_gb in the CG table — the same run's peak, moved into its log
 ---------------------------------------------------------------------
 
-`scripts/benchmark_solvers.py` always measured peak RSS (GNU `time -f %M`), but
-until the `# peak_rss_kb:` log header existed it wrote the number only into the
-sweep's own CSV under the gitignored bench_runs/ tree — and results/
-cg_benchmark.csv is rebuilt from the logs. The gap was closed without
-re-solving, by moving each number into the matching run's log. Per-row
-provenance, `mem_source`:
+`benchmark_solvers.py` always measured peak RSS (GNU `time -f %M`), but until the
+`# peak_rss_kb:` log header existed it wrote the number only into the sweep's own
+CSV under the gitignored bench_runs/ tree — and the committed table is rebuilt
+from the logs. The gap was closed without re-solving, by moving each number into
+the matching run's log. Per-row provenance, `mem_source`:
 
     backfilled:<csv>        410  relocated; the tag names the sweep CSV it came
-                                 from, and the row's `source` column names the
-                                 log it went into, so the pairing is readable
-                                 off the committed table
+                                 from and the row's `source` column names the log
+                                 it went into, so the pairing is readable off the
+                                 committed table
     measured                 29  written live by the run itself (24
                                  transportation re-runs, 5 issue-#40 re-runs)
     backfilled-untimed:<csv>  1  transportation/Sydney/path/mosek, which errored
@@ -102,19 +99,18 @@ provenance, `mem_source`:
                                  time-matched. Admitted deliberately: its
                                  95.8 GB peak is itself a headline datum
 
-Unlike section 2.2 this moves the SAME execution's measurement — the CSV row and
-the log are two records of one run — so it was gated on the two agreeing about
-that run's wall time and outcome. The gate is a tripwire, not a proof: two fast
-deterministic runs can agree on a 3-decimal time by coincidence, so the pairing
-rests on knowing which sweep produced the logs in a given directory. Every
-figure in this column is nonetheless a real measurement of the run in its row;
-none is a probe reading or an estimate.
+Unlike 2.2 this moves the SAME execution's measurement — CSV row and log are two
+records of one run — so it was gated on the two agreeing about wall time and
+outcome. That gate is a tripwire, not a proof (two fast deterministic runs can
+agree on a 3-decimal time by coincidence), so the pairing also rests on knowing
+which sweep produced the logs in a given directory. Every figure here is
+nonetheless a real measurement of the run in its row, never a probe reading.
 
-Both relocations (here and in 2.2) were one-shots over log trees that are not in
-this archive (see the end of section 5). Nothing in a reproduction needs them:
-benchmark_solvers.py and benchmark_mps.py write the header at run time, so every
-cell a fresh sweep produces is `measured`, and the consolidators rebuild both
-committed tables from the logs byte-identically either way.
+Both relocations (here and 2.2) were one-shots over log trees that are not in
+this archive (see the end of section 5). No reproduction needs them: both
+harnesses now write the header at run time, so every cell a fresh sweep produces
+is `measured`, and the consolidators rebuild both tables byte-identically either
+way.
 
 
 2. Compact-model baseline — solver binaries
@@ -122,7 +118,7 @@ committed tables from the logs byte-identically either way.
 
 Pins results/mps_compact_baseline.csv: 175 cells = 35 instances x 5, against
 `data/mps/*.mps.gz` (regenerable via scripts/write_mps.sh; gitignored, ~26 GB —
-BUS-2632-0 is 16.8 GB of that and Sydney 4.9 GB). Two sweeps, both by
+BUS-2632-0 is 16.8 GB of that, Sydney 4.9 GB). Two sweeps, both by
 scripts/benchmark_mps.py:
 
     33 instances x 5    2026-08-03..05   the original sweep
@@ -131,12 +127,12 @@ scripts/benchmark_mps.py:
 The MPS files for those last two did not exist during the first sweep, which is
 the only reason they are absent from it. One further exception: the five grid1
 cells were re-measured on 2026-08-11 while validating the memory instrumentation
-of section 2.1, so those five rows carry the re-run's timings (none moved by
-more than 0.05 s). Objectives, references and pass verdicts are byte-identical
-to the original sweep on all 165 rows.
+of 2.1, so those rows carry the re-run's timings (none moved by more than
+0.05 s). Objectives, references and pass verdicts are byte-identical to the
+original sweep on all 165 rows.
 
-Unlike the CG logs, these logs capture each vendor's own startup banner, so four
-of the five versions are recorded rather than inferred:
+Unlike the CG logs, these capture each vendor's own startup banner, so four of
+the five versions are recorded rather than inferred:
 
     highs      HiGHS 1.15.1 githash 04024d701f   [recorded in all 35 logs]
     mosek      MOSEK 11.0.30 (build 2025-11-17)  [recorded in all 35 logs]
@@ -144,21 +140,16 @@ of the five versions are recorded rather than inferred:
     copt-gpu   COPT 8.0.1                        [recorded in all 35 logs]
     cuopt      NVIDIA cuOpt 26.2.0 — STOCK, not the fork
 
-Two differences from section 1 matter:
-
-    cuOpt is the stock upstream CLI (26.2.0), not the delta-API fork. A one-shot
-    monolithic solve never mutates the model, so the fork's incremental API is
-    irrelevant here and stock cuOpt is the right — and more reproducible —
-    choice. Its CLI prints no version banner; the binary path is in each log's
-    `# cmd:` header and that binary reports 26.2.0.
-
-    HiGHS is the standalone CLI this repository builds at build/bin/highs, a
-    byproduct of `cmake --build build`: same patched source, same
-    -DBUILD_SHARED_EXTRAS_LIB=OFF as the library in section 1. A distro HiGHS
-    will NOT reproduce this row — the stock 1.15.1 CLI cannot run HiPO at all,
-    aborting with "features unavailable: amd, blas, metis, rcm" because upstream
-    defaults the numerical extras to a shared library the standalone never
-    links.
+Two differences from section 1 matter. cuOpt is the stock upstream CLI: a
+one-shot monolithic solve never mutates the model, so the fork's incremental API
+is irrelevant here and stock cuOpt is the more reproducible choice (its CLI
+prints no banner; the binary path is in each log's `# cmd:` header and that
+binary reports 26.2.0). HiGHS is the standalone CLI this repository builds at
+build/bin/highs as a byproduct of `cmake --build build` — same patched source and
+same -DBUILD_SHARED_EXTRAS_LIB=OFF as the linked library. A distro HiGHS will NOT
+reproduce these rows: the stock 1.15.1 CLI cannot run HiPO at all, aborting with
+"features unavailable: amd, blas, metis, rcm" because upstream defaults the
+numerical extras to a shared library the standalone never links.
 
 Barrier regime, deliberately NOT identical to section 1: crossover off and tol
 1e-4 as before, but presolve is left at each solver's default. A direct
@@ -170,37 +161,34 @@ handicap the baseline the CG results are compared against.
 --------------------------------------------------
 
 Pins results/mps_compact_memory.csv: the same 165 cells, run 2026-08-11..12 by
-`scripts/benchmark_mps.py --probe-iters 3`. 164 carry a peak; the 66 GPU cells
-also carry peak VRAM.
+`benchmark_mps.py --probe-iters 3`. 164 carry a peak; the 66 GPU cells also carry
+peak VRAM.
 
 These are NOT full solves. Each backend's barrier is capped at three iterations
 (highs `ipm_iteration_limit`, MOSEK `MSK_IPAR_INTPNT_MAX_ITERATIONS`, COPT
-`BarIterLimit`, cuOpt `--iteration-limit`), so the runs read the model,
-presolve, factor, iterate three times and stop. No objective is recorded, and
-the probe logs live in their own tree and consolidate through a separate mode so
-a capped iterate can never be scored as a solution.
+`BarIterLimit`, cuOpt `--iteration-limit`), so a run reads the model, presolves,
+factors, iterates three times and stops. No objective is recorded, and probe logs
+live in their own tree and consolidate through a separate mode, so a capped
+iterate can never be scored as a solution.
 
     Read every figure in this table as a LOWER BOUND on the full solve's peak.
 
-The justification for the cap: a barrier's high-water mark is the symbolic plus
+The cap is justified because a barrier's high-water mark is the symbolic plus
 numeric factorization of the normal equations, allocated on the first iteration
-and reused. Measured against full solves on grid7, planar300 and grid10 across
-all five backends, three iterations reach 0.95-1.00 of the full-solve peak
-(0.88-1.00 at one iteration; HiPO is the cell that needs three) for 1.5-7x less
-runtime, and peak VRAM to within 2%. A full-solve memory sweep would cost days
-on the giants, most of it re-deriving failures already recorded in section 2.
-
-How the numbers are taken:
+and reused. Against full solves on grid7, planar300 and grid10 across all five
+backends, three iterations reach 0.95-1.00 of the full-solve peak (0.88-1.00 at
+one iteration; HiPO is the cell that needs three) for 1.5-7x less runtime, and
+peak VRAM to within 2%.
 
     Host RSS   GNU `time -f %M`, wrapped INSIDE the systemd cgroup scope, which
-               runs with `OOMPolicy=continue` — without it systemd stops the
-               whole scope on a cgroup OOM and kills the `time` wrapper before
-               it writes, losing the measurement on exactly the runs worth
+               runs with `OOMPolicy=continue` — without it systemd stops the whole
+               scope on a cgroup OOM and kills the `time` wrapper before it
+               writes, losing the measurement on exactly the runs worth
                measuring. Ten cells report the 105 GiB cap: they need more than
                it, how much more is not measured.
-    VRAM       Sampled from `nvidia-smi` per process group, so a desktop
-               session's usage is never folded in. Sampling is a floor. A blank
-               vram_gb means unmeasured, never zero.
+    VRAM       Sampled from `nvidia-smi` per process group, so a desktop session's
+               usage is never folded in. Sampling is a floor. A blank vram_gb
+               means unmeasured, never zero.
 
 The one unmeasured cell is ChicagoRegional x highs: the harness's own subprocess
 timeout killed the process group before `time` could write. That hole is closed
@@ -211,41 +199,40 @@ wrapper; pinned by test/python/timeout_memory_test.py). This cell stays blank.
 2.2 mem_gb in the baseline table — relocated from the probe
 -------------------------------------------------------------
 
-The 2026-08-03..05 sweep predates the memory headers, so its logs carried none
-of their own, and memory — unlike objectives and timings — cannot be recovered
-by re-parsing a log. Rather than re-solve for days, each probe cell's peak was
-copied into the matching baseline log, keyed on (instance, solver) and tagged
-with the source log. Per-row provenance, `mem_source`:
+The 2026-08-03..05 sweep predates the memory headers, and memory — unlike
+objectives and timings — cannot be recovered by re-parsing a log. Rather than
+re-solve for days, each probe cell's peak was copied into the matching baseline
+log, keyed on (instance, solver) and tagged with the source log. Per-row
+provenance, `mem_source`:
 
     measured             15  the solve in that row reported its own peak (the
-                             five grid1 re-runs, plus the ten section 2.3 cells)
+                             five grid1 re-runs, plus the ten cells of 2.3)
     probe3:<log>        132  relocated; the probe reached its iteration cap, so
                              the setup regime completed
     probe3-partial:<log> 27  relocated, but the probe stopped SHORT of three
                              iterations (cgroup OOM, backend error, or a clean
-                             exit that never reached the barrier) — a lower
-                             bound on a lower bound. Ten sit at the ~105 GiB cap
+                             exit that never reached the barrier) — a lower bound
+                             on a lower bound. Ten sit at the ~105 GiB cap
     (blank)               1  ChicagoRegional x highs, unmeasured in BOTH sweeps
 
-    A relocated figure is the MODEL-SETUP PEAK, not the full solve's peak: read
-    it as a LOWER BOUND on the peak of the solve whose wall-clock sits in the
-    same row.
+    A relocated figure is the MODEL-SETUP PEAK, not the full solve's: read it as
+    a LOWER BOUND on the peak of the solve whose wall-clock sits beside it.
 
-Deliberately absent here: the time/outcome gate of section 1.1. That gate is
-right there because it moves one execution's number; here the two runs are
-different executions ON PURPOSE and are EXPECTED to disagree on both (Austin x
-copt-cpu: 1106 s probed against 7267 s solved). The only pairing evidence is
-(instance, solver) identity, which is why the tag names the source log.
+Deliberately absent here: the time/outcome gate of 1.1. That gate is right there
+because it moves one execution's number; here the two runs are different
+executions ON PURPOSE and are EXPECTED to disagree on both (Austin x copt-cpu:
+1106 s probed against 7267 s solved). The only pairing evidence is (instance,
+solver) identity, which is why the tag names the source log.
 
 
 2.3 Sydney and BUS-2632-0 — the two instances nothing solves
 -------------------------------------------------------------
 
 Ten cells run 2026-08-12, same barrier regime as section 2 and the memory guard
-of section 2.1, 2 h solver limit, 105 GiB cgroup cap. The guard is load-bearing
-here: `OOMPolicy=continue` is why these ten carry `measured` peaks while section
-2's own OOM deaths carry none. Compact source LP dimensions, from
-`mcfcg_cli --stats-only`, against the largest instance section 2 attempted:
+of 2.1, 2 h solver limit, 105 GiB cgroup cap. That guard is load-bearing here:
+`OOMPolicy=continue` is why these ten carry `measured` peaks while section 2's own
+OOM deaths carry none. Compact source LP dimensions, from `mcfcg_cli
+--stats-only`, against the largest instance section 2 attempted:
 
     ChicagoRegional    23.0 M rows    69.1 M cols     207 M nnz    ~9 GB MPS
     Sydney              108 M rows     246 M cols     736 M nnz   ~28 GB MPS
@@ -256,18 +243,18 @@ here: `OOMPolicy=continue` is why these ten carry `measured` peaks while section
 
 Eight were SIGKILLed by the cgroup at the cap (rc=137) with peak RSS pinned at
 ~104.8 GB — floors in a second sense from the relocated ones: the cell needed
-more than 105 GiB and how much more is not measured. The two exceptions, BUS x
-copt-cpu and copt-gpu, are not memory failures at all: COPT's reader printed
-"Reading failed" at 60.2 GB, well under the cap, so that figure is the READER's
-peak and says nothing about solving. Why it gave up is NOT established — BUS has
-2.64e9 nonzeros, past the int32 limit of 2.147e9, which makes a 32-bit count in
-the free-MPS reader the obvious suspect, but this was not confirmed against COPT
+more than 105 GiB, how much more is not measured. The two exceptions, BUS x
+copt-cpu and copt-gpu, are not memory failures: COPT's reader printed "Reading
+failed" at 60.2 GB, well under the cap, so that figure is the READER's peak and
+says nothing about solving. Why it gave up is NOT established — BUS has 2.64e9
+nonzeros, past the int32 limit of 2.147e9, which makes a 32-bit count in the
+free-MPS reader the obvious suspect, but this was never confirmed against COPT
 and an internal size limit is not excluded.
 
 For contrast, CG solves both: Sydney tree is 63-76 s at 9-13 GB on four of the
-five backends (255 s at 9.4 GB on highs), BUS-2632-0 is 1.6-3.4 s at 0.45-0.90
-GB across all five. The compact LP being unsolvable at this scale is the result,
-not a gap in it.
+five backends (255 s at 9.4 GB on highs), BUS-2632-0 is 1.6-3.4 s at 0.45-0.90 GB
+across all five. The compact LP being unsolvable at this scale is the result, not
+a gap in it.
 
 
 3. Benchmark host
@@ -284,57 +271,46 @@ not a gap in it.
 
 The 16 GiB GPU is the binding constraint behind one documented result: the cuOpt
 barrier cannot fit the path-formulation master of high-commodity instances (see
-the cuOpt notes in CLAUDE.md). That is a property of this host, not of cuOpt.
+CLAUDE.md). That is a property of this host, not of cuOpt. Wall-clock and
+peak-RSS figures will not reproduce numerically elsewhere; objectives will
+(section 6).
 
-Wall-clock and peak-RSS figures are host-specific by nature and will not
-reproduce numerically elsewhere; objective values will (section 6).
 
+4. Non-stock builds — the HiGHS patch and the cuOpt fork
+---------------------------------------------------------
 
-4. Deviations from stock solvers
---------------------------------
+Two of the five configurations are not stock upstream builds. Both change results
+relative to a stock install, and neither is visible in the version string the
+library reports, so both are part of the version pin.
 
-Two configurations are NOT stock upstream builds: HiGHS in both experiments, and
-cuOpt in the CG benchmark only (the compact baseline uses stock cuOpt). Both
-deviations change results relative to an unpatched install, so they are part of
-the version pin, and neither is visible in the version string the library
-reports.
-
-4.1 HiGHS — local patch, required for correctness
+HiGHS — local patch, in BOTH experiments, required for correctness.
     cmake/patches/highs-hipo-refine-status.patch, applied to the FetchContent'd
-    HiGHS source by CMakeLists.txt (idempotent; no manual step).
+    source by CMakeLists.txt (idempotent, no manual step). Stock HiPO discards a
+    near-optimal solution as an "internal error" when its IPX refinement step
+    fails on the ill-conditioned path masters this solver produces — the slack
+    penalty gives the objective a wide dynamic range. Tracked as issue #36.
 
-    Stock HiPO discards a near-optimal solution as an "internal error" when its
-    IPX refinement step fails on the ill-conditioned path masters this solver
-    produces (the slack penalty gives the objective a wide dynamic range).
-    Tracked in this repo as issue #36.
+    Load-bearing, not defensive, and no upstream tag replaces it. Checked
+    2026-08-13: HiGHS master still carries the unpatched `refineWithIpx()`, and
+    v1.15.1 — the tag pinned here — is the newest release. Built against
+    unpatched v1.15.1, this repo fails its own suite at RCValidation.WinnipegPath
+    ("LP not optimal at iter 8"); every other test passes, so the blast radius is
+    exactly the ill-conditioned path masters. `highsGithash()` reports the
+    upstream tag's hash and cannot tell you whether the patch is applied — the
+    build applies it unconditionally, so any binary from this tag has it.
 
-    The patch is load-bearing, not defensive, and no upstream tag replaces it.
-    Checked 2026-08-13: HiGHS master still carries the unpatched
-    `refineWithIpx()`, and v1.15.1 — the tag pinned here — is the newest release.
-    Building this repo against unpatched v1.15.1 fails its own suite at
-    RCValidation.WinnipegPath ("LP not optimal at iter 8", HiGHS returning a
-    non-optimal status mid-CG); every other test passes, so the blast radius is
-    exactly the ill-conditioned path masters described above.
-
-    `highsGithash()` reports the upstream tag's hash and cannot tell you whether
-    the patch is applied — the build applies it unconditionally, so any binary
-    built from this tag has it.
-
-4.2 cuOpt — delta-API fork, required for the default build
+cuOpt — delta-API fork, CG benchmark ONLY (the compact baseline uses stock 26.2.0).
     Repository https://github.com/spoorendonk/cuopt  (public)
     Branch     delta-api
     Commit     8ea7a033addb5594532f8f60b33b99067459c853  (2026-06-22)
     Base       branched from NVIDIA/cuopt at ffbe51a3921fa36362ca0ebec9eece597a87b9d9
 
-    Cite the commit, not the branch name: `delta-api` is a moving ref.
-
-    Stock cuOpt has no incremental (delta) C API, so the restricted master must
-    be rebuilt from scratch on every CG iteration — supported via
-    -DMCFCG_CUOPT_DELTA_API=OFF, but a serious performance degradation that does
-    not represent the reported cuOpt timings. The fork adds `cuopt_c_delta.h`.
-    It also carries a barrier fix for a ranged-constraint miscomputation with a
-    large finite bound (this repo's issue #32).
-
+    Cite the commit, not the branch: `delta-api` is a moving ref. Stock cuOpt has
+    no incremental (delta) C API, so the restricted master must be rebuilt from
+    scratch every CG iteration — supported via -DMCFCG_CUOPT_DELTA_API=OFF, but a
+    serious performance degradation that does not represent the reported cuOpt
+    timings. The fork adds `cuopt_c_delta.h`, and also carries a barrier fix for a
+    ranged-constraint miscomputation with a large finite bound (issue #32).
     `cuOptGetVersion` reports the upstream RAPIDS version (26.8.0) and cannot
     distinguish the fork.
 
@@ -344,39 +320,37 @@ reports.
 
 The 440 CG cells were collected between 2026-06-22 and 2026-08-07 and
 consolidated from six log directories by `scripts/consolidate_cg_logs.py`, which
-re-parses logs and never re-solves. The `source` column names the log behind
-every row. Four commits inside that window could affect a number:
+re-parses logs and never re-solves; the `source` column names the log behind every
+row. Four commits inside that window could affect a number:
 
-    3fc9ce9 (2026-08-07)  fix(cg): report best_ub, not the terminating
-                          iteration's LP objective, on the pricing-exhaustion
-                          optimal exit (issue #40). This DOES change reported
-                          objectives; the five affected cells were re-run at the
-                          fixed code (bench_runs/issue40_rerun logs, named in
-                          `source`).
+    3fc9ce9 (2026-08-07)  report best_ub, not the terminating iteration's LP
+                          objective, on the pricing-exhaustion optimal exit
+                          (issue #40). DOES change reported objectives; the five
+                          affected cells were re-run at the fixed code
+                          (bench_runs/issue40_rerun logs, named in `source`).
     d24f47d (2026-08-02)  forced the HiPO numerical extras to link statically.
                           Before it HiGHS silently fell back to dual simplex
-                          while still reporting method=hipo, so this changes
-                          which algorithm ran.
+                          while still reporting method=hipo — it changes which
+                          algorithm ran.
     eca2057 (2026-07-05)  bumped the FetchContent'd HiGHS to v1.15.1 and rebased
                           the HiPO patch.
-    4e67897 (2026-06-23)  human summary line only (prints UB=inf gap=inf when no
-                          feasible incumbent was found); the CSV result row is
+    4e67897 (2026-06-23)  human summary line only; the CSV result row is
                           untouched, so it cannot affect a tabulated value.
 
-The two HiGHS commits both land before the single 2026-08-05 sweep that produced
-all 88 HiGHS cells, so no committed HiGHS cell straddles either. ff56ad2
-(2026-06-26) corrected the Austin/Sydney reference optima, and the consolidator
-recomputes ref/rel_err/pass from the current optimal.csv, so that correction is
-reflected in every row. Everything else in the window is tooling and docs; the
-last commit to touch solver behaviour before the sweep began is 4a4f4b6
-(2026-06-22), so v0.1.0 reproduces every committed cell.
+Both HiGHS commits land before the single 2026-08-05 sweep that produced all 88
+HiGHS cells, so no committed HiGHS cell straddles either. ff56ad2 (2026-06-26)
+corrected the Austin/Sydney reference optima, and the consolidator recomputes
+ref/rel_err/pass from the current optimal.csv, so that correction is reflected in
+every row. Everything else in the window is tooling and docs; the last commit to
+touch solver behaviour before the sweep began is 4a4f4b6 (2026-06-22), so v0.1.0
+reproduces every committed cell.
 
-What the archive does NOT contain: `bench_runs/` is gitignored — bulky (583 CG
-run logs plus 165 baseline-solve logs) and fully regenerable — so the log files
-named in the `source` column are not part of this release or of the Zenodo
-archive. The consolidated CSVs under `results/` are the committed record;
-`source` documents which run produced each row, not a file you can open from the
-archive. Reproducing a row means re-running it, not re-parsing a log.
+What the archive does NOT contain: `bench_runs/` is gitignored — bulky (583 CG run
+logs plus 165 baseline-solve logs) and fully regenerable — so the logs named in
+`source` are not part of this release or of the Zenodo archive. The consolidated
+CSVs under `results/` are the committed record; `source` documents which run
+produced each row, not a file you can open from the archive. Reproducing a row
+means re-running it, not re-parsing a log.
 
 
 6. Reproducibility and licensing
@@ -385,46 +359,40 @@ archive. Reproducing a row means re-running it, not re-parsing a log.
 Objective values are the reproducible quantity, with one qualification: only the
 cells that PROVED optimality. A run stopped by the 7200 s limit reports the bound
 it had reached when the clock ran out, so its objective measures host speed as
-much as formulation. 20 of the 440 cells are not certified: 14 hit the time
+much as formulation. 20 of the 440 cells are not certified — 14 hit the time
 limit, 5 aborted after 0-5 iterations when an LP solve returned a non-optimal
 status (the four cuOpt transportation/*/path cells and planar2500/path/highs),
-and one was killed. The reproduction checker compares those cells but never
-fails on them.
+and one was killed. The reproduction checker compares those cells but never fails
+on them.
 
-Read the `objective` column of those 20 with care: for 17 of the 19 that
-produced a number at all, that number is the Lagrangian LOWER bound, not an
-objective — CG falls back to `best_lb` when it never recorded a slack-free
-incumbent, and `lower_bound` then holds the same value. Only
-transportation/Philadelphia/path/mosek reports a true upper bound (2.5893e7
-against an LB of 2.5572e7); transportation/Sydney/path/cuopt's -inf is the "no
-objective established" sentinel, its first LP solve having failed. A reader
-comparing these rows against the certified optima needs to know which direction
-the error runs.
+Read their `objective` with care: for 17 of the 19 that produced a number at all,
+that number is the Lagrangian LOWER bound, not an objective — CG falls back to
+`best_lb` when it never recorded a slack-free incumbent, and `lower_bound` then
+holds the same value. Only transportation/Philadelphia/path/mosek reports a true
+upper bound (2.5893e7 against an LB of 2.5572e7); transportation/Sydney/path/
+cuopt's -inf is the "no objective established" sentinel, its first LP solve having
+failed. A reader comparing these rows against the certified optima needs to know
+which direction the error runs.
 
 Timings and peak memory depend throughout on this host, this GPU and these
 library versions.
 
-Reproducible with open-source components only:
-    highs      HiGHS is fetched and built by CMake. No licence, no GPU, no
-               external install. This is the repo's default build.
-    cuopt      cuOpt and the fork are open source (Apache-2.0), but an NVIDIA
-               GPU is required. The fork must be built first; see README.md.
-
-Requires a commercial licence (free academic licences are available from both
-vendors):
-    mosek      MOSEK 11
-    copt-cpu   COPT 8
-    copt-gpu   COPT 8, plus an NVIDIA GPU
+    highs      open source, no licence, no GPU: fetched and built by CMake. This
+               is the repo's default build.
+    cuopt      open source (Apache-2.0) but needs an NVIDIA GPU, and the fork of
+               section 4 must be built first; see README.md.
+    mosek      commercial licence (free academic licences available)
+    copt-cpu   commercial licence (free academic licences available)
+    copt-gpu   commercial licence, plus an NVIDIA GPU
 
 All instance data for all four families is committed, so no download step is
 needed to reproduce any row of the CG benchmark. The compact baseline
 additionally needs the MPS exports, which are NOT committed (~26 GB of derived
-data); regenerate them with scripts/write_mps.sh before running
-scripts/benchmark_mps.py.
+data); regenerate them with scripts/write_mps.sh first.
 
 Smoke test — reproduces the grid/highs rows of results/cg_benchmark.csv on the
 default HiGHS-only build, in roughly 15 minutes of solve time plus a from-scratch
-CMake configure and build:
+configure and build:
 
     cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY
     cmake --build build -j$(nproc)
