@@ -47,7 +47,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                 params.warm_start);
 
     Pricer pricer;
-    pricer.init(inst, pool.get(), effective_batch_size, params.neg_rc_tol);
+    pricer.init(inst, pool.get(), effective_batch_size, params.neg_rc_tol, params.pricing_cutoff);
     pricer.set_track_arcs(effective_pricing_filter);
 
     Timer timer;
@@ -79,6 +79,14 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     bool certify_next = false;
     bool tried_certify = false;
 
+    // Accumulate the cutoff fire rate across every pricing sweep, including the
+    // warm start and the final_round retries, so the reported rate covers all
+    // the pricing work the run actually did.
+    auto tally_pricing = [&] {
+        result.cutoff_sources += pricer.last_cutoff_count();
+        result.priced_sources += pricer.last_priced_count();
+    };
+
     auto populate_timing = [&] {
         result.time_lp = timer.elapsed(TimerCat::LP);
         result.time_pricing = timer.elapsed(TimerCat::Pricing);
@@ -106,10 +114,11 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
 
     if (params.warm_start) {
         // One-shot initialization: price every source against +inf duals to
-        // seed the master with at least one column per source.  +inf
-        // disables the dijkstra cutoff (clamped to MAX_BOUND in the
-        // pricer) so we explore the full reachable graph.  Replaces the
-        // legacy Master::BIG_M coupling — the warm-start cutoff has
+        // seed the master with at least one column per source.  Every column
+        // prices out against +inf, so the pass explores the full reachable
+        // graph — and PricerBase::scale_dual saturates +inf at MAX_BOUND,
+        // leaving the optional dual pricing cutoff inert here.  Replaces the
+        // legacy Master::BIG_M coupling — the seeding pass has
         // nothing to do with the slack cost.  This pass intentionally
         // bypasses effective_col_limit (the per-iter cap only applies
         // inside the main loop below).
@@ -117,6 +126,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         std::vector<double> big_duals(num_entities, std::numeric_limits<double>::infinity());
         auto empty_mu = inst.graph.create_arc_map<double>(0.0);
         auto init_cols = pricer.price(big_duals, empty_mu, true);
+        tally_pricing();
         if (!init_cols.empty()) {
             master.add_columns(std::move(init_cols));
         }
@@ -242,8 +252,10 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         iter_timer.start(TimerCat::Pricing);
 
         auto new_cols = pricer.price(pi, mu, false, effective_col_limit);
+        tally_pricing();
         if (new_cols.empty()) {
             new_cols = pricer.price(pi, mu, true, effective_col_limit);
+            tally_pricing();
         }
         if (!new_cols.empty()) {
             // Keep _last_source_idx so partial pricing under PricerHeavy

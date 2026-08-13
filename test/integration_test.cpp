@@ -567,6 +567,215 @@ TEST(FeatureTests, LagrangianBoundTree) {
     EXPECT_LT(rel, mcfcg::RELATIVE_FEAS_TOL) << "obj=" << result.objective << " ref=" << ref;
 }
 
+// --- Dual pricing cutoff (CGParams::pricing_cutoff, gh #41) ---
+
+namespace cutoff_test {
+// 5 vertices.  Sink 3 is isolated (unreachable from the source) and vertex 4 is
+// a *dead end*: reachable from the source but with no path to any sink, so
+// compute_lower_bounds_to_targets gives it h = UNREACHED = MAX_BOUND.  That
+// combination is what puts a saturated key on the A* frontier while a target is
+// still pending — unreachable_test::build_disconnected cannot, because its
+// heap empties first.
+static mcfcg::Instance build_deadend() {
+    mcfcg::static_digraph_builder<double, double> builder(5);
+    builder.add_arc(0, 1, 1.0, 10.0);  // 0→1
+    builder.add_arc(1, 2, 2.0, 10.0);  // 1→2  (2 is the reachable sink)
+    builder.add_arc(0, 2, 5.0, 10.0);  // 0→2
+    builder.add_arc(0, 4, 1.0, 10.0);  // 0→4  (4 has no out-arcs: dead end)
+    auto [graph, cost_map, cap_map] = builder.build();
+
+    std::vector<mcfcg::Commodity> commodities = {
+        {0, 2, 1.0},  // reachable
+        {0, 3, 1.0},  // unreachable — sink 3 has no incident arcs
+    };
+    auto sources = mcfcg::group_by_source(commodities);
+    return mcfcg::Instance{std::move(graph), std::move(cost_map), std::move(cap_map),
+                           std::move(commodities), std::move(sources)};
+}
+
+// 4-vertex chain 0→1→2→3.  The near sink carries all the demand and the far
+// sink none, so the demand-weighted budget is fully "spent" while a target is
+// still unsettled.
+static mcfcg::Instance build_zero_demand() {
+    mcfcg::static_digraph_builder<double, double> builder(4);
+    builder.add_arc(0, 1, 1.0, 10.0);
+    builder.add_arc(1, 2, 1.0, 10.0);
+    builder.add_arc(2, 3, 1.0, 10.0);
+    auto [graph, cost_map, cap_map] = builder.build();
+
+    std::vector<mcfcg::Commodity> commodities = {
+        {0, 1, 1.0},  // near sink, all the demand
+        {0, 3, 0.0},  // far sink, zero demand (CommaLab keeps these verbatim)
+    };
+    auto sources = mcfcg::group_by_source(commodities);
+    return mcfcg::Instance{std::move(graph), std::move(cost_map), std::move(cap_map),
+                           std::move(commodities), std::move(sources)};
+}
+}  // namespace cutoff_test
+
+// A frontier saturated at MAX_BOUND is not a dual proof — it means the search
+// ran out of vertices that can reach any sink.  Treating it as a cutoff made
+// salvage_lagr_term contribute ~MAX_BOUND/SCALE per unsettled sink (≈4.6e9),
+// which latches into the monotone best_lb and is reported as the objective via
+// the #35 fallback; it also made the tree pricer suppress the partial column
+// the non-cutoff path emits for a disconnected source.  Both are silent wrong
+// answers on an instance class the pricer documents as degraded-but-working.
+TEST(FeatureTests, PricingCutoffIgnoresDeadEndFrontier) {
+    auto inst = cutoff_test::build_deadend();
+    mcfcg::TreePricer base_pricer;
+    mcfcg::TreePricer cut_pricer;
+    base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/false);
+    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/true);
+
+    std::vector<double> pi_s(inst.sources.size(), 50.0);
+    auto mu = inst.graph.create_arc_map<double>(0.0);
+    auto base_cols = base_pricer.price(pi_s, mu, true);
+    auto cut_cols = cut_pricer.price(pi_s, mu, true);
+
+    EXPECT_EQ(cut_pricer.last_cutoff_count(), 0U)
+        << "a dead-end frontier must not be recorded as a cutoff";
+    ASSERT_EQ(base_cols.size(), cut_cols.size()) << "partial tree suppressed by the cutoff";
+    EXPECT_NEAR(base_pricer.lagrangian_path_sum(), cut_pricer.lagrangian_path_sum(), 1e-9)
+        << "unreachable sink salvaged a saturated pseudo-distance into the LB";
+}
+
+// A zero-demand commodity drives the tree budget's remaining demand to 0 while
+// the budget itself is untouched.  Cutting there proves nothing — the unsettled
+// sinks contribute 0 to the tree reduced cost — and suppressed a strictly
+// improving column on every iteration including the final_round retry, which
+// the CG loop then reports as optimality.
+TEST(FeatureTests, PricingCutoffKeepsColumnWithZeroDemandCommodity) {
+    auto inst = cutoff_test::build_zero_demand();
+    mcfcg::TreePricer base_pricer;
+    mcfcg::TreePricer cut_pricer;
+    base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/false);
+    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/true);
+
+    std::vector<double> pi_s(inst.sources.size(), 1e6);
+    auto mu = inst.graph.create_arc_map<double>(0.0);
+    auto base_cols = base_pricer.price(pi_s, mu, true);
+    auto cut_cols = cut_pricer.price(pi_s, mu, true);
+
+    ASSERT_EQ(base_cols.size(), 1U) << "baseline must find this obviously attractive tree";
+    ASSERT_EQ(cut_cols.size(), base_cols.size()) << "cutoff dropped an improving column";
+    EXPECT_NEAR(base_cols[0].reduced_cost, cut_cols[0].reduced_cost, 1e-9);
+}
+
+// The cutoff is a proof that a source has no negative-reduced-cost column, so
+// switching it on must not change which columns the pricer emits.  Drives a
+// manual tree CG loop and prices every iteration twice — once with the cutoff,
+// once without — off the same duals, asserting the two column sets agree.  A
+// cutoff bound that is too aggressive (e.g. dividing the tree budget by the
+// wrong demand aggregate) shows up here as a dropped column, which end-to-end
+// objective checks would only catch if it happened to change the optimum.
+TEST(FeatureTests, PricingCutoffEmitsSameColumns) {
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar30");
+
+    mcfcg::TreeMaster master;
+    master.init(inst);
+    mcfcg::TreePricer base_pricer;
+    mcfcg::TreePricer cut_pricer;
+    base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/false);
+    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/true);
+
+    std::vector<double> big_pi(inst.sources.size(), std::numeric_limits<double>::infinity());
+    auto empty_mu = inst.graph.create_arc_map<double>(0.0);
+    auto init_cols = base_pricer.price(big_pi, empty_mu, true);
+    // The warm start's +inf duals must leave the cutoff inert, otherwise the
+    // seeding pass would explore less than the full reachable graph.
+    (void)cut_pricer.price(big_pi, empty_mu, true);
+    EXPECT_EQ(cut_pricer.last_cutoff_count(), 0U) << "+inf duals must disable the cutoff";
+    ASSERT_FALSE(init_cols.empty());
+    master.add_columns(std::move(init_cols));
+
+    uint64_t total_cut = 0;
+    for (uint32_t iter = 0; iter < 25; ++iter) {
+        ASSERT_EQ(master.solve(), mcfcg::LPStatus::Optimal) << "LP not optimal at iter " << iter;
+        auto primals = master.get_primals();
+        auto pi_s = master.get_structural_duals();
+        const auto& mu = master.get_capacity_duals();
+        (void)master.add_violated_capacity_constraints(primals);
+
+        // final_round on both so postponement can never make the two pricers
+        // visit different sources — the comparison is about the cutoff alone.
+        auto base_cols = base_pricer.price(pi_s, mu, true);
+        auto cut_cols = cut_pricer.price(pi_s, mu, true);
+        total_cut += cut_pricer.last_cutoff_count();
+
+        ASSERT_EQ(base_cols.size(), cut_cols.size()) << "column count differs at iter " << iter;
+        for (size_t i = 0; i < base_cols.size(); ++i) {
+            EXPECT_EQ(base_cols[i].source_idx, cut_cols[i].source_idx) << "at iter " << iter;
+            EXPECT_NEAR(base_cols[i].reduced_cost, cut_cols[i].reduced_cost, 1e-9)
+                << "at iter " << iter;
+        }
+
+        if (base_cols.empty()) {
+            break;
+        }
+        (void)master.bump_active_slacks(primals, mcfcg::SLACK_BUMP_FACTOR);
+        master.add_columns(std::move(base_cols));
+    }
+    // A pass where the cutoff never fired would satisfy every assertion above
+    // vacuously.
+    EXPECT_GT(total_cut, 0U) << "cutoff never fired; the comparison proved nothing";
+}
+
+// End-to-end: the cutoff must not move the optimum or cost optimality, on both
+// formulations and on the family it is actually meant for (intermodal, tree +
+// PricerHeavy — where a cut source must suppress its whole tree column rather
+// than emit a partial one).
+TEST(FeatureTests, PricingCutoffPathMatchesReference) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar150");
+    mcfcg::CGParams params;
+    params.pricing_cutoff = true;
+    auto result = mcfcg::solve_path_cg(inst, params);
+    EXPECT_TRUE(result.optimal);
+    double ref = opt.at("planar150");
+    double rel = std::abs(result.objective - ref) / std::max(1.0, std::abs(ref));
+    EXPECT_LT(rel, mcfcg::RELATIVE_FEAS_TOL) << "obj=" << result.objective << " ref=" << ref;
+    EXPECT_LE(result.lower_bound, ref * (1.0 + mcfcg::RELATIVE_FEAS_TOL))
+        << "salvaged LB exceeds OPT";
+    // Without this the test is vacuous: an inert cutoff trivially reproduces
+    // the reference.  Measured fire rate on planar150 path is ~19%.
+    EXPECT_GT(result.cutoff_sources, 0U) << "cutoff never fired";
+}
+
+TEST(FeatureTests, PricingCutoffTreeMatchesReference) {
+    auto opt = load_optimal(data_dir("commalab/planar"));
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar150");
+    mcfcg::CGParams params;
+    params.pricing_cutoff = true;
+    auto result = mcfcg::solve_tree_cg(inst, params);
+    EXPECT_TRUE(result.optimal);
+    double ref = opt.at("planar150");
+    double rel = std::abs(result.objective - ref) / std::max(1.0, std::abs(ref));
+    EXPECT_LT(rel, mcfcg::RELATIVE_FEAS_TOL) << "obj=" << result.objective << " ref=" << ref;
+    EXPECT_LE(result.lower_bound, ref * (1.0 + mcfcg::RELATIVE_FEAS_TOL))
+        << "salvaged LB exceeds OPT";
+    // Vacuity guard, as above.  Measured fire rate on planar150 tree is ~12%.
+    EXPECT_GT(result.cutoff_sources, 0U) << "cutoff never fired";
+}
+
+TEST(FeatureTests, PricingCutoffIntermodalTree) {
+    auto path = data_dir("intermodal") + "/BUS-2632-0.txt.gz";
+    if (!fs::exists(path)) {
+        GTEST_SKIP() << "data/intermodal not found";
+    }
+    auto opt = load_optimal(data_dir("intermodal"));
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.strategy = mcfcg::CGStrategy::PricerHeavy;
+    params.pricing_cutoff = true;
+    auto result = mcfcg::solve_tree_cg(inst, params);
+    double ref = opt.at("BUS-2632-0");
+    double tol = mcfcg::RELATIVE_FEAS_TOL * 2;
+    EXPECT_TRUE(result.optimal) << "Did not reach optimality";
+    EXPECT_GE(result.objective, ref * (1.0 - tol)) << "Objective below reference";
+    EXPECT_LE(result.objective, ref * (1.0 + tol)) << "Objective above reference";
+    EXPECT_GT(result.cutoff_sources, 0U) << "cutoff never fired on intermodal";
+}
+
 // The π-free Lagrangian LB must be (a) always valid (≤ OPT) and (b) AVAILABLE
 // while slacks are basic — the property that lets gap-termination fire on hard
 // instances (the old clamped LB was suppressed whenever a slack was basic).

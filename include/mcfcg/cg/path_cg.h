@@ -31,6 +31,13 @@ struct CGResult {
     uint32_t iterations = 0;
     uint32_t total_columns = 0;
     bool optimal = false;
+    // Dual pricing cutoff instrumentation, summed over every pricing sweep of
+    // the run: how many source prices the cutoff stopped short, out of how many
+    // it ran.  Both stay 0 / N when CGParams::pricing_cutoff is off.  A null
+    // speed-up is only interpretable next to the fire rate, so the CLI reports
+    // it rather than leaving "did it ever trigger?" unanswered.
+    uint64_t cutoff_sources = 0;
+    uint64_t priced_sources = 0;
     double time_lp = 0;
     double time_pricing = 0;
     double time_separation = 0;
@@ -92,6 +99,50 @@ struct CGParams {
     // Strategy preset; see CGStrategy enum above for the bundled behaviors.
     CGStrategy strategy = CGStrategy::PricerLight;
     bool pricing_filter = false;
+    // Dual-based pricing cutoff (manuscript §3.3): stop each source's A* as
+    // soon as the frontier proves no negative-reduced-cost column remains for
+    // it, instead of running until every sink of the source is settled.
+    //
+    // Off by default.  Measured on intermodal (gh #41, the only family where
+    // pricing is a large enough share of runtime to matter): a modest but
+    // reproducible win — pricing −4.3%/−4.7% and wall clock −3.6%/−3.7% under
+    // copt-cpu/copt-gpu, against a ~1.3% noise floor, with the Lagrangian bound
+    // at termination *improving* and every run still exiting on the gap test.
+    //
+    // Do not expect more than that on intermodal.  The cut fires 65−77% of the
+    // time yet buys only ~2−3% on the instances whose CG trajectory is
+    // unchanged, because at a master optimum every structural row is served by
+    // a basic column of reduced cost 0: the A* frontier reaches the sink at
+    // almost exactly the dual, so the cut lands just short of where the search
+    // would have stopped anyway.  What makes it fire at all is the _neg_rc_tol
+    // allowance folded into both bounds — the criterion needs only prove
+    // rc ≥ _neg_rc_tol, not rc ≥ 0.
+    //
+    // Where it does real work is a *multi-target* search, and there the two
+    // formulations diverge sharply.  Measured on grid + planar≤1000 under
+    // copt-gpu (288 runs): tree pricing −16.3%, path pricing −0.9%.  The tree
+    // bound (residual budget over the sum of remaining demands) tightens on
+    // every settle; the path bound (max π over unsettled sinks) is hostage to
+    // the single most expensive remaining commodity, which is usually the
+    // farthest and settles last — so the path search runs nearly to completion
+    // regardless.  That asymmetry is inherent to per-commodity duals, not an
+    // implementation detail.  Tree savings hold at ~14−22% across every
+    // commodities-per-source bucket even as the fire rate falls 75%→16%: with
+    // more targets a cut is harder to earn but prunes proportionally more.
+    //
+    // None of that reaches the wall clock on those families, because pricing is
+    // only 1.0−1.5% of their runtime (−1.3% tree, +0.3% path, both inside
+    // noise).  The two properties that would make this pay off — pricing-bound
+    // AND several commodities per source — do not co-occur anywhere in the
+    // shipped suite.  A family with both should see roughly the 16% pricing cut
+    // translate into real time.
+    //
+    // Caveat if you do enable it: on an instance with unreachable sinks the
+    // cutoff can stop a search while an unreachable target is still pending
+    // whenever some *other* sink keeps the A* heuristic finite, which
+    // suppresses the partial tree column the non-cutoff path would emit.
+    // Preprocess with mcfcg_clean, as the pricer already asks.
+    bool pricing_cutoff = false;
     uint32_t num_threads = 0;         // 0 = auto-detect via hardware_concurrency
     uint32_t pricing_batch_size = 0;  // 0 = all sources in one batch
     double neg_rc_tol = NEG_RC_TOL;   // see tolerances.h

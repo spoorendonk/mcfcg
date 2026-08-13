@@ -40,6 +40,13 @@ Examples:
 
   # both formulations on every family (override per-family default)
   python3 scripts/benchmark_solvers.py --formulations path,tree
+
+  # A/B ablation of a CLI flag: two sweeps, separate --out and --logdir
+  python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-cpu \
+      --out bench_runs/cg/cutoff_off.csv --logdir bench_runs/cg/cutoff_off
+  python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-cpu \
+      --extra-args '--pricing-cutoff' \
+      --out bench_runs/cg/cutoff_on.csv --logdir bench_runs/cg/cutoff_on
 """
 
 import argparse
@@ -48,6 +55,7 @@ import fnmatch
 import glob
 import os
 import re
+import shlex
 import signal
 import subprocess
 import sys
@@ -590,12 +598,18 @@ def main():
                     help="results CSV; default under the gitignored bench_runs/ "
                          "tree, not repo root. Promote a finalized full run to "
                          "results/ to commit it.")
+    ap.add_argument("--extra-args", default=None,
+                    help="extra CLI flags appended verbatim to every run, on top of the "
+                         "per-family defaults (shell-style quoting, e.g. "
+                         "--extra-args '--pricing-cutoff'). For A/B ablations: run the "
+                         "sweep twice into different --out/--logdir paths.")
     ap.add_argument("--logdir", default="bench_runs/cg/logs",
                     help="directory to save each run's full stdout+stderr (the per-iteration "
                          "CG log: cut growth, slack/bound history, timings). One file per run, "
                          "named <family>__<instance>__<formulation>__<solver>.log. "
                          "Default under gitignored bench_runs/, not repo root.")
     args = ap.parse_args()
+    extra_args = shlex.split(args.extra_args) if args.extra_args else []
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     os.makedirs(args.logdir, exist_ok=True)
@@ -626,9 +640,13 @@ def main():
     # redundant: every way a run can die -- signal, crash, bad args -- collapses
     # into "error", and only `exit_status` says which, so a cell killed by a signal
     # is distinguishable from a licence failure without opening the log.
-    fields = ["family", "instance", "solver", "formulation", "outcome", "exit_status",
-              "objective", "ref", "rel_err", "pass", "optimal", "iterations", "columns",
-              "time", "mem_gb", "config", "detail"]
+    # `extra_args` records the --extra-args flags verbatim. Without it two arms of
+    # an A/B differ only by the --out path, which is a filename convention rather
+    # than a record -- exactly the "silently mislabelled column" failure these
+    # scripts exist to prevent. Empty for a plain sweep, so old rows stay readable.
+    fields = ["family", "instance", "solver", "formulation", "extra_args", "outcome",
+              "exit_status", "objective", "ref", "rel_err", "pass", "optimal", "iterations",
+              "columns", "time", "mem_gb", "config", "detail"]
     rows = []
     summary = {s: {"pass": 0, "fail": 0, "wrong": 0, "error": 0, "noref": 0} for s in solvers}
 
@@ -648,12 +666,14 @@ def main():
                 sys.stderr.flush()
                 log_path = os.path.join(args.logdir,
                                         f"{family}__{key}__{formulation}__{solver}.log")
-                r = run_one(args.binary, instance, solver, formulation, extra,
+                r = run_one(args.binary, instance, solver, formulation, extra + extra_args,
                             args.max_iters, log_path=log_path,
                             time_limit=args.time_limit)
                 ref = refs.get(key)
                 rec = {"family": family, "instance": key, "solver": solver,
-                       "formulation": formulation, "outcome": r["outcome"],
+                       "formulation": formulation,
+                       "extra_args": " ".join(extra_args),
+                       "outcome": r["outcome"],
                        "exit_status": format_exit_status(r.get("returncode")),
                        "objective": "", "ref": "" if ref is None else ref,
                        "rel_err": "", "pass": "", "optimal": "", "iterations": "",

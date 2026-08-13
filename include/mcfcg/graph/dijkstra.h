@@ -114,12 +114,6 @@ public:
             advance();
     }
 
-    // Run until the heap is empty or the minimum key exceeds bound.
-    void run_until(length_type bound) noexcept {
-        while (!finished() && current().second <= bound)
-            advance();
-    }
-
     bool reached(vertex u) const noexcept { return _ws->status[u] != vertex_status::PRE_HEAP; }
     bool visited(vertex u) const noexcept { return _ws->status[u] == vertex_status::POST_HEAP; }
 
@@ -187,6 +181,17 @@ public:
     }
 
     bool finished() const noexcept { return _ws->heap.empty(); }
+
+    // Smallest f = g + h on the frontier.  With a consistent heuristic the
+    // settled f-sequence is non-decreasing, so this is a lower bound on the
+    // final f of every unsettled vertex — and hence on the final g of every
+    // unsettled vertex whose h is 0.  The dual pricing cutoff relies on
+    // exactly that, applied to target sinks (compute_lower_bounds_to_targets
+    // seeds every sink at distance 0, so h(sink) = 0).
+    length_type min_f() const noexcept {
+        assert(!finished());
+        return _ws->heap.top().p;
+    }
 
     // Returns the vertex being settled and its true distance g(v).
     std::pair<vertex, length_type> settle_next() noexcept {

@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <iterator>
 #include <numeric>
+#include <optional>
 #include <unordered_set>
 #include <vector>
 
@@ -93,19 +94,44 @@ inline static_map<uint32_t, int64_t> compute_lower_bounds_to_targets(const Insta
     return dist;
 }
 
+// One target sink of the source being priced, as seen by the dual pricing
+// cutoff.  `key` is the per-sink stopping threshold (path: the scaled
+// structural dual); `demand` is the sink's aggregated demand (tree).  Each
+// derived pricer uses the field its bound needs and ignores the other; the
+// shared layout lets both share one per-thread scratch buffer.
+struct CutoffEntry {
+    uint32_t sink;
+    int64_t key;
+    double demand;
+};
+
 // CRTP base class for path and tree pricers.  Shared logic: member
 // variables, initialization, reduced-cost computation, batched
 // round-robin source loop with parallel execution, A* target
 // setup/cleanup, and utility methods.
 //
 // Derived must implement:
-//   void process_source(s_idx, src, duals, mu, dijk, out)  [auto& dijk]
+//   void process_source(s_idx, src, duals, mu, dijk, out, tid, cutoff_f)
+//     [auto& dijk]
+//   auto make_cutoff(s_idx, src, duals, scratch)  -- returns a tracker with
+//     `int64_t bound()` (a cached read, queried once per settled vertex) and
+//     `void on_settle(dijk, sink, g)`, which is what refreshes it.  Required
+//     unconditionally: _dual_cutoff is a runtime flag, so the call is always
+//     instantiated even for a pricer that will never run with the cutoff on.
 template <typename Derived, typename ColumnT>
 class PricerBase {
 public:
     using vertex_t = uint32_t;
 
     static constexpr double SCALE = 1e9;
+    // Largest usable scaled distance.  Two roles: scale_dual saturates here, so
+    // a +inf dual yields a bound no *reachable* A* key exceeds; and
+    // compute_lower_bounds_to_targets uses the same value as its UNREACHED
+    // heuristic, so a frontier at or above it means every frontier vertex is a
+    // dead end and the search is effectively exhausted.  A* keys therefore CAN
+    // exceed it (f = g + h saturates only at semiring::infty) — which is why
+    // price_source_astar refuses to cut there.
+    static constexpr int64_t MAX_BOUND = shortest_path_semiring<int64_t>::infty / 2;
 
 protected:
     const Instance* _inst = nullptr;
@@ -116,9 +142,25 @@ protected:
     static_map<vertex_t, int64_t> _lower_bounds;
     static_map<uint32_t, int64_t> _rc;
 
+    // Dual-based pricing cutoff (manuscript §3.3): stop the A* as soon as the
+    // frontier proves no negative-reduced-cost column can exist for this
+    // source.  Off by default; see the CGParams::pricing_cutoff doc.
+    bool _dual_cutoff = false;
+    // Per unit of demand, the worst-case gap between an integer-scaled path
+    // length and SCALE·(its true cost): compute_rc rounds each scaled arc cost
+    // to the nearest integer, so the error is at most 0.5 per arc, and a
+    // shortest path under non-negative lengths is simple, so V bounds its arc
+    // count.  Used twice, in opposite directions — subtracted in
+    // salvage_lagr_term so a salvaged Lagrangian term stays a valid lower
+    // bound, and added to each cutoff bound (see the derivations in
+    // PathPricer::make_cutoff and TreePricer::make_cutoff) so the cut is
+    // provably no more aggressive than _neg_rc_tol.
+    double _round_slack_per_demand = 0.0;
+
     // Per-thread state for parallel pricing
     std::vector<dijkstra_workspace> _workspaces;
     std::vector<static_map<uint32_t, bool>> _is_targets;
+    std::vector<std::vector<CutoffEntry>> _cutoff_scratch;
     std::vector<std::vector<ColumnT>> _thread_columns;  // reused across batches
     // Per-source LB accumulators.  Writing to a per-source slot (instead
     // of a per-thread slot) keeps the final sum order-independent of the
@@ -150,6 +192,13 @@ protected:
     double _last_lagr_path_sum = 0.0;
     bool _last_priced_all = false;
 
+    // _source_cut[s] is 1 when the dual cutoff stopped the most recent A* run
+    // for source s.  Written only when s is actually priced; the per-call
+    // counters below are accumulated over the priced batches.
+    std::vector<uint8_t> _source_cut;
+    uint64_t _last_cutoff_count = 0;
+    uint64_t _last_priced_count = 0;
+
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
 
 public:
@@ -163,13 +212,18 @@ public:
     PricerBase& operator=(PricerBase&&) noexcept = default;
 
     void init(const Instance& inst, thread_pool* pool = nullptr, uint32_t batch_size = 0,
-              double neg_rc_tol = NEG_RC_TOL) {
+              double neg_rc_tol = NEG_RC_TOL, bool dual_cutoff = false) {
         _inst = &inst;
         _source_postponed.assign(inst.sources.size(), 0);
         _neg_rc_tol = neg_rc_tol;
         _pool = pool;
         _batch_size = batch_size;
         _last_source_idx = 0;
+        _dual_cutoff = dual_cutoff;
+        _round_slack_per_demand = 0.5 * static_cast<double>(inst.graph.num_vertices()) / SCALE;
+        _source_cut.assign(inst.sources.size(), 0);
+        _last_cutoff_count = 0;
+        _last_priced_count = 0;
 
         uint32_t num_ws = pool != nullptr ? pool->num_threads() : 1;
         _workspaces.clear();
@@ -186,6 +240,7 @@ public:
         _is_targets.reserve(num_ws);
         for (uint32_t wi = 0; wi < num_ws; ++wi)
             _is_targets.push_back(inst.graph.create_vertex_map<bool>(false));
+        _cutoff_scratch.assign(num_ws, {});
     }
 
     void set_track_arcs(bool enabled) {
@@ -206,6 +261,8 @@ public:
         _last_priced_all = false;
         _last_rc_error_bound = 0.0;
         _last_lagr_path_sum = 0.0;
+        _last_cutoff_count = 0;
+        _last_priced_count = 0;
 
         uint32_t n_sources = static_cast<uint32_t>(_inst->sources.size());
         if (n_sources == 0) {
@@ -224,6 +281,7 @@ public:
         uint32_t start = final_round ? 0 : _last_source_idx;
         uint32_t sources_scanned = 0;
         uint32_t priced_count = 0;
+        uint64_t cut_count = 0;
 
         std::vector<ColumnT> all_columns;
         std::vector<uint32_t> batch;
@@ -248,6 +306,8 @@ public:
             auto batch_cols = price_batch(batch, duals, mu);
             all_columns.insert(all_columns.end(), std::make_move_iterator(batch_cols.begin()),
                                std::make_move_iterator(batch_cols.end()));
+            for (uint32_t s_idx : batch)
+                cut_count += _source_cut[s_idx];
 
             if (max_cols > 0 && all_columns.size() >= max_cols) {
                 break;
@@ -270,10 +330,17 @@ public:
         // tree's one-col-per-source emission hits it precisely at the
         // end of the sweep.
         _last_priced_all = (priced_count == n_sources);
+        _last_priced_count = priced_count;
+        _last_cutoff_count = cut_count;
         return all_columns;
     }
 
     bool priced_all() const noexcept { return _last_priced_all; }
+
+    // Sources priced by the last price() call, and how many of those the dual
+    // cutoff stopped short.  Always 0/N when the cutoff is disabled.
+    uint64_t last_priced_count() const noexcept { return _last_priced_count; }
+    uint64_t last_cutoff_count() const noexcept { return _last_cutoff_count; }
 
     // π-free capacity-relaxation Lagrangian path sum Σ_k d_k·sp_k(c−μ) from
     // the last price() call.  Add Σ_a cap_a·μ_a and subtract lb_error_bound()
@@ -327,6 +394,19 @@ public:
     }
 
 protected:
+    // Scale a dual to the pricer's integer distance units, saturating instead
+    // of overflowing.  +inf (the warm-start duals) and NaN both map to
+    // MAX_BOUND, which no A* key can exceed — so the cutoff is inert there,
+    // and the warm start still explores the full reachable graph.
+    static int64_t scale_dual(double dual) noexcept {
+        double raw = dual * SCALE;
+        if (!(raw < static_cast<double>(MAX_BOUND)))
+            return MAX_BOUND;
+        if (raw <= -static_cast<double>(MAX_BOUND))
+            return -MAX_BOUND;
+        return static_cast<int64_t>(std::ceil(raw));
+    }
+
     // Branch-free body so the compiler can auto-vectorize the dense
     // cost/mu/_rc loop under -march=native.
     void compute_rc(const static_map<uint32_t, double>& mu) {
@@ -395,6 +475,14 @@ protected:
         uint32_t num_targets = 0;
         for (uint32_t k : src.commodity_indices) {
             vertex_t sink = _inst->commodities[k].sink;
+            // Cutoff soundness: min_f() bounds the final g of an unsettled
+            // vertex only where h vanishes.  compute_lower_bounds_to_targets
+            // seeds every sink at 0, so this holds for sinks — and would break
+            // if the heuristic ever became per-source or non-sink-seeded.
+            // Only the cutoff depends on it, so it is not worth checking on the
+            // default path even in a debug build.
+            assert((!_dual_cutoff || _lower_bounds[sink] == 0) &&
+                   "A* heuristic must vanish at every sink");
             if (!is_target[sink]) {
                 is_target[sink] = true;
                 ++num_targets;
@@ -404,13 +492,85 @@ protected:
         ws.reset();
         astar_dijkstra<dijkstra_store_paths> dijk(_inst->graph, _rc, _lower_bounds, ws);
         dijk.add_source(source_v);
-        dijk.run_until_targets(is_target, num_targets);
 
-        self().process_source(s_idx, src, duals, mu, dijk, new_columns, thread_id);
+        // Frontier f at which the dual cutoff stopped the search, empty when it
+        // did not fire.  Every sink left unsettled by a cutoff has a true
+        // reduced-cost distance of at least this — which is what lets
+        // salvage_lagr_term keep the Lagrangian bound from collapsing.  Held as
+        // an optional because 0 is a frontier value the cutoff really can stop
+        // at (a non-positive dual makes the bound negative before anything is
+        // settled), so it cannot double as "did not fire".
+        std::optional<int64_t> cutoff_f;
+        if (_dual_cutoff) {
+            auto& scratch = _cutoff_scratch[thread_id];
+            auto tracker = self().make_cutoff(s_idx, src, duals, scratch);
+            while (!dijk.finished() && num_targets > 0) {
+                int64_t frontier = dijk.min_f();
+                // Every frontier vertex now carries the UNREACHED heuristic
+                // (compute_lower_bounds_to_targets seeds dead ends at
+                // MAX_BOUND), so no unsettled sink is reachable any more.  Stop
+                // like the heap-exhausted case and NOT as a cutoff: those sinks
+                // are genuinely unreachable, so salvaging ~MAX_BOUND/SCALE for
+                // them would latch a Lagrangian bound orders of magnitude above
+                // OPT into the monotone best_lb, and would make the tree pricer
+                // suppress the partial column the non-cutoff path emits for a
+                // disconnected source.  Reachable targets have h=0, hence a
+                // frontier below MAX_BOUND, so all of them are already settled.
+                if (frontier >= MAX_BOUND)
+                    break;
+                if (frontier > tracker.bound()) {
+                    cutoff_f = frontier;
+                    break;
+                }
+                auto [settled, g_dist] = dijk.settle_next();
+                if (is_target[settled]) {
+                    is_target[settled] = false;
+                    --num_targets;
+                    tracker.on_settle(dijk, settled, g_dist);
+                }
+            }
+        } else {
+            dijk.run_until_targets(is_target, num_targets);
+        }
+        _source_cut[s_idx] = cutoff_f.has_value() ? 1 : 0;
+
+        self().process_source(s_idx, src, duals, mu, dijk, new_columns, thread_id, cutoff_f);
 
         // Clear only the sinks we set (O(commodities-per-source), not O(V)).
         for (uint32_t k : src.commodity_indices)
             is_target[_inst->commodities[k].sink] = false;
+    }
+
+    // Whether this call should refresh _source_arcs[s_idx].  A cut search
+    // covers only the sinks it settled, so its arc set is not the evidence
+    // filter_for_new_caps needs.  Leave the previous complete set standing
+    // rather than overwrite it with a partial one: possibly stale arcs still
+    // describe this source's routing, while a partial set would understate it
+    // and postpone a source a new capacity row does affect.  (With
+    // warm_start=false a source cut on its very first price keeps an *empty*
+    // set, which reads as "unaffected" — still only a convergence-speed
+    // question, since the pricing-exhausted final_round re-prices every source
+    // regardless of postponement.)
+    bool should_record_arcs(std::optional<int64_t> cutoff_f) const noexcept {
+        return _track_arcs && !cutoff_f.has_value();
+    }
+
+    // Lagrangian contribution salvaged for a commodity the cutoff left
+    // unsettled.  `cutoff_f` lower-bounds the integer-scaled reduced-cost
+    // distance to that sink, and rounding can inflate an integer-scaled path
+    // length by at most 0.5 per arc, so
+    //     d_k·sp_k(c−μ) >= demand · (cutoff_f/SCALE − margin)
+    // is a valid (if slack) stand-in for the term the truncated search never
+    // computed.  Dropping the term outright is also valid — every sp_k ≥ 0 —
+    // but at convergence the cutoff fires on nearly every source, and a bound
+    // that then collapses to Σ cap·μ would trade pricing time for the gap exit
+    // the bound exists to trigger.
+    double salvage_lagr_term(std::optional<int64_t> cutoff_f, double demand) const noexcept {
+        if (!cutoff_f.has_value()) {
+            return 0.0;  // heap exhausted: the sink is genuinely unreachable
+        }
+        double bound = static_cast<double>(*cutoff_f) / SCALE - _round_slack_per_demand;
+        return bound > 0.0 ? demand * bound : 0.0;
     }
 };
 
