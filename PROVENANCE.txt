@@ -23,7 +23,7 @@ Result tables pinned by this record
     results/mps_compact_baseline.csv  175 cells = 35 instances x 5 backend
                                     configurations: direct (non-CG) barrier
                                     solves of the compact source LP. Its mem_gb
-                                    is mostly INJECTED from the probe below and
+                                    is mostly RELOCATED from the probe below and
                                     is a lower bound — read mem_source per row,
                                     and see section 2.2
     results/mps_compact_memory.csv  peak RSS and VRAM of 165 of those
@@ -67,6 +67,47 @@ the run log, e.g.
 The version is queried from the loaded library, never from the vendor header's
 compile-time macros, so a stale LD_LIBRARY_PATH pointing at a second install
 shows up in the log instead of being silently misreported.
+
+
+1.1 mem_gb in the CG table — the same run's peak, moved into its log
+---------------------------------------------------------------------
+
+`scripts/benchmark_solvers.py` has always measured peak RSS with GNU `time -f
+%M`, but until the `# peak_rss_kb:` log header existed it wrote the number only
+into the sweep's own result CSV under the gitignored bench_runs/ tree. Once
+results/cg_benchmark.csv became log-derived (consolidate_cg_logs.py re-parses
+logs and never re-solves), memory stopped reaching the committed table.
+
+That gap was closed WITHOUT re-solving: for each older sweep row the number was
+moved into the matching run's log. Unlike section 2.2 this relocates the SAME
+execution's measurement — the CSV row and the log are two records of one run —
+so it was gated on the two agreeing about that run's wall time and outcome, a
+mismatch meaning the number came from a different execution than the log it was
+being attached to. The gate is necessary, not sufficient: two fast deterministic
+runs can agree on a 3-decimal time by coincidence, so the pairing rests on
+knowing which sweep produced the logs in a given directory, with the gate as a
+tripwire against mistakes. It is recorded per row and survives the one-shot: the
+`mem_source` tag names the sweep CSV the number came from and the `source`
+column names the log it went into, so any row's pairing can be read off the
+committed table. Per-row provenance, `mem_source`:
+
+    backfilled:<csv>        410  relocated, gate passed. The tag names the sweep
+                                 CSV the number came from
+    measured                 29  written live by the run itself (the 24
+                                 transportation re-runs and the 5 issue-#40
+                                 re-runs, both of which postdate the header)
+    backfilled-untimed:<csv>  1  transportation/Sydney/path/mosek, which errored
+                                 with no result row and so could not be
+                                 time-matched. Admitted deliberately: its
+                                 95.8 GB peak is itself a headline datum, and it
+                                 is the ONE row here whose memory rests on the
+                                 CSV-to-logdir correspondence alone
+
+Every figure in this column is a real measurement of the run in its row; none is
+a probe reading or an estimate. As in section 2.2 the relocation was a one-shot
+over a log tree that is not in this archive, and a fresh sweep needs no such
+step — `benchmark_solvers.py` now writes the header at run time, so every cell
+it produces is `measured`.
 
 
 2. Compact-model baseline — solver binaries
@@ -200,17 +241,17 @@ only be re-run, which is what this table does. Section 2.2 relocates these
 numbers into that sweep's rows.
 
 
-2.2 How mem_gb reaches the baseline table — injection, not re-solving
----------------------------------------------------------------------
+2.2 How mem_gb reaches the baseline table — relocation, not re-solving
+----------------------------------------------------------------------
 
 results/mps_compact_baseline.csv reports peak RSS on 174 of its 175 cells, but
 only 15 of those were measured during the solve the row describes. The rest were
-copied in from the section 2.1 probe by `scripts/inject_probe_memory.py`, which
-writes the probe's peak into the matching baseline log keyed on (instance,
-solver). Re-running the full sweep for memory alone costs days on the giants,
-almost all of it re-deriving failures already recorded in section 2.
+copied in from the section 2.1 probe: the probe's peak was written into the
+matching baseline log, keyed on (instance, solver) and tagged with the source
+log it came from. Re-running the full sweep for memory alone costs days on the
+giants, almost all of it re-deriving failures already recorded in section 2.
 
-    An injected figure is the MODEL-SETUP PEAK, not the full solve's peak:
+    A relocated figure is the MODEL-SETUP PEAK, not the full solve's peak:
     the high-water mark of reading the model, presolve, and three barrier
     iterations — the regime containing the symbolic and numeric factorization
     that dominates a barrier's footprint. Read it as a LOWER BOUND on the peak
@@ -222,10 +263,10 @@ Per-row provenance is in the `mem_source` column, never inferred:
                              five grid1 re-runs of section 2, plus the ten
                              section 2.3 cells, which postdate the
                              instrumentation)
-    probe3:<log>        132  injected; the probe reached its iteration cap, so
+    probe3:<log>        132  relocated; the probe reached its iteration cap, so
                              the setup regime completed. The trailing path is
                              the source log, the 3 is the iteration cap
-    probe3-partial:<log> 27  injected, but the probe stopped SHORT of three
+    probe3-partial:<log> 27  relocated, but the probe stopped SHORT of three
                              iterations — OOM at the cgroup cap, a backend
                              error, or a clean rc=0 exit that never reached the
                              barrier at all — so the peak is wherever it
@@ -234,21 +275,27 @@ Per-row provenance is in the `mem_source` column, never inferred:
                              section 2.3 sense: the cell needed more than the cap
     (blank)               1  ChicagoRegional x highs, unmeasured in BOTH sweeps
 
-Deliberately absent: the time/outcome provenance gate that
-scripts/backfill_log_memory.py applies. That gate is right there, because it
-relocates the SAME execution's number and a disagreement would prove a mixup.
-Here the two runs are different executions ON PURPOSE and are EXPECTED to
+Deliberately absent here: a time/outcome gate pairing the probe run with the
+solve it lends its peak to. Such a gate is right for the section 1.1 relocation,
+which moves the SAME execution's number and where a disagreement would prove a
+mixup. Here the two runs are different executions ON PURPOSE and are EXPECTED to
 disagree on both time and outcome — Austin x copt-cpu is 1106 s probed against
 7267 s solved. The only pairing evidence is (instance, solver) identity, which is
-why the tag names the source log: the claim is checkable by hand. Do not "fix"
-the missing gate.
+why the tag names the source log: the claim is checkable by hand.
 
-Reproduce (both idempotent; the injector rewrites only log headers, never
-bodies, and never overwrites a `measured` row):
+The relocation itself was a one-shot, performed over the log tree on 2026-08-12
+and not part of this release. It rewrote log headers only, never
+bodies, and never overwrote a `measured` reading. Its input — the section 2.1
+probe logs — is gitignored and outside the archive (see the note at the end of
+section 5), so there is nothing here for a third party to re-run and no shipped
+script that would relocate anything. What ships is the record and the reader:
 
-    python3 scripts/inject_probe_memory.py --dry-run   # report, write nothing
-    python3 scripts/inject_probe_memory.py
-    python3 scripts/consolidate_mps_logs.py
+    * the per-row `mem_source` tag, which names the source log;
+    * `scripts/consolidate_mps_logs.py`, which reads those tags out of the logs
+      and rebuilds results/mps_compact_baseline.csv byte-identically;
+    * `scripts/benchmark_mps.py`, which measures peak RSS live. A fresh full
+      sweep needs no relocation step at all: every cell it completes carries its
+      own `measured` peak.
 
 
 2.3 Sydney and BUS-2632-0 — the two instances nothing solves
@@ -270,7 +317,7 @@ instance section 2 attempted:
     either instance.
 
 Eight were SIGKILLed by the cgroup at the cap (rc=137) with peak RSS pinned at
-~104.8 GB. Those figures are FLOORS in a second sense from the injected ones:
+~104.8 GB. Those figures are FLOORS in a second sense from the relocated ones:
 the cell needed more than 105 GiB and how much more was not measured.
 
 The two exceptions are BUS x copt-cpu and BUS x copt-gpu, which are not memory

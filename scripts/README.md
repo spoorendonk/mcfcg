@@ -279,17 +279,24 @@ it in the log header, and the consolidator reads it back:
 
 | value | meaning |
 |---|---|
-| `measured` | GNU time read it during the run that wrote this log. |
-| `backfilled:<csv>` | relocated from a pre-header sweep CSV by `backfill_log_memory.py`; the CSV row's `time` and `outcome` matched the log's. |
+| `measured` | GNU time read it during the run that wrote this log. **The only tag a run can write** — everything below is historical. |
+| `backfilled:<csv>` | the same run's number, relocated into its log from a pre-header sweep CSV; the CSV row's `time` and `outcome` matched the log's. |
 | `backfilled-untimed:<csv>` | relocated, but the row had no `time` to check (the run errored), so only `outcome` was matched. One cell: `transportation/Sydney/path/mosek`, SIGKILLed at 95.8 GB — see `exit_status` below. |
 
-The match is a **tripwire, not a proof**. Times print to 3 decimals, so two runs
-of a fast deterministic instance can agree exactly while being different
-executions — and peak RSS depends on machine, build and solver version, not just
-the instance. Only extend `DEFAULT_SOURCES` when you already know which sweep
-produced the logs in the paired dir. (`bench_runs/legacy-root/*.csv` carry memory
-for 14 cells that were missing memory at the time and are deliberately excluded
-for exactly this reason.)
+The two `backfilled` tags come from a one-shot performed once over the log tree
+before archiving; the script is not in the release, since its input (pre-header
+sweep CSVs under the gitignored `bench_runs/`) is not either. The readers keep
+the vocabulary because the logs and `results/cg_benchmark.csv` still carry it —
+see `PROVENANCE.txt` section 1.1 for the full account, and
+`test/python/log_headers_test.py` for the round-trip test that keeps
+`parse_peak_rss` able to read those tags back.
+
+Its match rule is worth remembering if a comparable relocation is ever needed
+again: an agreement on `time` and `outcome` is a **tripwire, not a proof**. Times
+print to 3 decimals, so two runs of a fast deterministic instance can agree
+exactly while being different executions — and peak RSS depends on machine, build
+and solver version, not just the instance. The pairing rested on knowing which
+sweep produced the logs in a given dir, with the gate catching mistakes.
 
 ### How a run died is the other thing only the header knows
 
@@ -345,20 +352,6 @@ report `exit_status=ok`; the one exception is `transportation/Sydney/path/mosek`
 A cell reappearing in the "missing" count means a log lost its header — most
 likely a sweep rerun into a `--logdir` whose logs already carried memory
 (`write_log` truncates), which is unrecoverable without a re-solve.
-
-#### `backfill_log_memory.py`
-
-One-shot recovery tool, already applied — kept as the auditable record of how the
-pre-header runs got their memory. It reads the sweep CSVs listed in
-`DEFAULT_SOURCES`, matches each row to its log, and injects the header. Re-running
-it is a no-op (a log that already has a header is skipped), and it refuses any row
-whose `time`/`outcome` disagree with the log. New sweeps do not need it: they
-record memory natively.
-
-```
-python3 scripts/backfill_log_memory.py --dry-run   # report only
-python3 scripts/backfill_log_memory.py --allow-untimed
-```
 
 ## Compact-Model Baseline (`benchmark_mps.py`)
 
@@ -426,8 +419,8 @@ most interesting runs is lost.
 
 Memory is the one metric that **cannot** be recovered by re-parsing a log, so
 a cell solved before these headers existed has no peak of its own and needs a
-rerun — or the probe's number relocated into it (see `inject_probe_memory.py`
-below, which is what the committed table does for 159 of its 175 cells).
+rerun — or the probe's number relocated into it, which is what the committed
+table does for 159 of its 175 cells (see the `mem_source` section below).
 `--probe-iters N` is the cheap rerun: it caps the barrier at N iterations
 (`ipm_iteration_limit` / `MSK_IPAR_INTPNT_MAX_ITERATIONS` / `BarIterLimit` /
 `--iteration-limit`) instead of solving. A barrier's peak is the symbolic +
@@ -452,30 +445,33 @@ carry a `# probe_iters:` header; the consolidator keeps the two populations apar
 in either direction. A capped barrier's iterate is not a solution, and the point
 of the separation is that it can never be scored as one.
 
-### `inject_probe_memory.py` — and the baseline's `mem_source` column
+### The baseline's `mem_source` column
 
-The 2026-08-03..05 baseline sweep predates the memory headers, so re-running it
-for memory alone would cost days. `inject_probe_memory.py` instead copies each
-probe cell's peak into the matching baseline log, keyed on `(instance, solver)`,
-and `consolidate_mps_logs.py` surfaces the provenance as a `mem_source` column in
-`results/mps_compact_baseline.csv`:
+The 2026-08-03..05 baseline sweep predates the memory headers, and re-running it
+for memory alone would cost days. Each probe cell's peak was instead copied into
+the matching baseline log, keyed on `(instance, solver)`, by a one-shot performed
+once before archiving; `consolidate_mps_logs.py` surfaces the provenance as a
+`mem_source` column in `results/mps_compact_baseline.csv`:
 
 | value | meaning |
 |---|---|
-| `measured` | the solve in that row reported its own peak (the five grid1 re-runs plus the ten Sydney / BUS-2632-0 cells). |
-| `probeN:<log>` | **injected** from the named probe log: the model-setup peak (read + presolve + N barrier iterations), a **lower bound** on this row's full-solve peak, from a different execution with a different `time_wall` and `outcome`. |
-| `probeN-partial:<log>` | injected from a probe that stopped short of its cap (cgroup OOM, backend error, or a clean exit that never reached the barrier) — a lower bound on a lower bound. |
+| `measured` | the solve in that row reported its own peak (the five grid1 re-runs plus the ten Sydney / BUS-2632-0 cells). **The only tag a run writes for itself.** |
+| `probeN:<log>` | **relocated** from the named probe log: the model-setup peak (read + presolve + N barrier iterations), a **lower bound** on this row's full-solve peak, from a different execution with a different `time_wall` and `outcome`. |
+| `probeN-partial:<log>` | relocated from a probe that stopped short of its cap (cgroup OOM, backend error, or a clean exit that never reached the barrier) — a lower bound on a lower bound. |
 | *(empty)* | unmeasured in both sweeps. One cell: `ChicagoRegional x highs`. |
 
-Never quote an injected figure as the peak of the solve whose `time_wall` sits
-next to it. Unlike `backfill_log_memory.py` there is **no** time/outcome gate
-here, deliberately: the two runs are different executions and are *expected* to
-disagree (Austin x copt-cpu, 1106 s probed vs 7267 s solved). The only pairing
-evidence is `(instance, solver)` identity, which is why the tag names the source
-log. See PROVENANCE.txt section 2.2.
+Never quote a relocated figure as the peak of the solve whose `time_wall` sits
+next to it. There was deliberately **no** time/outcome gate on this relocation
+(unlike the CG one above): the two runs are different executions and are
+*expected* to disagree (Austin x copt-cpu, 1106 s probed vs 7267 s solved). The
+only pairing evidence is `(instance, solver)` identity, which is why the tag
+names the source log. See PROVENANCE.txt section 2.2.
+
+The relocating script is not in the release — its input, the probe log tree, is
+gitignored and outside the archive, and a fresh sweep never needs it: every cell
+`benchmark_mps.py` completes writes its own `measured` peak. Rebuilding the
+committed table from the logs is unaffected:
 
 ```bash
-python3 scripts/inject_probe_memory.py --dry-run   # report only
-python3 scripts/inject_probe_memory.py
 python3 scripts/consolidate_mps_logs.py            # rebuild the results CSV
 ```

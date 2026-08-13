@@ -19,13 +19,15 @@ that cell was never measured and needs a rerun (see --probe for the cheap one).
 `mem_source` says which regime that memory came from, and the distinction is not
 cosmetic:
     measured    the full solve's own peak, from GNU `time` on this very run.
-    probeN:...  INJECTED by inject_probe_memory.py from the iteration-capped
-                probe sweep (N barrier iterations). It is the model-setup /
-                initial peak -- read, presolve, symbolic+numeric factorization,
-                N iterations -- and therefore a LOWER BOUND on this row's
-                full-solve peak, measured in a different execution with a
-                different wall time and outcome. Never quote it as the peak of
-                the solve whose time_wall sits next to it.
+                The only tag a live run writes.
+    probeN:...  RELOCATED into this log from the iteration-capped probe sweep (N
+                barrier iterations) by a one-shot performed before archiving; see
+                PROVENANCE.txt section 2.2. It is the model-setup / initial peak
+                -- read, presolve, symbolic+numeric factorization, N iterations
+                -- and therefore a LOWER BOUND on this row's full-solve peak,
+                measured in a different execution with a different wall time and
+                outcome. Never quote it as the peak of the solve whose time_wall
+                sits next to it. The trailing path names the source log.
     probeN-partial:...  the same, from a probe that died (cgroup OOM at the cap,
                 or a backend error) before finishing its N iterations: a lower
                 bound on a lower bound.
@@ -80,8 +82,9 @@ def parse_log(path):
     return {
         "wall": wall, "rc": rc, "outcome": outcome, "warn": warn, "body": body,
         "mem_gb": bs.mem_gb_from_kb(rss_kb),
-        # Provenance of BOTH memory columns: the peak-RSS and peak-VRAM headers are
-        # written, and rewritten, as one block (see inject_probe_memory.py).
+        # Provenance of BOTH memory columns: the peak-RSS and peak-VRAM headers
+        # are written as one block, and were relocated as one block too, so a
+        # fresh RSS peak never sits beside a stale VRAM figure.
         "mem_source": rss_source,
         "vram_gb": bm.gb_from_mib(bm.parse_peak_vram_mib(text)),
         "probe_iters": bm.parse_probe_iters(text),
@@ -126,7 +129,8 @@ def main():
         # `mem_source` covers mem_gb AND vram_gb (one header block, one
         # provenance). It exists only in this mode: probe logs are live readings
         # by construction -- the probe sweep postdates the headers and nothing
-        # injects into it -- so the column would be the constant "measured" there,
+        # was ever relocated into it -- so the column would be the constant
+        # "measured" there,
         # and mps_compact_memory.csv is pinned in PROVENANCE section 2.1.
         # `probe_iters` is deliberately NOT carried across: on a full-solve row it
         # would read as "this solve was capped", which is the opposite of true.
@@ -248,9 +252,9 @@ def main():
         print(f"  pass={npass}  error/timeout={nerr}  "
               f"other={len(rows) - npass - nerr}")
         # Split the memory count by regime: lumping the two together would report
-        # an injected lower bound as if the full solve had been measured.
+        # a relocated lower bound as if the full solve had been measured.
         print(f"  peak RSS on {nmem}/{len(rows)} cells: {nfull} from the full solve, "
-              f"{nmem - nfull} injected from the probe sweep (lower bounds)")
+              f"{nmem - nfull} from the probe sweep (lower bounds)")
         if nmem < len(rows):
             print(f"  {len(rows) - nmem} cell(s) unmeasured in both sweeps "
                   f"(`--probe-iters` re-measures cheaply)")

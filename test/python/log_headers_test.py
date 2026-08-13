@@ -8,8 +8,9 @@ reader is silent (a blank or mislabelled CSV column), which is the same failure
 mode test/python/timeout_memory_test.py exists to prevent, one layer down.
 
 Several of these pin claims that are currently only asserted in comments — that
-the run-header writer and reader "cannot drift", that a truncated log is never
-fused onto, that a fresh RSS peak never ends up beside a stale VRAM figure.
+the run-header writer and reader "cannot drift", that a `#` line in the body is
+never mistaken for a header, that a provenance tag never survives the peak it
+describes.
 
 Run:  python3 -m unittest discover -s test/python -p '*_test.py'
 """
@@ -24,7 +25,6 @@ sys.path.insert(0, os.path.join(REPO, "scripts"))
 import benchmark_mps as bm  # noqa: E402
 import benchmark_solvers as bs  # noqa: E402
 import consolidate_mps_logs as cm  # noqa: E402
-import inject_probe_memory as ip  # noqa: E402
 
 # A benchmark_mps log, as run_one writes one.
 LOG = ("# cmd: /usr/bin/time -o /tmp/x -f %M solver model.mps\n"
@@ -51,42 +51,43 @@ class RunHeaderRoundTripTest(unittest.TestCase):
                          (None, None, "error"))
 
 
-class RewriteHeaderBlockTest(unittest.TestCase):
-    """The one rewriter of logs that cost hours to days to reproduce."""
+class PeakRssHeaderRoundTripTest(unittest.TestCase):
+    """format_peak_rss_headers writes it, parse_peak_rss reads it, nothing else."""
 
-    def test_replaces_in_the_block_and_leaves_the_body_alone(self):
-        out = bs.rewrite_header_block(
-            LOG, ip.MEM_HEADERS, bs.format_peak_rss_headers(999, "probe3:p.log"))
-        self.assertEqual(bs.parse_peak_rss(out), (999, "probe3:p.log"))
-        self.assertEqual(out.count("# peak_rss_kb:"), 1)
-        self.assertEqual(out.split(cm.MARKER, 1)[1], LOG.split(cm.MARKER, 1)[1],
-                         "the body was modified")
-        # Still parses as the same run.
-        self.assertEqual(bm.parse_run_header(out), (12.5, 0, "ok"))
+    def _log_with(self, block):
+        """A run log carrying `block` as its only memory header."""
+        return ("# cmd: solver model.mps\n"
+                "# wall=12.500s rc=0 outcome=ok\n"
+                + block + cm.MARKER + "\nObjective value : 1.0\n")
 
-    def test_is_idempotent(self):
-        block = bs.format_peak_rss_headers(999, "probe3:p.log")
-        once = bs.rewrite_header_block(LOG, ip.MEM_HEADERS, block)
-        self.assertEqual(bs.rewrite_header_block(once, ip.MEM_HEADERS, block), once)
+    def test_round_trip(self):
+        """Including the two relocation tags: the committed logs still carry them.
 
-    def test_truncated_header_is_not_fused_onto(self):
-        """A log cut off mid-header must not gain `...# peak_rss_kb:` on one line."""
-        out = bs.rewrite_header_block("# cmd: solver model.mps",
-                                      ip.MEM_HEADERS,
-                                      bs.format_peak_rss_headers(7, "measured"))
-        self.assertEqual(out.splitlines()[0], "# cmd: solver model.mps")
-        self.assertEqual(bs.parse_peak_rss(out), (7, "measured"))
+        A live run only ever writes `measured`, but consolidate_*_logs.py has to
+        keep reading `backfilled[-untimed]:` and `probeN[-partial]:` back —
+        results/cg_benchmark.csv and results/mps_compact_baseline.csv report them
+        in `mem_source` (PROVENANCE.txt sections 1.1 and 2.2), so a reader that
+        dropped the vocabulary would silently blank those columns.
+        """
+        for source in ("measured", "backfilled:bench_runs/a.csv",
+                       "backfilled-untimed:bench_runs/a.csv", "probe3:p.log",
+                       "probe3-partial:p.log"):
+            with self.subTest(source=source):
+                text = self._log_with(bs.format_peak_rss_headers(999, source))
+                self.assertEqual(bs.parse_peak_rss(text), (999, source))
 
-    def test_drops_a_stale_vram_line_with_the_rss_pair(self):
-        """MEM_HEADERS travel as one block: no fresh RSS beside a stale VRAM."""
-        stale = LOG.replace(cm.MARKER, "# peak_vram_mib: 5000\n" + cm.MARKER)
-        out = bs.rewrite_header_block(stale, ip.MEM_HEADERS,
-                                      bs.format_peak_rss_headers(999, "probe3:p"))
-        self.assertIsNone(bm.parse_peak_vram_mib(out))
+    def test_nothing_to_record_writes_nothing(self):
+        self.assertEqual(bs.format_peak_rss_headers(None, "measured"), "")
+
+    def test_a_source_without_a_peak_is_not_reported(self):
+        """The pair is atomic: never a provenance claim for a missing number."""
+        text = self._log_with("# peak_rss_source: measured\n")
+        self.assertEqual(bs.parse_peak_rss(text), (None, ""))
 
     def test_a_hash_line_in_the_body_is_not_treated_as_a_header(self):
-        out = bs.rewrite_header_block(LOG, (), "# peak_rss_kb: 2\n")
-        self.assertIn(cm.MARKER + "\n# this hash is BODY, not header\n", out)
+        self.assertEqual(bs.parse_peak_rss(LOG), (1234, "measured"))
+        body_header = LOG + "# peak_rss_kb: 2\n# peak_rss_source: measured\n"
+        self.assertEqual(bs.parse_peak_rss(body_header), (1234, "measured"))
 
 
 class OutcomeGateTest(unittest.TestCase):
@@ -108,10 +109,6 @@ class OutcomeGateTest(unittest.TestCase):
         self.assertTrue(bm.copt_solve_failed("[ERROR] Fail to solve"))
         self.assertFalse(bm.copt_read_failed("[ERROR] Fail to solve"))
         self.assertFalse(bm.copt_solve_failed("Primal objective: 1.0"))
-
-    def test_source_tag_marks_a_probe_that_stopped_short(self):
-        self.assertEqual(ip.source_tag(3, True, "p.log"), "probe3:p.log")
-        self.assertEqual(ip.source_tag(3, False, "p.log"), "probe3-partial:p.log")
 
 
 class ScopeOrderingTest(unittest.TestCase):

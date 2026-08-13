@@ -482,7 +482,7 @@ class VramSampler(threading.Thread):
 
 
 # The per-run summary header. Writer and reader live together so the consolidator
-# and the injector cannot drift from what run_one emits.
+# cannot drift from what run_one emits.
 RUN_HEADER = re.compile(r"# wall=([\d.]+)s rc=(-?\d+) outcome=(\w+)")
 
 

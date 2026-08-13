@@ -12,10 +12,13 @@ the committed `results/cg_benchmark.csv` reproducible: run the full suite with
 `benchmark_solvers.py` (logs -> bench_runs/cg/logs), then run this.
 
 Peak RSS (`mem_gb`) is read from each log's `# peak_rss_kb:` header, with
-`mem_source` recording whether it was measured live or relocated from an older
-sweep CSV by backfill_log_memory.py. Memory is the only metric measured outside
-the child process, so it must be in the log for this tool to see it; logs
-predating that header report an empty mem_gb until backfilled.
+`mem_source` recording whether the run wrote it live (`measured`) or it was
+relocated into the log from that same run's row in an older sweep CSV, back when
+the header did not yet exist (`backfilled:<csv>`, a one-shot performed before
+archiving — PROVENANCE.txt section 1.1). Memory is the only metric measured
+outside the child process, so it must be in the log for this tool to see it; a
+log with no header reports an empty mem_gb and can only be re-measured by
+re-running the cell.
 
 Multiple `--logdir`s are applied in PRIORITY ORDER: a later dir overrides an earlier
 one for the same (family,instance,formulation,solver) cell. That is how the
