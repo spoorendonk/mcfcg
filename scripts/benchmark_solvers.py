@@ -45,7 +45,7 @@ Examples:
   python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-cpu \
       --out bench_runs/cg/cutoff_off.csv --logdir bench_runs/cg/cutoff_off
   python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-cpu \
-      --extra-args '--pricing-cutoff' \
+      --extra-args=--pricing-cutoff \
       --out bench_runs/cg/cutoff_on.csv --logdir bench_runs/cg/cutoff_on
 """
 
@@ -132,6 +132,12 @@ def enumerate_family(family):
         for inst in insts:
             key = os.path.basename(inst)[: -len(".txt.gz")]
             # Tree is the default everywhere; intermodal additionally needs PricerHeavy.
+            # Deliberately NOT --pricing-cutoff, even though this is the family
+            # with the highest pricing share (71-85%) and so the flag's best case
+            # on the suite: gh #41 measured it at -3.6% wall clock here and a wash
+            # or a loss everywhere else, which is not worth a per-family flag in
+            # the benchmark default. Pass --extra-args=--pricing-cutoff to measure
+            # it; see results/ablation/README.md for what that already showed.
             yield inst, key, "tree", ["--strategy", "pricer-heavy"]
         return
     raise ValueError(f"unknown family '{family}'")
@@ -581,7 +587,9 @@ def main():
                     help="comma-separated formulations to run for every instance "
                          "(e.g. 'path,tree'). Overrides each family's default. "
                          "Omit to use the per-family default (tree for every family; "
-                         "intermodal additionally uses --strategy pricer-heavy).")
+                         "intermodal additionally uses --strategy pricer-heavy). "
+                         "Per-family extras apply to both formulations when this "
+                         "overrides the default one.")
     ap.add_argument("--instances", default=None,
                     help="fnmatch glob on the ref key to filter (e.g. 'grid1', 'BUS-*').")
     ap.add_argument("--max-planar", type=int, default=None,
@@ -600,9 +608,9 @@ def main():
                          "results/ to commit it.")
     ap.add_argument("--extra-args", default=None,
                     help="extra CLI flags appended verbatim to every run, on top of the "
-                         "per-family defaults (shell-style quoting, e.g. "
-                         "--extra-args '--pricing-cutoff'). For A/B ablations: run the "
-                         "sweep twice into different --out/--logdir paths.")
+                         "per-family defaults (shell-style quoting). A value starting with "
+                         "'-' needs the '=' form: --extra-args=--pricing-cutoff. For A/B "
+                         "ablations: run the sweep twice into different --out/--logdir paths.")
     ap.add_argument("--logdir", default="bench_runs/cg/logs",
                     help="directory to save each run's full stdout+stderr (the per-iteration "
                          "CG log: cut growth, slack/bound history, timings). One file per run, "

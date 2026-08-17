@@ -1,0 +1,38 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_9ouzrlts.txt -f %M build/mcfcg_cli data/commalab/grid/grid11 --solver copt --copt-gpu-mode 2 --formulation path --max-iters 10000 --pricing-cutoff --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 595108
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 625 vertices, 2400 arcs, 4000 commodities, 625 sources
+Solver: copt (gpu-mode 2), formulation: path
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=4000, capped_arcs=2400)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   3.2684e+08   3.2684e+08   4241   4241     0      0      0    241      0   0.327   0.006   0.001   0.334     0.334
+    2          inf   3.2684e+08   3.9001e+08   7583   4241   241   3342      0      0      0   0.220   0.003   0.000   0.224     0.559
+    3          inf   3.2704e+08   3.3040e+08   9985   4365     0   2278      0    124      0   0.243   0.003   0.001   0.249     0.807
+    4          inf   3.2704e+08   3.3108e+08  12798   4383     7   2795      0     18      0   0.318   0.002   0.001   0.323     1.130
+    5          inf   3.2825e+08   3.2984e+08  15087   4403     0   2269      0     20      0   0.351   0.003   0.001   0.357     1.487
+    6          inf   3.2870e+08   3.2952e+08  17060   4421     0   1955      0     18      0   0.335   0.003   0.001   0.341     1.828
+    7          inf   3.2899e+08   3.2939e+08  18621   4430     0   1552      0      9      0   0.384   0.003   0.002   0.390     2.218
+    8          inf   3.2916e+08   3.2931e+08  18028   4361     0   1105   1629      4     73   0.392   0.003   0.002   0.404     2.622
+    9          inf   3.2921e+08   3.2927e+08  17037   4318     0    747   1695      7     50   0.345   0.003   0.002   0.355     2.977
+   10          inf   3.2924e+08   3.2926e+08  14522   4308     0    499   3004      4     14   0.333   0.003   0.002   0.343     3.321
+   11          inf   3.2925e+08   3.2926e+08  12661   4298     0    360   2211      3     13   0.304   0.003   0.001   0.314     3.634
+   12          inf   3.2926e+08   3.2926e+08  11187   4292     0    149   1617      1      7   0.292   0.003   0.001   0.300     3.934
+   13          inf   3.2926e+08   3.2926e+08  10116   4283     0     60   1122      2     11   0.292   0.002   0.001   0.299     4.234
+   14          inf   3.2926e+08   3.2926e+08   9493   4274     0      4    618      1     10   0.293   0.003   0.001   0.299     4.533
+   15          inf   3.2926e+08   3.2926e+08   9494   4275     0      0      0      1      0   0.288   0.006   0.001   0.295     4.828
+   16   3.2926e+08   3.2926e+08   3.2926e+08   9494   4275     0     *0      0      0      0   0.345   0.006   0.000   0.351     5.179
+CG optimal after 16 iterations. UB=329258288.241195 LB=329258004.742835 gap=2.835e+02 tol=3.293e+04  t_LP=5.061  t_PR=0.060  t_SP=0.017  t_Tot=5.186
+[pricing-cutoff] enabled=1 cut=7422 priced=12500 rate=59.4%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/commalab/grid/grid11,path,16,9219,329258288.241195,329258004.742835,1,5.211,5.061,0.060,0.017

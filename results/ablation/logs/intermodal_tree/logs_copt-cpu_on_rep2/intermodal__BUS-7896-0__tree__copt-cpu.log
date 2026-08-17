@@ -1,0 +1,42 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_jcrh8veg.txt -f %M build/mcfcg_cli data/intermodal/BUS-7896-0.txt.gz --solver copt --copt-gpu-mode 0 --formulation tree --max-iters 10000 --strategy pricer-heavy --pricing-cutoff --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 415368
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 130395 vertices, 710935 arcs, 7883 commodities, 7883 sources
+Solver: copt (gpu-mode 0), formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=7883, capped_arcs=524037)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   2.0473e+05  15766   7960   475      0      0     77      0   0.027   0.000   0.050   0.077     0.077
+    2          inf         -inf   2.0647e+05  16206   7960   631    440      0      0      0   0.009   0.047   0.049   0.106     0.184
+    3          inf         -inf   2.1121e+05  16206   8031    48      0      0     71      0   0.011   0.000   0.050   0.062     0.245
+    4          inf         -inf   2.1215e+05  16206   8035   112      0      0      4      0   0.014   0.000   0.050   0.065     0.310
+    5          inf         -inf   2.1217e+05  16255   8035   112     49      0      0      0   0.014   0.023   0.049   0.087     0.397
+    6          inf         -inf   2.2155e+05  16255   8036   111      0      0      1      0   0.015   0.000   0.049   0.064     0.461
+    7          inf         -inf   2.2155e+05  16275   8011   111     20      0      0     25   0.015   0.022   0.049   0.086     0.547
+    8          inf         -inf   2.4088e+05  16275   8013    82      0      0      2      0   0.014   0.000   0.049   0.064     0.611
+    9          inf         -inf   2.4093e+05  16294   7967    86     19      0      0     46   0.015   0.026   0.049   0.090     0.701
+   10          inf   1.3301e+04   2.5544e+05  16796   7967    80    502      0      0      0   0.013   0.201   0.050   0.265     0.967
+   11          inf   1.3301e+04   2.1053e+05  16796   8008     0      0      0     41      0   0.014   0.000   0.049   0.064     1.031
+   12          inf   1.3301e+04   2.1075e+05  16796   8019     3      0      0     11      0   0.017   0.000   0.049   0.066     1.097
+   13          inf   1.3301e+04   2.1082e+05  16796   8020     5      0      0      1      0   0.020   0.000   0.048   0.069     1.166
+   14          inf   1.3301e+04   2.1083e+05  16798   8006     6      2      0      0     14   0.021   0.022   0.049   0.093     1.259
+   15          inf   1.9844e+05   2.1135e+05  17080   8005     5    282      0      0      1   0.016   0.206   0.049   0.272     1.531
+   16          inf   1.9844e+05   2.1060e+05  17080   8013     0      0      0      8      0   0.021   0.000   0.050   0.071     1.602
+   17   2.1060e+05   1.9844e+05   2.1060e+05  17085   7977     0      5      0      0     36   0.022   0.023   0.050   0.095     1.698
+   18   2.1060e+05   1.9844e+05   2.1060e+05  17085   7980     0      0      0      3      0   0.016   0.000   0.050   0.066     1.763
+   19   2.1060e+05   2.1051e+05   2.1060e+05  17154   7974     0     69      0      0      6   0.015   0.213   0.050   0.279     2.042
+   20   2.1060e+05   2.1059e+05   2.1060e+05  17154   7974     0    *24      0      0      0   0.016   0.193   0.050   0.260     2.302
+CG optimal after 20 iterations. UB=210595.000061 LB=210590.316884 gap=4.683e+00 tol=2.106e+01  t_LP=0.325  t_PR=1.221  t_SP=0.989  t_Tot=2.546
+[pricing-cutoff] enabled=1 cut=30979 priced=40274 rate=76.9%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 0
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/BUS-7896-0.txt.gz,tree,20,9271,210595.000061,210590.316884,1,2.731,0.325,1.221,0.989

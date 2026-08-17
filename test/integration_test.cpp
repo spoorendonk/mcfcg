@@ -11,9 +11,11 @@
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/source/source_lp.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 
@@ -593,9 +595,18 @@ static mcfcg::Instance build_deadend() {
                            std::move(commodities), std::move(sources)};
 }
 
-// 4-vertex chain 0→1→2→3.  The near sink carries all the demand and the far
-// sink none, so the demand-weighted budget is fully "spent" while a target is
-// still unsettled.
+// 4-vertex chain 0→1→2→3.  The near sinks carry all the demand and the far sink
+// none, so the demand-weighted budget is fully "spent" while a target is still
+// unsettled.
+//
+// The demands are deliberately fractional and deliberately three.  With a single
+// unit demand, Σd minus the settled demands lands on exactly +0.0, the division
+// in TreePricer::Cutoff::recompute yields +inf, and the MAX_BOUND clamp then
+// reproduces precisely what the `_rem_demand > 0` guard does — so the test
+// passes with that guard deleted and pins nothing.  Fractional demands (the norm
+// on TNTP) leave a small NEGATIVE residue instead, the division yields -inf, and
+// its int64_t cast is UB (INT64_MIN in practice), so every frontier cuts and the
+// improving column is lost.  That is the bug the guard exists for.
 static mcfcg::Instance build_zero_demand() {
     mcfcg::static_digraph_builder<double, double> builder(4);
     builder.add_arc(0, 1, 1.0, 10.0);
@@ -604,12 +615,95 @@ static mcfcg::Instance build_zero_demand() {
     auto [graph, cost_map, cap_map] = builder.build();
 
     std::vector<mcfcg::Commodity> commodities = {
-        {0, 1, 1.0},  // near sink, all the demand
-        {0, 3, 0.0},  // far sink, zero demand (CommaLab keeps these verbatim)
+        {0, 1, 8.446},  // near sinks carry all the demand; the fractional values
+        {0, 2, 7.582},  // make the residue land just *below* zero, not at +0.0
+        {0, 3, 0.0},    // far sink, zero demand (CommaLab keeps these verbatim)
     };
     auto sources = mcfcg::group_by_source(commodities);
     return mcfcg::Instance{std::move(graph), std::move(cost_map), std::move(cap_map),
                            std::move(commodities), std::move(sources)};
+}
+
+// Two independent source→sink pairs plus a spare arc 0→5 that lies on no
+// shortest path to any sink, so a capacity row on it touches neither source's
+// recorded arc set.  Vertex 5 is nobody's sink, so it is a dead end.
+static mcfcg::Instance build_two_sources_and_spare_arc() {
+    mcfcg::static_digraph_builder<double, double> builder(6);
+    builder.add_arc(0, 1, 1.0, 10.0);
+    builder.add_arc(1, 2, 1.0, 10.0);
+    builder.add_arc(3, 4, 1.0, 10.0);
+    builder.add_arc(0, 5, 1.0, 10.0);  // the spare
+    auto [graph, cost_map, cap_map] = builder.build();
+
+    std::vector<mcfcg::Commodity> commodities = {
+        {0, 2, 1.0},
+        {3, 4, 1.0},
+    };
+    auto sources = mcfcg::group_by_source(commodities);
+    return mcfcg::Instance{std::move(graph), std::move(cost_map), std::move(cap_map),
+                           std::move(commodities), std::move(sources)};
+}
+
+// Match key for a column: each commodity (path) / source (tree) yields at most
+// one column per sweep, so the key identifies a column within one price() call.
+inline uint64_t column_key(const mcfcg::Column& col) {
+    return col.commodity;
+}
+inline uint64_t column_key(const mcfcg::TreeColumn& col) {
+    return col.source_idx;
+}
+
+// Bit-equality, not EXPECT_NEAR.  A cutoff run settles its sinks in the same
+// order as a full run — run_until_targets is the same settle_next loop as the
+// cutoff driver, minus the frontier checks — so the two extract the same path
+// and accumulate the same floats in the same order.  Anything but bit-equality
+// means the cutoff changed the answer.  Returns "" when the columns agree,
+// otherwise a description of the first field that differs.
+inline std::string column_diff(const mcfcg::Column& base, const mcfcg::Column& cut) {
+    std::ostringstream os;
+    os.precision(17);
+    if (base.cost != cut.cost) {
+        os << " cost " << base.cost << " vs " << cut.cost;
+    }
+    if (base.reduced_cost != cut.reduced_cost) {
+        os << " rc " << base.reduced_cost << " vs " << cut.reduced_cost;
+    }
+    if (base.arcs != cut.arcs) {
+        os << " arcs differ (" << base.arcs.size() << " vs " << cut.arcs.size() << ")";
+    }
+    return os.str();
+}
+
+inline std::string column_diff(const mcfcg::TreeColumn& base, const mcfcg::TreeColumn& cut) {
+    std::ostringstream os;
+    os.precision(17);
+    if (base.cost != cut.cost) {
+        os << " cost " << base.cost << " vs " << cut.cost;
+    }
+    if (base.reduced_cost != cut.reduced_cost) {
+        os << " rc " << base.reduced_cost << " vs " << cut.reduced_cost;
+    }
+    // arc_flows is dumped from an unordered_map, so its order is not part of
+    // the contract even though both pricers build the map identically.
+    auto by_arc = [](std::vector<mcfcg::TreeColumn::ArcFlow> flows) {
+        std::sort(flows.begin(), flows.end(),
+                  [](const auto& lhs, const auto& rhs) { return lhs.arc < rhs.arc; });
+        return flows;
+    };
+    auto base_flows = by_arc(base.arc_flows);
+    auto cut_flows = by_arc(cut.arc_flows);
+    if (base_flows.size() != cut_flows.size()) {
+        os << " arc_flows " << base_flows.size() << " vs " << cut_flows.size();
+        return os.str();
+    }
+    for (size_t i = 0; i < base_flows.size(); ++i) {
+        if (base_flows[i].arc != cut_flows[i].arc || base_flows[i].flow != cut_flows[i].flow) {
+            os << " arc_flow[" << i << "] " << base_flows[i].arc << ":" << base_flows[i].flow
+               << " vs " << cut_flows[i].arc << ":" << cut_flows[i].flow;
+            break;
+        }
+    }
+    return os.str();
 }
 }  // namespace cutoff_test
 
@@ -661,6 +755,60 @@ TEST(FeatureTests, PricingCutoffKeepsColumnWithZeroDemandCommodity) {
     EXPECT_NEAR(base_cols[0].reduced_cost, cut_cols[0].reduced_cost, 1e-9);
 }
 
+// A cut source keeps the arc set from its last complete price, so the source
+// pricing filter answers "was any arc I route over just capacitated?" from an
+// older routing.  Pinned rather than fixed: this is why switching the cutoff on
+// moves the CG trajectory (see the Shadow tests for the invariant that DOES
+// hold), and treating a cut source as affected instead costs +31% wall clock on
+// intermodal — see should_record_arcs.
+TEST(FeatureTests, PricingCutoffFilterUsesStaleArcsForCutSources) {
+    auto inst = cutoff_test::build_two_sources_and_spare_arc();
+    ASSERT_EQ(inst.sources.size(), 2U);
+    // The spare arc lies on no source's routing; the first arc out of vertex 0
+    // toward vertex 1 lies on source 0's.
+    uint32_t spare = UINT32_MAX;
+    uint32_t routed = UINT32_MAX;
+    for (uint32_t arc : inst.graph.out_arcs(0)) {
+        if (inst.graph.arc_target(arc) == 5) {
+            spare = arc;
+        } else {
+            routed = arc;
+        }
+    }
+    ASSERT_NE(spare, UINT32_MAX);
+    ASSERT_NE(routed, UINT32_MAX);
+
+    mcfcg::TreePricer pricer;
+    pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/true);
+    pricer.set_track_arcs(true);
+    auto mu = inst.graph.create_arc_map<double>(0.0);
+
+    // Seed: +inf duals leave the cutoff inert, so both sources record a
+    // complete arc set — neither of which contains the spare arc.
+    std::vector<double> seed(inst.sources.size(), std::numeric_limits<double>::infinity());
+    (void)pricer.price(seed, mu, true);
+    ASSERT_EQ(pricer.last_cutoff_count(), 0U);
+
+    // Source 0's convexity dual of 0 spends its budget before anything is
+    // settled, so it is cut and never refreshes its arcs.  Source 1's budget is
+    // large enough to run to completion.
+    std::vector<double> pi_s = {0.0, 1e6};
+    (void)pricer.price(pi_s, mu, true);
+    ASSERT_EQ(pricer.last_cutoff_count(), 1U) << "test setup did not cut exactly one source";
+
+    // Capacitating an arc on nobody's routing postpones everyone, the cut
+    // source included: its stale set is consulted exactly like a fresh one.
+    pricer.filter_for_new_caps({spare});
+    (void)pricer.price(pi_s, mu, false);
+    EXPECT_EQ(pricer.last_priced_count(), 0U) << "a stale arc set still postpones";
+
+    // And the stale set is the *seed* routing, not an empty or partial one:
+    // capacitating an arc it contains brings the cut source back.
+    pricer.filter_for_new_caps({routed});
+    (void)pricer.price(pi_s, mu, false);
+    EXPECT_EQ(pricer.last_priced_count(), 1U) << "the retained arc set is the complete one";
+}
+
 // The cutoff is a proof that a source has no negative-reduced-cost column, so
 // switching it on must not change which columns the pricer emits.  Drives a
 // manual tree CG loop and prices every iteration twice — once with the cutoff,
@@ -704,8 +852,8 @@ TEST(FeatureTests, PricingCutoffEmitsSameColumns) {
 
         ASSERT_EQ(base_cols.size(), cut_cols.size()) << "column count differs at iter " << iter;
         for (size_t i = 0; i < base_cols.size(); ++i) {
-            EXPECT_EQ(base_cols[i].source_idx, cut_cols[i].source_idx) << "at iter " << iter;
-            EXPECT_NEAR(base_cols[i].reduced_cost, cut_cols[i].reduced_cost, 1e-9)
+            ASSERT_EQ(base_cols[i].source_idx, cut_cols[i].source_idx) << "at iter " << iter;
+            EXPECT_EQ(cutoff_test::column_diff(base_cols[i], cut_cols[i]), "")
                 << "at iter " << iter;
         }
 
@@ -718,6 +866,19 @@ TEST(FeatureTests, PricingCutoffEmitsSameColumns) {
     // A pass where the cutoff never fired would satisfy every assertion above
     // vacuously.
     EXPECT_GT(total_cut, 0U) << "cutoff never fired; the comparison proved nothing";
+}
+
+// The ablation in results/ablation/ concluded "ship it off", but nothing pinned
+// that: every other PricingCutoff* test sets the flag explicitly, so a flipped
+// default would leave the whole suite green while silently changing what every
+// committed benchmark cell in results/cg_benchmark.csv means — and that CSV has
+// no extra_args column to record it (PROVENANCE.txt section 5.1).
+TEST(FeatureTests, PricingCutoffIsOffByDefault) {
+    EXPECT_FALSE(mcfcg::CGParams{}.pricing_cutoff);
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
+    auto result = mcfcg::solve_tree_cg(inst, mcfcg::CGParams{});
+    EXPECT_TRUE(result.optimal);
+    EXPECT_EQ(result.cutoff_sources, 0U) << "a default run fired the pricing cutoff";
 }
 
 // End-to-end: the cutoff must not move the optimum or cost optimality, on both
@@ -774,6 +935,180 @@ TEST(FeatureTests, PricingCutoffIntermodalTree) {
     EXPECT_GE(result.objective, ref * (1.0 - tol)) << "Objective below reference";
     EXPECT_LE(result.objective, ref * (1.0 + tol)) << "Objective above reference";
     EXPECT_GT(result.cutoff_sources, 0U) << "cutoff never fired on intermodal";
+}
+
+// --- Shadow pricing: the cutoff must emit identical columns on the dual
+// trajectory a real solve visits, not just on a hand-rolled one ---
+
+namespace cutoff_test {
+
+// Drives the real CG loop with the cutoff OFF while shadowing every dual vector
+// the loop produces with a second, cutoff-ON pricer, and checks the two emit
+// the same columns down to the arc lists.  solve_cg is a template on Pricer and
+// touches only the methods forwarded below, so this needs no production change.
+//
+// The shadow always prices final_round=true with no column cap, so its sweep
+// covers every source; whatever the baseline emits — possibly truncated by
+// max_cols or thinned by postponement — is a subset of that same sweep.  That
+// is what lets the two be compared without synchronizing postponement: a cut
+// source does not refresh its _source_arcs (see should_record_arcs), so
+// filter_for_new_caps would otherwise postpone different sources in the two
+// pricers and the comparison would be between different source sets.
+//
+// Results are static because solve_cg constructs the pricer itself and the test
+// never gets a handle on it.  GoogleTest runs cases sequentially; reset()
+// clears between them.
+template <typename Inner>
+class ShadowPricer {
+public:
+    static inline std::string failure;
+    static inline uint64_t compared = 0;
+    static inline uint64_t fired = 0;
+
+    static void reset() {
+        failure.clear();
+        compared = 0;
+        fired = 0;
+    }
+
+    void init(const mcfcg::Instance& inst, mcfcg::thread_pool* pool = nullptr,
+              uint32_t batch_size = 0, double neg_rc_tol = mcfcg::NEG_RC_TOL,
+              bool dual_cutoff = false) {
+        // This harness owns BOTH arms, so the caller's flag is deliberately not
+        // forwarded — it would otherwise be possible to run the shadow with the
+        // cutoff off on both sides, comparing a pricer against itself and
+        // passing vacuously.
+        EXPECT_FALSE(dual_cutoff) << "ShadowPricer drives both arms; leave the flag off";
+        _base.init(inst, pool, batch_size, neg_rc_tol, /*dual_cutoff=*/false);
+        _cut.init(inst, pool, batch_size, neg_rc_tol, /*dual_cutoff=*/true);
+    }
+
+    void set_track_arcs(bool enabled) {
+        _base.set_track_arcs(enabled);
+        _cut.set_track_arcs(enabled);
+    }
+
+    auto price(const std::vector<double>& duals, const mcfcg::static_map<uint32_t, double>& mu,
+               bool final_round = false, uint32_t max_cols = 0) {
+        auto base_cols = _base.price(duals, mu, final_round, max_cols);
+        auto cut_cols = _cut.price(duals, mu, /*final_round=*/true, /*max_cols=*/0);
+        fired += _cut.last_cutoff_count();
+        check(base_cols, cut_cols);
+        return base_cols;
+    }
+
+    // Control flow follows the baseline; the reported cutoff stats follow the
+    // shadow, which is the pricer those numbers describe.
+    bool priced_all() const noexcept { return _base.priced_all(); }
+    double lagrangian_path_sum() const noexcept { return _base.lagrangian_path_sum(); }
+    double lb_error_bound() const noexcept { return _base.lb_error_bound(); }
+    uint64_t last_cutoff_count() const noexcept { return _cut.last_cutoff_count(); }
+    uint64_t last_priced_count() const noexcept { return _cut.last_priced_count(); }
+
+    void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
+        _base.filter_for_new_caps(new_cap_arcs);
+        _cut.filter_for_new_caps(new_cap_arcs);
+    }
+    void clear_postponed() {
+        _base.clear_postponed();
+        _cut.clear_postponed();
+    }
+    void reset_postponed() {
+        _base.reset_postponed();
+        _cut.reset_postponed();
+    }
+
+private:
+    // Every baseline column must appear in the shadow sweep, unchanged.  Stops
+    // at the first mismatch: the loop runs for tens of iterations and a real
+    // divergence would otherwise bury the first (and only diagnostic) one.
+    template <typename ColumnT>
+    static void check(const std::vector<ColumnT>& base_cols, const std::vector<ColumnT>& cut_cols) {
+        if (!failure.empty()) {
+            return;
+        }
+        std::unordered_map<uint64_t, const ColumnT*> by_key;
+        by_key.reserve(cut_cols.size());
+        for (const auto& col : cut_cols) {
+            by_key.emplace(column_key(col), &col);
+        }
+        for (const auto& col : base_cols) {
+            auto found = by_key.find(column_key(col));
+            if (found == by_key.end()) {
+                failure = "cutoff dropped the column for key " + std::to_string(column_key(col));
+                return;
+            }
+            auto diff = column_diff(col, *found->second);
+            if (!diff.empty()) {
+                failure = "cutoff altered the column for key " + std::to_string(column_key(col)) +
+                          ":" + diff;
+                return;
+            }
+            ++compared;
+        }
+    }
+
+    Inner _base;
+    Inner _cut;
+};
+
+template <typename Shadow>
+static void expect_shadow_agreed(const mcfcg::CGResult& result) {
+    EXPECT_TRUE(result.optimal) << "baseline run did not reach optimality";
+    EXPECT_TRUE(Shadow::failure.empty()) << Shadow::failure;
+    // Both guard vacuity: a cutoff that never fires, or a run that never
+    // compares a column, satisfies the assertion above for free.  The counts go
+    // to the XML report (--gtest_output=xml) so the coverage the run achieved is
+    // recoverable without making a passing suite noisier.
+    ::testing::Test::RecordProperty("cutoff_fired", std::to_string(Shadow::fired));
+    ::testing::Test::RecordProperty("columns_compared", std::to_string(Shadow::compared));
+    EXPECT_GT(Shadow::fired, 0U) << "cutoff never fired; the comparison proved nothing";
+    EXPECT_GT(Shadow::compared, 0U) << "no columns were compared";
+}
+}  // namespace cutoff_test
+
+TEST(FeatureTests, PricingCutoffShadowTree) {
+    using Shadow = cutoff_test::ShadowPricer<mcfcg::TreePricer>;
+    Shadow::reset();
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar150");
+    mcfcg::CGParams params;
+    auto result = mcfcg::solve_cg<mcfcg::TreeMaster, Shadow>(
+        inst, params, [](const mcfcg::TreeMaster& m) { return m.get_structural_duals(); },
+        static_cast<uint32_t>(inst.sources.size()));
+    cutoff_test::expect_shadow_agreed<Shadow>(result);
+}
+
+// The path bound (max π over unsettled sinks) is a different formula from the
+// tree's demand-weighted budget and had no equivalent column-identity guard.
+TEST(FeatureTests, PricingCutoffShadowPath) {
+    using Shadow = cutoff_test::ShadowPricer<mcfcg::PathPricer>;
+    Shadow::reset();
+    auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar150");
+    mcfcg::CGParams params;
+    auto result = mcfcg::solve_cg<mcfcg::PathMaster, Shadow>(
+        inst, params, [](const mcfcg::PathMaster& m) { return m.get_structural_duals(); },
+        static_cast<uint32_t>(inst.commodities.size()));
+    cutoff_test::expect_shadow_agreed<Shadow>(result);
+}
+
+// The family the cutoff is meant for, and the one where switching it on
+// measurably moves the trajectory.  PricerHeavy so the source pricing
+// filter — the mechanism that makes a cut source's stale _source_arcs matter —
+// is live, and long paths so the integer-scaling allowance is under real load.
+TEST(FeatureTests, PricingCutoffShadowIntermodalTree) {
+    auto path = data_dir("intermodal") + "/BUS-2632-0.txt.gz";
+    if (!fs::exists(path)) {
+        GTEST_SKIP() << "data/intermodal not found";
+    }
+    using Shadow = cutoff_test::ShadowPricer<mcfcg::TreePricer>;
+    Shadow::reset();
+    auto inst = mcfcg::read_commalab(path);
+    mcfcg::CGParams params;
+    params.strategy = mcfcg::CGStrategy::PricerHeavy;
+    auto result = mcfcg::solve_cg<mcfcg::TreeMaster, Shadow>(
+        inst, params, [](const mcfcg::TreeMaster& m) { return m.get_structural_duals(); },
+        static_cast<uint32_t>(inst.sources.size()));
+    cutoff_test::expect_shadow_agreed<Shadow>(result);
 }
 
 // The π-free Lagrangian LB must be (a) always valid (≤ OPT) and (b) AVAILABLE

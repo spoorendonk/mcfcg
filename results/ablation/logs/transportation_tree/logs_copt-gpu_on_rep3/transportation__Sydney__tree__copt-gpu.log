@@ -1,0 +1,48 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_bckvz1jp.txt -f %M build/mcfcg_cli data/transportation/Sydney_net.tntp.gz --solver copt --copt-gpu-mode 2 --formulation tree --max-iters 10000 --pricing-cutoff --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 9909536
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+TNTP: net=data/transportation/Sydney_net.tntp.gz trips=data/transportation/Sydney_trips.tntp.gz coef=1.9
+Instance: 33113 vertices, 75379 arcs, 3343560 commodities, 3257 sources
+Solver: copt (gpu-mode 2), formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=3257, capped_arcs=75379)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   6.4642e+05   1.5043e+05   6514   3257  3042      0      0      0      0   0.440   0.143   0.006   0.589     0.589
+    2          inf   1.3602e+06   1.2093e+06   6514   3257  2028      0      0      0      0   0.164   0.761   0.011   0.936     1.525
+    3          inf   4.6551e+06   4.6463e+06   6514   3477    91      0      0    220      0   0.173   1.988   0.024   2.185     3.710
+    4          inf   4.6551e+06   5.5261e+06   9757   3482   706   3243      0      5      0   0.570   1.020   0.020   2.393     6.103
+    5          inf   4.6551e+06   5.8426e+06  13011   3497   735   3254      0     15      0   0.692   1.022   0.034   2.582     8.685
+    6          inf   4.6551e+06   5.8386e+06  16263   3552   223   3252      0     55      0   0.872   1.005   0.056   2.772    11.457
+    7          inf   4.6551e+06   5.2367e+06  19511   3610    19   3248      0     58      0   1.503   0.962   0.075   3.388    14.845
+    8          inf   4.6831e+06   4.9884e+06  22755   3618     0   3244      0      8      0   2.212   0.943   0.090   4.117    18.961
+    9          inf   4.9585e+06   4.9804e+06  25875   3514     0   3243    123      1    105   2.305   0.949   0.075   4.487    23.449
+   10          inf   4.9615e+06   4.9735e+06  27636   3516     0   3205   1444      3      1   1.497   0.994   0.116   3.676    27.125
+   11          inf   4.9645e+06   4.9713e+06  28863   3510     0   3215   1988      3      9   1.675   0.982   0.129   3.855    30.980
+   12          inf   4.9654e+06   4.9700e+06  28613   3471     0   3172   3422      1     40   1.503   0.939   0.135   3.519    34.499
+   13          inf   4.9654e+06   4.9692e+06  27905   3422     0   3114   3822      2     51   1.268   0.929   0.136   3.262    37.761
+   14   4.9689e+06   4.9661e+06   4.9689e+06  26625   3404     0   3031   4311      0     18   1.010   0.959   0.130   3.007    40.768
+   15   4.9685e+06   4.9662e+06   4.9685e+06  26128   3397     0   2847   3344      0      7   0.885   0.955   0.126   2.870    43.638
+   16   4.9685e+06   4.9663e+06   4.9683e+06  26091   3397     0   2890   2927      2      2   0.855   0.965   0.124   2.849    46.487
+   17   4.9683e+06   4.9664e+06   4.9683e+06  25847   3391     0   2299   2543      0      6   0.835   0.945   0.125   2.735    49.222
+   18   4.9682e+06   4.9664e+06   4.9682e+06  24789   3391     0   2060   3118      0      0   0.844   0.930   0.122   2.670    51.892
+   19   4.9682e+06   4.9664e+06   4.9682e+06  23278   3391     0   1646   3157      0      0   0.833   0.942   0.117   2.589    54.481
+   20   4.9682e+06   4.9665e+06   4.9682e+06  21363   3389     0    847   2762      0      2   0.822   0.946   0.111   2.434    56.915
+   21   4.9682e+06   4.9665e+06   4.9682e+06  19590   3389     0    383   2156      0      0   0.752   0.938   0.103   2.216    59.132
+   22   4.9682e+06   4.9665e+06   4.9682e+06  17868   3388     0     45   1767      0      1   0.743   0.965   0.094   2.133    61.265
+   23   4.9682e+06   4.9665e+06   4.9682e+06  16635   3388     0    131   1364      0      0   0.679   0.980   0.083   2.031    63.296
+   24   4.9682e+06   4.9665e+06   4.9682e+06  15904   3385     0      3    734      0      3   0.622   0.976   0.075   1.906    65.203
+   25   4.9682e+06   4.9665e+06   4.9682e+06  15904   3385     0      0      0      0      0   0.583   1.956   0.069   2.609    67.811
+CG optimal after 25 iterations. UB=4968208.845097 LB=4966458.791916 gap=1.750e+03 tol=4.968e+02  t_LP=24.337  t_PR=26.926  t_SP=2.184  t_Tot=69.644
+[pricing-cutoff] enabled=1 cut=28627 priced=97710 rate=29.3%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/transportation/Sydney_net.tntp.gz,tree,25,12647,4968208.845097,4966458.791916,1,70.553,24.337,26.926,2.184

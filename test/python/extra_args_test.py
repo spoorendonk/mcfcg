@@ -63,6 +63,17 @@ class ExtraArgsReachChildTest(unittest.TestCase):
     def test_no_extra_args_leaves_command_unchanged(self):
         self.assertNotIn("--pricing-cutoff", self.build_cmd([]))
 
+    def test_no_family_default_enables_the_pricing_cutoff(self):
+        """gh #41 shipped the cutoff off (see results/ablation/), and
+        results/cg_benchmark.csv has no extra_args column -- so a family default
+        that quietly turned it on would be both unrecorded and unnoticed."""
+        checked = 0
+        for family in bs.FAMILY_OPTIMAL:
+            for _inst, key, _form, extra in bs.enumerate_family(family):
+                self.assertNotIn("--pricing-cutoff", extra, f"{family}/{key}")
+                checked += 1
+        self.assertGreater(checked, 0, "enumerate_family yielded nothing to check")
+
 
 class ExtraArgsQuotingTest(unittest.TestCase):
     """argparse hands --extra-args over as one string; shlex.split is what splits it."""

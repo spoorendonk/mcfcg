@@ -8,7 +8,10 @@ data/intermodal/raw/
 *.mps.gz
 *.mps
 # Benchmark outputs (scripts/benchmark_solvers.py).
-# Per-run CG logs are bulky and regenerable — never tracked.
+# Per-run CG logs are bulky and regenerable — never tracked. One exception:
+# results/ablation/logs/ (the gh#41 pricing-cutoff A/B) IS committed, because it
+# settles a design question rather than feeding a results table and is not meant
+# to be re-run. See results/ablation/README.md and PROVENANCE.txt section 5.1.
 bench-logs/
 bench_runs/
 bench-*.log

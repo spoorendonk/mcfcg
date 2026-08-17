@@ -1,0 +1,31 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_zx6otbsv.txt -f %M build/mcfcg_cli data/commalab/grid/grid5 --solver copt --copt-gpu-mode 2 --formulation path --max-iters 10000 --pricing-cutoff --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 477392
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 225 vertices, 840 arcs, 100 commodities, 83 sources
+Solver: copt (gpu-mode 2), formulation: path
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=100, capped_arcs=840)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   9.5617e+05   5.5950e+05    200    100   100      0      0      0      0   0.341   0.001   0.000   0.342     0.342
+    2          inf   4.3559e+06   4.3345e+06    200    107    35      0      0      7      0   0.151   0.001   0.000   0.152     0.493
+    3          inf   4.3559e+06   7.3488e+06    225    123    19     25      0     16      0   0.157   0.000   0.000   0.157     0.651
+    4          inf   4.3559e+06   9.2773e+06    267    133    22     42      0     10      0   0.156   0.000   0.000   0.156     0.807
+    5          inf   4.3559e+06   6.4630e+06    305    147     8     38      0     14      0   0.160   0.000   0.000   0.161     0.968
+    6          inf   5.0106e+06   5.0550e+06    340    152     2     36      1      5      0   0.166   0.000   0.000   0.167     1.134
+    7   5.0505e+06   5.0439e+06   5.0505e+06    361    152     0     21      0      0      0   0.166   0.000   0.000   0.166     1.301
+    8   5.0505e+06   5.0485e+06   5.0495e+06    368    153     0     10      3      1      0   0.171   0.000   0.000   0.171     1.472
+    9   5.0497e+06   5.0493e+06   5.0497e+06    368    153     0     *6      0      0      0   0.167   0.000   0.000   0.168     1.640
+CG optimal after 9 iterations. UB=5049726.000000 LB=5049271.843514 gap=4.542e+02 tol=5.050e+02  t_LP=1.636  t_PR=0.004  t_SP=0.001  t_Tot=1.641
+[pricing-cutoff] enabled=1 cut=750 priced=996 rate=75.3%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/commalab/grid/grid5,path,9,268,5049726.000000,5049271.843514,1,1.659,1.636,0.004,0.001

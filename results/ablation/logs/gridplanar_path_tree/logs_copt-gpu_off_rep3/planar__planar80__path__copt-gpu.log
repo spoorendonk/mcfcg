@@ -1,0 +1,32 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_n9yh8py_.txt -f %M build/mcfcg_cli data/commalab/planar/planar80 --solver copt --copt-gpu-mode 2 --formulation path --max-iters 10000 --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 485412
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 80 vertices, 440 arcs, 543 commodities, 80 sources
+Solver: copt (gpu-mode 2), formulation: path
+Pricing threads: 32 (auto)
+Slack mode: EdgeRows (struct=543, capped_arcs=440)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   1.6746e+08   1.6746e+08    634    634     0      0      0     91      0   0.344   0.000   0.000   0.344     0.344
+    2          inf   1.6746e+08   2.5924e+09   1155    634    91    521      0      0      0   0.205   0.000   0.000   0.205     0.550
+    3          inf   1.6746e+08   1.8987e+08   1610    676     0    413      0     42      0   0.185   0.000   0.000   0.185     0.735
+    4          inf   1.6746e+08   2.8676e+08   2045    686    16    425      0     10      0   0.190   0.000   0.000   0.190     0.925
+    5          inf   1.6746e+08   2.7527e+08   2389    694     6    336      0      8      0   0.207   0.000   0.000   0.208     1.133
+    6          inf   1.7892e+08   1.8337e+08   2701    695     0    311      0      1      0   0.206   0.000   0.000   0.207     1.340
+    7          inf   1.8132e+08   1.8268e+08   2883    697     0    180      0      2      0   0.208   0.000   0.000   0.208     1.548
+    8   1.8248e+08   1.8238e+08   1.8248e+08   2708    684     0     38    200      0     13   0.205   0.000   0.000   0.206     1.754
+    9   1.8248e+08   1.8244e+08   1.8244e+08   2497    680     0      8    215      1      5   0.200   0.000   0.000   0.201     1.955
+   10   1.8244e+08   1.8244e+08   1.8244e+08   2497    680     0     *0      0      0      0   0.192   0.000   0.000   0.192     2.147
+CG optimal after 10 iterations. UB=182438134.000020 LB=182438131.958298 gap=2.042e+00 tol=1.824e+04  t_LP=2.139  t_PR=0.003  t_SP=0.002  t_Tot=2.149
+[pricing-cutoff] enabled=0 cut=0 priced=1040 rate=0.0%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/commalab/planar/planar80,path,10,2360,182438134.000020,182438131.958298,1,2.168,2.139,0.003,0.002

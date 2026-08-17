@@ -194,7 +194,8 @@ protected:
 
     // _source_cut[s] is 1 when the dual cutoff stopped the most recent A* run
     // for source s.  Written only when s is actually priced; the per-call
-    // counters below are accumulated over the priced batches.
+    // counters below are accumulated over the priced batches.  All zeros
+    // whenever the cutoff is off.
     std::vector<uint8_t> _source_cut;
     uint64_t _last_cutoff_count = 0;
     uint64_t _last_priced_count = 0;
@@ -367,6 +368,9 @@ public:
         std::unordered_set<uint32_t> cap_set(new_cap_arcs.begin(), new_cap_arcs.end());
         uint32_t n = static_cast<uint32_t>(_source_postponed.size());
         auto body = [&](uint32_t s) {
+            // Deliberately reads _source_arcs even when the dual cutoff left it
+            // describing an older routing (see should_record_arcs): re-pricing
+            // every cut source instead costs more than the stale evidence does.
             bool affected = std::any_of(_source_arcs[s].begin(), _source_arcs[s].end(),
                                         [&](uint32_t a) { return cap_set.contains(a); });
             _source_postponed[s] = affected ? 0 : 1;
@@ -546,11 +550,23 @@ protected:
     // filter_for_new_caps needs.  Leave the previous complete set standing
     // rather than overwrite it with a partial one: possibly stale arcs still
     // describe this source's routing, while a partial set would understate it
-    // and postpone a source a new capacity row does affect.  (With
-    // warm_start=false a source cut on its very first price keeps an *empty*
-    // set, which reads as "unaffected" — still only a convergence-speed
-    // question, since the pricing-exhausted final_round re-prices every source
-    // regardless of postponement.)
+    // and postpone a source a new capacity row does affect.
+    //
+    // The consequence is that filter_for_new_caps decides postponement from an
+    // older routing for every cut source, so switching the cutoff on changes
+    // which sources the loop prices — and hence the CG trajectory — even though
+    // the columns the pricer emits are identical (pinned bit-for-bit by the
+    // FeatureTests.PricingCutoffShadow* tests).  That is a convergence-speed
+    // effect only: the pricing-exhausted final_round re-prices every source
+    // regardless of postponement.
+    //
+    // Do NOT "fix" it by treating a cut source as affected (_source_cut[s] is
+    // exactly that flag, sticky until the source is priced uncut).  Measured on
+    // intermodal tree/PricerHeavy under COPT: +31% wall clock, because the 65-77%
+    // fire rate makes almost every source affected and the filter stops
+    // filtering — SBT-56295 alone paid +68% at an unchanged iteration count.
+    // (With warm_start=false a source cut on its very first price keeps an
+    // *empty* set, which reads as "unaffected"; same convergence-speed caveat.)
     bool should_record_arcs(std::optional<int64_t> cutoff_f) const noexcept {
         return _track_arcs && !cutoff_f.has_value();
     }

@@ -1,0 +1,30 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_q5slbxk6.txt -f %M build/mcfcg_cli data/commalab/planar/planar30 --solver copt --copt-gpu-mode 2 --formulation path --max-iters 10000 --pricing-cutoff --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 475700
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 30 vertices, 150 arcs, 92 commodities, 29 sources
+Solver: copt (gpu-mode 2), formulation: path
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=92, capped_arcs=150)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   4.3134e+07   4.3130e+07    184    109     1      0      0     17      0   0.342   0.000   0.000   0.342     0.342
+    2          inf   4.3134e+07   4.8730e+07    232    109    26     48      0      0      0   0.156   0.000   0.000   0.156     0.498
+    3          inf   4.3134e+07   6.6830e+07    270    111    11     38      0      2      0   0.158   0.000   0.000   0.159     0.657
+    4          inf   4.3134e+07   4.4632e+07    283    114     2     13      0      3      0   0.163   0.000   0.000   0.163     0.820
+    5          inf   4.3134e+07   4.4467e+07    300    115     0     17      0      1      0   0.158   0.000   0.000   0.159     0.979
+    6   4.4363e+07   4.4310e+07   4.4363e+07    303    115     0      3      0      0      0   0.157   0.000   0.000   0.157     1.136
+    7   4.4363e+07   4.4345e+07   4.4345e+07    303    116     0      0      0      1      0   0.160   0.000   0.000   0.160     1.297
+    8   4.4351e+07   4.4351e+07   4.4351e+07    303    116     0     *0      0      0      0   0.167   0.000   0.000   0.167     1.464
+CG optimal after 8 iterations. UB=44350624.000000 LB=44350623.852797 gap=1.472e-01 tol=4.435e+03  t_LP=1.462  t_PR=0.002  t_SP=0.000  t_Tot=1.465
+[pricing-cutoff] enabled=1 cut=270 priced=348 rate=77.6%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/commalab/planar/planar30,path,8,211,44350624.000000,44350623.852797,1,1.481,1.462,0.002,0.000

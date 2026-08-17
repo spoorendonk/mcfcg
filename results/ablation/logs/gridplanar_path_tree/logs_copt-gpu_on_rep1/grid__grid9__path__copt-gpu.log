@@ -1,0 +1,42 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_ak4mdr19.txt -f %M build/mcfcg_cli data/commalab/grid/grid9 --solver copt --copt-gpu-mode 2 --formulation path --max-iters 10000 --pricing-cutoff --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 522716
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 625 vertices, 2400 arcs, 1000 commodities, 495 sources
+Solver: copt (gpu-mode 2), formulation: path
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=1000, capped_arcs=2400)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   8.8834e+06   5.6336e+06   2000   1000   997      0      0      0      0   0.339   0.000   0.000   0.339     0.339
+    2          inf   5.1002e+07   5.0596e+07   2000   1000   710      0      0      0      0   0.152   0.002   0.000   0.154     0.494
+    3          inf   8.1702e+07   8.1702e+07   2000   1327     0      0      0    327      0   0.146   0.003   0.000   0.149     0.643
+    4          inf   8.1702e+07   2.0615e+08   2742   1327   393    742      0      0      0   0.208   0.001   0.000   0.211     0.854
+    5          inf   8.1702e+07   5.0315e+08   3504   1354   313    762      0     27      0   0.218   0.002   0.000   0.221     1.075
+    6          inf   8.1702e+07   4.4585e+08   4262   1406   199    758      0     52      0   0.234   0.002   0.000   0.237     1.312
+    7          inf   8.1702e+07   1.1838e+08   5018   1473    54    756      0     67      0   0.286   0.002   0.000   0.288     1.600
+    8          inf   8.1723e+07   8.2884e+07   5740   1519     1    722      0     46      0   0.332   0.002   0.000   0.335     1.935
+    9          inf   8.2350e+07   8.2784e+07   6257   1469     0    621    104     22     72   0.306   0.002   0.000   0.310     2.246
+   10          inf   8.2502e+07   8.2725e+07   6585   1486     0    551    223     18      1   0.306   0.002   0.000   0.310     2.556
+   11          inf   8.2558e+07   8.2689e+07   6707   1499     0    477    355     19      6   0.307   0.002   0.000   0.311     2.867
+   12          inf   8.2593e+07   8.2674e+07   6664   1497     0    414    457      9     11   0.309   0.003   0.001   0.315     3.182
+   13          inf   8.2619e+07   8.2662e+07   6152   1482     0    315    827      5     20   0.325   0.002   0.001   0.329     3.511
+   14          inf   8.2630e+07   8.2657e+07   5673   1463     0    284    763      2     21   0.303   0.002   0.000   0.307     3.818
+   15          inf   8.2644e+07   8.2655e+07   5300   1451     0    195    568      2     14   0.301   0.002   0.000   0.305     4.123
+   16          inf   8.2649e+07   8.2654e+07   4963   1447     0    113    450      2      6   0.300   0.002   0.000   0.304     4.427
+   17          inf   8.2651e+07   8.2653e+07   4663   1446     0     86    386      3      4   0.302   0.002   0.000   0.305     4.732
+   18          inf   8.2652e+07   8.2653e+07   4413   1438     0     59    309      1      9   0.305   0.002   0.000   0.309     5.041
+   19          inf   8.2653e+07   8.2653e+07   4221   1430     0      7    199      2     10   0.291   0.002   0.000   0.295     5.336
+   20   8.2653e+07   8.2653e+07   8.2653e+07   4221   1430     0     *0      0      0      0   0.294   0.003   0.000   0.298     5.633
+CG optimal after 20 iterations. UB=82652972.566652 LB=82652934.473106 gap=3.809e+01 tol=8.265e+03  t_LP=5.565  t_PR=0.041  t_SP=0.007  t_Tot=5.637
+[pricing-cutoff] enabled=1 cut=7759 priced=12375 rate=62.7%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/commalab/grid/grid9,path,20,3221,82652972.566652,82652934.473106,1,5.658,5.565,0.041,0.007

@@ -1,0 +1,28 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_3_p1x7k4.txt -f %M build/mcfcg_cli data/intermodal/SBT-31275-0.txt.gz --solver copt --copt-gpu-mode 0 --formulation tree --max-iters 10000 --strategy pricer-heavy --pricing-cutoff --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 1238180
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 213509 vertices, 2760366 arcs, 31252 commodities, 31252 sources
+Solver: copt (gpu-mode 0), formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=31252, capped_arcs=2513346)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   7.9697e+05  62504  31318   523      0      0     66      0   0.111   0.000   0.192   0.303     0.303
+    2          inf         -inf   8.0461e+05  63528  31318   892   1024      0      0      0   0.019   0.295   0.187   0.503     0.807
+    3          inf         -inf   8.0139e+05  63528  31331     0      0      0     13      0   0.022   0.000   0.190   0.213     1.020
+    4          inf         -inf   8.0149e+05  63669  31331    20    141      0      0      0   0.023   0.161   0.186   0.371     1.390
+    5   8.0138e+05   8.0084e+05   8.0138e+05  63790  31331     0    121      0      0      0   0.023   4.582   0.185   4.790     6.181
+    6   8.0132e+05   8.0132e+05   8.0132e+05  63790  31331     0     *0      0      0      0   0.024   9.141   0.190   9.355    15.536
+CG optimal after 6 iterations. UB=801323.000000 LB=801319.663709 gap=3.336e+00 tol=8.013e+01  t_LP=0.221  t_PR=19.042  t_SP=1.130  t_Tot=20.399
+[pricing-cutoff] enabled=1 cut=93804 priced=126342 rate=74.2%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 0
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/SBT-31275-0.txt.gz,tree,6,32538,801323.000000,801319.663709,1,21.029,0.221,19.042,1.130

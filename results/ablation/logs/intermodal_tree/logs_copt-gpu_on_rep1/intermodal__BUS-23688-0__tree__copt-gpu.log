@@ -1,0 +1,42 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_3yvlju_f.txt -f %M build/mcfcg_cli data/intermodal/BUS-23688-0.txt.gz --solver copt --copt-gpu-mode 2 --formulation tree --max-iters 10000 --strategy pricer-heavy --pricing-cutoff --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 1244472
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 161993 vertices, 1653437 arcs, 23643 commodities, 23643 sources
+Solver: copt (gpu-mode 2), formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=23643, capped_arcs=1466539)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   6.0693e+05  47286  23709  1421      0      0     66      0   0.459   0.000   0.113   0.573     0.573
+    2          inf         -inf   6.1290e+05  48445  23709  1888   1159      0      0      0   0.164   0.192   0.115   0.474     1.046
+    3          inf         -inf   6.2762e+05  48445  23756   198      0      0     47      0   0.175   0.000   0.110   0.287     1.333
+    4          inf         -inf   6.2951e+05  48445  23758   352      0      0      2      0   0.194   0.000   0.110   0.306     1.639
+    5          inf         -inf   6.2953e+05  48539  23758   356     94      0      0      0   0.187   0.050   0.111   0.349     1.988
+    6          inf   4.6901e+05   6.5966e+05  50150  23758   348   1611      0      0      0   0.186   1.075   0.111   1.375     3.362
+    7          inf   4.6901e+05   6.2486e+05  50150  23799     5      0      0     41      0   0.197   0.000   0.111   0.309     3.671
+    8          inf   4.6901e+05   6.2525e+05  50150  23808    19      0      0      9      0   0.206   0.000   0.110   0.317     3.988
+    9          inf   4.6901e+05   6.2528e+05  50300  23764    23    150      0      0     44   0.207   0.083   0.110   0.403     4.391
+   10          inf   4.6901e+05   6.2537e+05  50300  23768     9      0      0      4      0   0.198   0.000   0.111   0.309     4.700
+   11          inf   4.6901e+05   6.2537e+05  50346  23765     9     46      0      0      3   0.205   0.056   0.112   0.375     5.075
+   12          inf   4.6901e+05   6.2538e+05  50346  23767     8      0      0      2      0   0.197   0.000   0.111   0.309     5.384
+   13          inf   4.6901e+05   6.2538e+05  50532  23725     8    186      0      0     42   0.198   0.068   0.111   0.378     5.763
+   14          inf   4.6901e+05   6.2521e+05  50532  23729     3      0      0      4      0   0.202   0.000   0.111   0.314     6.076
+   15          inf   4.6901e+05   6.2521e+05  50533  23721     3      1      0      0      8   0.197   0.054   0.110   0.362     6.438
+   16          inf   6.2275e+05   6.2522e+05  50968  23720     3    435      0      0      1   0.200   1.123   0.111   1.437     7.875
+   17          inf   6.2275e+05   6.2489e+05  50968  23728     0      0      0      8      0   0.193   0.000   0.111   0.305     8.180
+   18   6.2489e+05   6.2275e+05   6.2489e+05  50988  23725     0     20      0      0      3   0.208   0.081   0.110   0.401     8.581
+   19   6.2489e+05   6.2275e+05   6.2489e+05  50988  23726     0      0      0      1      0   0.197   0.000   0.111   0.309     8.889
+   20   6.2489e+05   6.2485e+05   6.2489e+05  50988  23726     0    *30      0      0      0   0.198   1.136   0.112   1.446    10.335
+CG optimal after 20 iterations. UB=624894.000001 LB=624846.295662 gap=4.770e+01 tol=6.249e+01  t_LP=4.169  t_PR=5.056  t_SP=2.222  t_Tot=11.473
+[pricing-cutoff] enabled=1 cut=70064 priced=97439 rate=71.9%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/BUS-23688-0.txt.gz,tree,20,27345,624894.000001,624846.295662,1,11.873,4.169,5.056,2.222

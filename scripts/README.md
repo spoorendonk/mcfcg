@@ -230,6 +230,19 @@ python3 scripts/extract_iterations.py                        # same --logdir set
 python3 scripts/consolidate_mps_logs.py
 ```
 
+The dual pricing cutoff ablation is the one exception to "logs are never
+tracked": it settles a design question instead of feeding a results table, is not
+meant to be re-run, and so ships with its 424 raw logs under `results/ablation/`.
+Same consolidator relationship — re-parses, never re-solves:
+
+```
+# ablation logs -> results/ablation/pricing_cutoff_{runs,summary}.csv
+python3 scripts/analyze_pricing_cutoff_ablation.py
+```
+
+See `results/ablation/README.md` for what it measured and the two comparisons not
+to repeat.
+
 ### Counting columns: three different numbers
 
 `results/cg_benchmark.csv` carries `columns` (final master size, from the CLI's
