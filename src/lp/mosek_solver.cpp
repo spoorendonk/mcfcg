@@ -38,18 +38,18 @@ BoundKey to_mosek_bound(double lb, double ub) {
     bool lb_inf = lb <= -detail::LP_BOUND_INF_THRESHOLD;
     bool ub_inf = ub >= detail::LP_BOUND_INF_THRESHOLD;
     if (lb_inf && ub_inf) {
-        return {MSK_BK_FR, 0.0, 0.0};
+        return {.bk = MSK_BK_FR, .lo = 0.0, .hi = 0.0};
     }
     if (lb_inf) {
-        return {MSK_BK_UP, 0.0, ub};
+        return {.bk = MSK_BK_UP, .lo = 0.0, .hi = ub};
     }
     if (ub_inf) {
-        return {MSK_BK_LO, lb, 0.0};
+        return {.bk = MSK_BK_LO, .lo = lb, .hi = 0.0};
     }
     if (lb == ub) {
-        return {MSK_BK_FX, lb, ub};
+        return {.bk = MSK_BK_FX, .lo = lb, .hi = ub};
     }
-    return {MSK_BK_RA, lb, ub};
+    return {.bk = MSK_BK_RA, .lo = lb, .hi = ub};
 }
 
 // Stream handler that drops MOSEK log output when the solver is non-verbose.
@@ -116,10 +116,10 @@ public:
     }
 
     ~MosekSolver() override {
-        if (_task) {
+        if (_task != nullptr) {
             MSK_deletetask(&_task);
         }
-        if (_env) {
+        if (_env != nullptr) {
             MSK_deleteenv(&_env);
         }
     }
@@ -153,7 +153,7 @@ public:
             return first;
         }
         check_mosek(MSK_appendvars(_task, n), "appendvars");
-        int32_t lo_idx = static_cast<int32_t>(first);
+        auto lo_idx = static_cast<int32_t>(first);
         int32_t hi_idx = lo_idx + n;
         check_mosek(MSK_putcslice(_task, lo_idx, hi_idx, obj.data()), "putcslice");
         std::vector<MSKboundkeye> bk;
@@ -177,7 +177,7 @@ public:
             return first;
         }
         check_mosek(MSK_appendvars(_task, n), "appendvars");
-        int32_t lo_idx = static_cast<int32_t>(first);
+        auto lo_idx = static_cast<int32_t>(first);
         int32_t hi_idx = lo_idx + n;
         check_mosek(MSK_putcslice(_task, lo_idx, hi_idx, obj.data()), "putcslice");
         std::vector<MSKboundkeye> bk;
@@ -209,7 +209,7 @@ public:
             return first;
         }
         check_mosek(MSK_appendcons(_task, m), "appendcons");
-        int32_t lo_idx = static_cast<int32_t>(first);
+        auto lo_idx = static_cast<int32_t>(first);
         int32_t hi_idx = lo_idx + m;
         std::vector<MSKboundkeye> bk;
         std::vector<double> lo;
@@ -251,7 +251,7 @@ public:
         check_mosek(MSK_putcj(_task, static_cast<int32_t>(col), cost), "putcj(set_col_cost)");
     }
 
-    bool certify_runs_crossover() const override { return true; }
+    [[nodiscard]] bool certify_runs_crossover() const override { return true; }
 
     LPStatus solve(bool certify) override {
         // Steady state runs no basis identification (MSK_BI_NEVER, pinned). The
@@ -299,13 +299,13 @@ public:
         }
     }
 
-    double get_obj() const override {
+    [[nodiscard]] double get_obj() const override {
         double val = 0.0;
         check_mosek(MSK_getprimalobj(_task, _sol, &val), "getprimalobj");
         return val;
     }
 
-    std::vector<double> get_primals() const override {
+    [[nodiscard]] std::vector<double> get_primals() const override {
         std::vector<double> vals(num_cols());
         if (!vals.empty()) {
             check_mosek(MSK_getxx(_task, _sol, vals.data()), "getxx");
@@ -313,7 +313,7 @@ public:
         return vals;
     }
 
-    std::vector<double> get_duals() const override {
+    [[nodiscard]] std::vector<double> get_duals() const override {
         std::vector<double> vals(num_rows());
         if (!vals.empty()) {
             check_mosek(MSK_gety(_task, _sol, vals.data()), "gety");
@@ -321,7 +321,7 @@ public:
         return vals;
     }
 
-    std::vector<double> get_reduced_costs() const override {
+    [[nodiscard]] std::vector<double> get_reduced_costs() const override {
         uint32_t n = num_cols();
         std::vector<double> vals(n);
         if (n > 0) {
@@ -333,13 +333,13 @@ public:
         return vals;
     }
 
-    uint32_t num_cols() const override {
+    [[nodiscard]] uint32_t num_cols() const override {
         int32_t n = 0;
         check_mosek(MSK_getnumvar(_task, &n), "getnumvar");
         return static_cast<uint32_t>(n);
     }
 
-    uint32_t num_rows() const override {
+    [[nodiscard]] uint32_t num_rows() const override {
         int32_t m = 0;
         check_mosek(MSK_getnumcon(_task, &m), "getnumcon");
         return static_cast<uint32_t>(m);
@@ -350,7 +350,7 @@ public:
     // This lets instances whose per-row column cost exceeds 1e7 (e.g.
     // planar2500 tree, ~1.7e7/source) price their slacks out and reach a
     // slack-free upper bound, which the 1e7 default would never permit.
-    double max_slack_cost() const override { return 1e9; }
+    [[nodiscard]] double max_slack_cost() const override { return 1e9; }
 };
 
 std::unique_ptr<LPSolver> create_mosek_solver(bool verbose) {

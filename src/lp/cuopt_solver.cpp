@@ -209,13 +209,13 @@ public:
 
     ~CuOptSolver() override {
 #ifdef MCFCG_CUOPT_DELTA_API
-        if (_solution) {
+        if (_solution != nullptr) {
             cuOptDestroySolution(&_solution);
         }
-        if (_settings) {
+        if (_settings != nullptr) {
             cuOptDestroySolverSettings(&_settings);
         }
-        if (_problem) {
+        if (_problem != nullptr) {
             cuOptDestroyProblem(&_problem);
         }
 #endif
@@ -231,7 +231,7 @@ public:
             _col_entries.emplace_back();
         }
 #ifdef MCFCG_CUOPT_DELTA_API
-        if (_problem) {
+        if (_problem != nullptr) {
             // No coefficients — empty CSC (starts = {0, 0, ..., 0}).
             std::vector<cuopt_int_t> starts(obj.size() + 1, 0);
             std::vector<cuopt_float_t> f_obj(obj.begin(), obj.end());
@@ -268,7 +268,7 @@ public:
             _col_entries.push_back(std::move(entries));
         }
 #ifdef MCFCG_CUOPT_DELTA_API
-        if (_problem) {
+        if (_problem != nullptr) {
             std::vector<cuopt_int_t> f_starts(starts.begin(), starts.end());
             std::vector<cuopt_int_t> f_rows(row_indices.begin(), row_indices.end());
             std::vector<cuopt_float_t> f_vals(values.begin(), values.end());
@@ -306,7 +306,7 @@ public:
             }
         }
 #ifdef MCFCG_CUOPT_DELTA_API
-        if (_problem) {
+        if (_problem != nullptr) {
             // cuOptAddRows requires each row's column indices sorted strictly
             // ascending — cuOpt does not re-sort delta-appended rows. The
             // caller's CSR is not guaranteed sorted: a lazily-added capacity
@@ -331,7 +331,7 @@ public:
                     row_entries.emplace_back(static_cast<cuopt_int_t>(indices[j]),
                                              static_cast<cuopt_float_t>(values[j]));
                 }
-                std::sort(row_entries.begin(), row_entries.end());
+                std::ranges::sort(row_entries);
                 for (const auto& [col, val] : row_entries) {
                     f_cols.push_back(col);
                     f_vals.push_back(val);
@@ -352,7 +352,7 @@ public:
         uint32_t n = num_cols();
 #ifdef MCFCG_CUOPT_DELTA_API
         std::vector<cuopt_int_t> delta_indices;
-        if (_problem) {
+        if (_problem != nullptr) {
             for (uint32_t i = 0; i < n; ++i) {
                 if (mask[i] == 1) {
                     delta_indices.push_back(static_cast<cuopt_int_t>(i));
@@ -394,7 +394,7 @@ public:
         }
 
 #ifdef MCFCG_CUOPT_DELTA_API
-        if (_problem) {
+        if (_problem != nullptr) {
             check_cuopt(cuOptDeleteColumns(_problem, static_cast<cuopt_int_t>(delta_indices.size()),
                                            delta_indices.data()),
                         "cuOptDeleteColumns");
@@ -406,9 +406,9 @@ public:
         assert(col < _obj.size());
         _obj[col] = cost;
 #ifdef MCFCG_CUOPT_DELTA_API
-        if (_problem) {
-            const cuopt_int_t idx = static_cast<cuopt_int_t>(col);
-            const cuopt_float_t v = static_cast<cuopt_float_t>(cost);
+        if (_problem != nullptr) {
+            const auto idx = static_cast<cuopt_int_t>(col);
+            const auto v = static_cast<cuopt_float_t>(cost);
             check_cuopt(cuOptSetObjectiveCoefficients(_problem, 1, &idx, &v),
                         "cuOptSetObjectiveCoefficients");
         }
@@ -419,7 +419,7 @@ public:
         uint32_t m = num_rows();
 #ifdef MCFCG_CUOPT_DELTA_API
         std::vector<cuopt_int_t> delta_indices;
-        if (_problem) {
+        if (_problem != nullptr) {
             for (uint32_t i = 0; i < m; ++i) {
                 if (mask[i] == 1) {
                     delta_indices.push_back(static_cast<cuopt_int_t>(i));
@@ -461,7 +461,7 @@ public:
         }
 
 #ifdef MCFCG_CUOPT_DELTA_API
-        if (_problem) {
+        if (_problem != nullptr) {
             check_cuopt(cuOptDeleteRows(_problem, static_cast<cuopt_int_t>(delta_indices.size()),
                                         delta_indices.data()),
                         "cuOptDeleteRows");
@@ -480,7 +480,7 @@ public:
         }
 
 #ifdef MCFCG_CUOPT_DELTA_API
-        if (_problem) {
+        if (_problem != nullptr) {
             // Resolve the persistent problem. cuOptResolve may reallocate the
             // solution handle; pass the previous pointer so the implementation
             // can reuse or free it.
@@ -513,7 +513,7 @@ public:
             row_offsets.push_back(offset);
             // Sort by column index for cuOpt
             auto& re = row_entries[r];
-            std::sort(re.begin(), re.end());
+            std::ranges::sort(re);
             for (const auto& [col, val] : re) {
                 col_indices.push_back(static_cast<cuopt_int_t>(col));
                 coeff_values.push_back(static_cast<cuopt_float_t>(val));
@@ -590,13 +590,17 @@ public:
         return result;
     }
 
-    double get_obj() const override { return _cached_obj; }
-    std::vector<double> get_primals() const override { return _cached_primals; }
-    std::vector<double> get_duals() const override { return _cached_duals; }
-    std::vector<double> get_reduced_costs() const override { return _cached_reduced_costs; }
+    [[nodiscard]] double get_obj() const override { return _cached_obj; }
+    [[nodiscard]] std::vector<double> get_primals() const override { return _cached_primals; }
+    [[nodiscard]] std::vector<double> get_duals() const override { return _cached_duals; }
+    [[nodiscard]] std::vector<double> get_reduced_costs() const override {
+        return _cached_reduced_costs;
+    }
 
-    uint32_t num_cols() const override { return static_cast<uint32_t>(_obj.size()); }
-    uint32_t num_rows() const override { return static_cast<uint32_t>(_row_lb.size()); }
+    [[nodiscard]] uint32_t num_cols() const override { return static_cast<uint32_t>(_obj.size()); }
+    [[nodiscard]] uint32_t num_rows() const override {
+        return static_cast<uint32_t>(_row_lb.size());
+    }
 };
 
 std::unique_ptr<LPSolver> create_cuopt_solver(bool verbose) {
