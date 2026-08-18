@@ -89,7 +89,7 @@ SourceLP build_source_lp(const Instance& inst) {
     // wrap and emit a corrupt MPS. Such instances are impractical to dump
     // anyway, so failing loudly is correct.
     const uint64_t cols = static_cast<uint64_t>(n_sources) * n_arcs;
-    const uint64_t rows = static_cast<uint64_t>(n_sources) * n_vertices + n_cap;
+    const uint64_t rows = (static_cast<uint64_t>(n_sources) * n_vertices) + n_cap;
     if (cols > UINT32_MAX || rows > UINT32_MAX || cols * 3 > UINT32_MAX) {
         throw std::runtime_error(
             "compact source LP too large for the MPS exporter: |S|*|E| or "
@@ -120,7 +120,7 @@ SourceLP build_source_lp(const Instance& inst) {
     }
     for (uint32_t a : g.arcs()) {
         if (cap_row[a] >= 0) {
-            const uint32_t row = n_sources * n_vertices + static_cast<uint32_t>(cap_row[a]);
+            const uint32_t row = (n_sources * n_vertices) + static_cast<uint32_t>(cap_row[a]);
             lp.row_lower[row] = -INF;
             lp.row_upper[row] = inst.capacity[a];
         }

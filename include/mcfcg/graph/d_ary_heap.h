@@ -106,7 +106,7 @@ public:
 
 private:
     static constexpr size_type parent_of(size_type i) noexcept { return (i - 1) / D; }
-    static constexpr size_type first_child_of(size_type i) noexcept { return i * D + 1; }
+    static constexpr size_type first_child_of(size_type i) noexcept { return (i * D) + 1; }
 
     void sift_up(size_type pos) noexcept {
         entry e = _heap[pos];

@@ -6,7 +6,7 @@
 
 namespace mcfcg {
 
-enum class LPStatus { Optimal, Infeasible, Unbounded, Error };
+enum class LPStatus : uint8_t { Optimal, Infeasible, Unbounded, Error };
 
 // Backend-agnostic LP solver interface used by the CG master.
 //

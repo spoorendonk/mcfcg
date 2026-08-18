@@ -30,30 +30,6 @@ public:
     static_digraph &operator=(const static_digraph &) = default;
     static_digraph &operator=(static_digraph &&) = default;
 
-    template <std::ranges::forward_range S, std::ranges::forward_range T>
-        requires std::convertible_to<std::ranges::range_value_t<S>, vertex> &&
-                     std::convertible_to<std::ranges::range_value_t<T>, vertex>
-    static_digraph(std::size_t num_verts, S &&sources, T &&targets)
-        : _out_arc_begin(num_verts, arc{0}),
-          _arc_target(std::forward<T>(targets)),
-          _arc_source(std::forward<S>(sources)),
-          _in_arc_begin(num_verts, arc{0}),
-          _in_arcs(_arc_target.size()) {
-        assert(std::ranges::is_sorted(sources));
-        static_map<vertex, arc> in_count(num_verts, arc{0});
-        for (auto &&s : sources) ++_out_arc_begin[s];
-        for (auto &&t : targets) ++in_count[t];
-        std::exclusive_scan(_out_arc_begin.data(), _out_arc_begin.data() + num_verts,
-                            _out_arc_begin.data(), arc{0});
-        std::exclusive_scan(in_count.data(), in_count.data() + num_verts, _in_arc_begin.data(),
-                            arc{0});
-        for (auto a : arcs()) {
-            vertex t = _arc_target[a];
-            --in_count[t];
-            _in_arcs[_in_arc_begin[t] + in_count[t]] = a;
-        }
-    }
-
     constexpr uint32_t num_vertices() const noexcept {
         return static_cast<uint32_t>(_out_arc_begin.size());
     }
@@ -66,6 +42,40 @@ public:
 
     constexpr auto vertices() const noexcept { return std::views::iota(vertex{0}, num_vertices()); }
     constexpr auto arcs() const noexcept { return std::views::iota(arc{0}, num_arcs()); }
+
+    // Declared above the constructor on purpose: the constructor body calls
+    // arcs(), and a deduced return type must be defined before use.  GCC
+    // defers the body and accepts the other order; clang rejects it outright.
+    template <std::ranges::forward_range S, std::ranges::forward_range T>
+        requires std::convertible_to<std::ranges::range_value_t<S>, vertex> &&
+                     std::convertible_to<std::ranges::range_value_t<T>, vertex>
+    static_digraph(std::size_t num_verts, S &&sources, T &&targets)
+        : _out_arc_begin(num_verts, arc{0}),
+          _arc_target(std::forward<T>(targets)),
+          _arc_source(std::forward<S>(sources)),
+          _in_arc_begin(num_verts, arc{0}),
+          _in_arcs(_arc_target.size()) {
+        // Read the members, not the parameters: both were forwarded into
+        // _arc_target/_arc_source above, so an rvalue argument leaves them
+        // moved-from and the counting loops would silently see nothing.
+        assert(std::ranges::is_sorted(_arc_source));
+        static_map<vertex, arc> in_count(num_verts, arc{0});
+        for (auto s : _arc_source) {
+            ++_out_arc_begin[s];
+        }
+        for (auto t : _arc_target) {
+            ++in_count[t];
+        }
+        std::exclusive_scan(_out_arc_begin.data(), _out_arc_begin.data() + num_verts,
+                            _out_arc_begin.data(), arc{0});
+        std::exclusive_scan(in_count.data(), in_count.data() + num_verts, _in_arc_begin.data(),
+                            arc{0});
+        for (auto a : arcs()) {
+            vertex t = _arc_target[a];
+            --in_count[t];
+            _in_arcs[_in_arc_begin[t] + in_count[t]] = a;
+        }
+    }
 
     constexpr auto out_arcs(vertex u) const noexcept {
         assert(is_valid_vertex(u));

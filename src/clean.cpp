@@ -1,13 +1,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <string>
 
 #include "mcfcg/graph/dijkstra.h"
 #include "mcfcg/graph/dijkstra_workspace.h"
 #include "mcfcg/instance.h"
 
-int main(int argc, char* argv[]) {
+namespace {
+
+int run_clean(int argc, char* argv[]) {
     if (argc < 2) {
         std::fprintf(stderr, "Usage: mcfcg_clean <input> [--output cleaned.txt]\n");
         return EXIT_FAILURE;
@@ -17,17 +20,22 @@ int main(int argc, char* argv[]) {
     std::string output_path;
 
     for (int i = 2; i < argc; i += 2) {
-        if (i + 1 >= argc) break;
-        if (std::strcmp(argv[i], "--output") == 0) output_path = argv[i + 1];
+        if (i + 1 >= argc) {
+            break;
+        }
+        if (std::strcmp(argv[i], "--output") == 0) {
+            output_path = argv[i + 1];
+        }
     }
 
     if (output_path.empty()) {
         // Default: input stem + "_cleaned.txt"
         auto dot = input_path.rfind('.');
-        if (dot != std::string::npos)
+        if (dot != std::string::npos) {
             output_path = input_path.substr(0, dot) + "_cleaned.txt";
-        else
+        } else {
             output_path = input_path + "_cleaned.txt";
+        }
     }
 
     auto inst = mcfcg::read_commalab(input_path);
@@ -75,4 +83,17 @@ int main(int argc, char* argv[]) {
     std::fprintf(stderr, "Written to %s\n", output_path.c_str());
 
     return EXIT_SUCCESS;
+}
+
+}  // namespace
+
+int main(int argc, char* argv[]) {
+    // The readers and writer throw on malformed input; without this an
+    // unreadable instance aborts via std::terminate with no message.
+    try {
+        return run_clean(argc, argv);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "error: %s\n", e.what());
+        return EXIT_FAILURE;
+    }
 }
