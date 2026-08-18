@@ -11,18 +11,18 @@
 namespace mcfcg {
 
 struct dijkstra_default_traits {
-    static constexpr bool store_distances = false;
-    static constexpr bool store_paths = false;
+    static constexpr bool STORE_DISTANCES = false;
+    static constexpr bool STORE_PATHS = false;
 };
 
 struct dijkstra_store_distances {
-    static constexpr bool store_distances = true;
-    static constexpr bool store_paths = false;
+    static constexpr bool STORE_DISTANCES = true;
+    static constexpr bool STORE_PATHS = false;
 };
 
 struct dijkstra_store_paths {
-    static constexpr bool store_distances = true;
-    static constexpr bool store_paths = true;
+    static constexpr bool STORE_DISTANCES = true;
+    static constexpr bool STORE_PATHS = true;
 };
 
 // Dijkstra's algorithm on static_digraph with int64_t arc lengths.
@@ -30,15 +30,15 @@ struct dijkstra_store_paths {
 // Memory is borrowed from a dijkstra_workspace to avoid per-call allocation.
 template <typename Traits = dijkstra_default_traits>
 class dijkstra {
-    static_assert(!Traits::store_paths || Traits::store_distances,
-                  "store_paths requires store_distances");
+    static_assert(!Traits::STORE_PATHS || Traits::STORE_DISTANCES,
+                  "STORE_PATHS requires STORE_DISTANCES");
 
 public:
     using vertex = uint32_t;
     using arc = uint32_t;
     using length_type = int64_t;
     using semiring = shortest_path_semiring<length_type>;
-    using vertex_status = dijkstra_workspace::vertex_status;
+    using VertexStatus = dijkstra_workspace::VertexStatus;
 
 private:
     const static_digraph* _graph = nullptr;
@@ -54,15 +54,15 @@ public:
 
     void reset() noexcept { _ws->reset(); }
 
-    void add_source(vertex s, length_type dist = semiring::zero) noexcept {
-        assert(_ws->status[s] != vertex_status::IN_HEAP);
+    void add_source(vertex s, length_type dist = semiring::ZERO) noexcept {
+        assert(_ws->status[s] != VertexStatus::InHeap);
         _ws->heap.push(s, dist);
-        _ws->status[s] = vertex_status::IN_HEAP;
+        _ws->status[s] = VertexStatus::InHeap;
         _ws->touch(s);
-        if constexpr (Traits::store_distances) {
+        if constexpr (Traits::STORE_DISTANCES) {
             _ws->dist[s] = dist;
         }
-        if constexpr (Traits::store_paths) {
+        if constexpr (Traits::STORE_PATHS) {
             _ws->pred[s] = dijkstra_workspace::NO_PRED;
         }
     }
@@ -78,30 +78,32 @@ public:
     void advance() noexcept {
         assert(!finished());
         auto [u, u_dist] = current();
-        if constexpr (Traits::store_distances) {
+        if constexpr (Traits::STORE_DISTANCES) {
             _ws->dist[u] = u_dist;
         }
-        _ws->status[u] = vertex_status::POST_HEAP;
+        _ws->status[u] = VertexStatus::PostHeap;
         _ws->heap.pop();
 
         for (arc a : _graph->out_arcs(u)) {
             vertex w = _graph->arc_target(a);
-            if (_ws->status[w] == vertex_status::POST_HEAP) continue;
+            if (_ws->status[w] == VertexStatus::PostHeap) {
+                continue;
+            }
 
             length_type new_dist = semiring::plus(u_dist, (*_length_map)[a]);
 
-            if (_ws->status[w] == vertex_status::IN_HEAP) {
+            if (_ws->status[w] == VertexStatus::InHeap) {
                 if (semiring::less(new_dist, _ws->heap.priority(w))) {
                     _ws->heap.promote(w, new_dist);
-                    if constexpr (Traits::store_paths) {
+                    if constexpr (Traits::STORE_PATHS) {
                         _ws->pred[w] = a;
                     }
                 }
             } else {
                 _ws->heap.push(w, new_dist);
-                _ws->status[w] = vertex_status::IN_HEAP;
+                _ws->status[w] = VertexStatus::InHeap;
                 _ws->touch(w);
-                if constexpr (Traits::store_paths) {
+                if constexpr (Traits::STORE_PATHS) {
                     _ws->pred[w] = a;
                 }
             }
@@ -109,28 +111,30 @@ public:
     }
 
     void run() noexcept {
-        while (!finished()) advance();
+        while (!finished()) {
+            advance();
+        }
     }
 
-    bool reached(vertex u) const noexcept { return _ws->status[u] != vertex_status::PRE_HEAP; }
-    bool visited(vertex u) const noexcept { return _ws->status[u] == vertex_status::POST_HEAP; }
+    bool reached(vertex u) const noexcept { return _ws->status[u] != VertexStatus::PreHeap; }
+    bool visited(vertex u) const noexcept { return _ws->status[u] == VertexStatus::PostHeap; }
 
     length_type dist(vertex u) const noexcept
-        requires(Traits::store_distances)
+        requires(Traits::STORE_DISTANCES)
     {
         assert(visited(u));
         return _ws->dist[u];
     }
 
     arc pred_arc(vertex u) const noexcept
-        requires(Traits::store_paths)
+        requires(Traits::STORE_PATHS)
     {
         assert(reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED);
         return _ws->pred[u];
     }
 
     bool has_pred(vertex u) const noexcept
-        requires(Traits::store_paths)
+        requires(Traits::STORE_PATHS)
     {
         return reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED;
     }
@@ -149,7 +153,7 @@ public:
     using arc = uint32_t;
     using length_type = int64_t;
     using semiring = shortest_path_semiring<length_type>;
-    using vertex_status = dijkstra_workspace::vertex_status;
+    using VertexStatus = dijkstra_workspace::VertexStatus;
 
 private:
     const static_digraph* _graph = nullptr;
@@ -166,14 +170,14 @@ public:
 
     void reset() noexcept { _ws->reset(); }
 
-    void add_source(vertex s, length_type dist = semiring::zero) noexcept {
-        assert(_ws->status[s] != vertex_status::IN_HEAP);
+    void add_source(vertex s, length_type dist = semiring::ZERO) noexcept {
+        assert(_ws->status[s] != VertexStatus::InHeap);
         _ws->dist[s] = dist;
         length_type f = semiring::plus(dist, (*_heuristic)[s]);
         _ws->heap.push(s, f);
-        _ws->status[s] = vertex_status::IN_HEAP;
+        _ws->status[s] = VertexStatus::InHeap;
         _ws->touch(s);
-        if constexpr (Traits::store_paths) {
+        if constexpr (Traits::STORE_PATHS) {
             _ws->pred[s] = dijkstra_workspace::NO_PRED;
         }
     }
@@ -197,30 +201,32 @@ public:
         auto top = _ws->heap.top();
         vertex u = top.v;
         length_type u_dist = _ws->dist[u];
-        _ws->status[u] = vertex_status::POST_HEAP;
+        _ws->status[u] = VertexStatus::PostHeap;
         _ws->heap.pop();
 
         for (arc a : _graph->out_arcs(u)) {
             vertex w = _graph->arc_target(a);
-            if (_ws->status[w] == vertex_status::POST_HEAP) continue;
+            if (_ws->status[w] == VertexStatus::PostHeap) {
+                continue;
+            }
 
             length_type new_g = semiring::plus(u_dist, (*_length_map)[a]);
             length_type new_f = semiring::plus(new_g, (*_heuristic)[w]);
 
-            if (_ws->status[w] == vertex_status::IN_HEAP) {
+            if (_ws->status[w] == VertexStatus::InHeap) {
                 if (semiring::less(new_g, _ws->dist[w])) {
                     _ws->dist[w] = new_g;
                     _ws->heap.promote(w, new_f);
-                    if constexpr (Traits::store_paths) {
+                    if constexpr (Traits::STORE_PATHS) {
                         _ws->pred[w] = a;
                     }
                 }
             } else {
                 _ws->dist[w] = new_g;
                 _ws->heap.push(w, new_f);
-                _ws->status[w] = vertex_status::IN_HEAP;
+                _ws->status[w] = VertexStatus::InHeap;
                 _ws->touch(w);
-                if constexpr (Traits::store_paths) {
+                if constexpr (Traits::STORE_PATHS) {
                     _ws->pred[w] = a;
                 }
             }
@@ -230,7 +236,9 @@ public:
     }
 
     void run() noexcept {
-        while (!finished()) settle_next();
+        while (!finished()) {
+            settle_next();
+        }
     }
 
     // Run until num_targets target vertices have been settled.
@@ -247,25 +255,25 @@ public:
         }
     }
 
-    bool reached(vertex u) const noexcept { return _ws->status[u] != vertex_status::PRE_HEAP; }
-    bool visited(vertex u) const noexcept { return _ws->status[u] == vertex_status::POST_HEAP; }
+    bool reached(vertex u) const noexcept { return _ws->status[u] != VertexStatus::PreHeap; }
+    bool visited(vertex u) const noexcept { return _ws->status[u] == VertexStatus::PostHeap; }
 
     length_type dist(vertex u) const noexcept
-        requires(Traits::store_distances)
+        requires(Traits::STORE_DISTANCES)
     {
         assert(visited(u));
         return _ws->dist[u];
     }
 
     arc pred_arc(vertex u) const noexcept
-        requires(Traits::store_paths)
+        requires(Traits::STORE_PATHS)
     {
         assert(reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED);
         return _ws->pred[u];
     }
 
     bool has_pred(vertex u) const noexcept
-        requires(Traits::store_paths)
+        requires(Traits::STORE_PATHS)
     {
         return reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED;
     }

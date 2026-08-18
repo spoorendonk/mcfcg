@@ -163,7 +163,7 @@ public:
             _fp = std::fopen(path.c_str(), "wb");
         }
         _failed = !ok();
-        _buf.reserve(kFlush + 256);
+        _buf.reserve(FLUSH + 256);
     }
     ~MpsSink() { close(); }
     MpsSink(const MpsSink&) = delete;
@@ -181,7 +181,7 @@ public:
     }
     void nl() {
         _buf.push_back('\n');
-        if (_buf.size() >= kFlush) {
+        if (_buf.size() >= FLUSH) {
             flush();
         }
     }
@@ -214,7 +214,7 @@ public:
     }
 
 private:
-    static constexpr size_t kFlush = 1u << 20;
+    static constexpr size_t FLUSH = 1u << 20;
     bool _gz;
     bool _failed = false;
     gzFile _gzf = nullptr;

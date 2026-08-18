@@ -7,7 +7,7 @@
 #include "mcfcg/instance.h"
 #include "test_paths.h"
 
-using mcfcg::test::writeInstance;
+using mcfcg::test::write_instance;
 
 // --- Capacity binding (single commodity) ---
 
@@ -15,7 +15,7 @@ class RCCapBinding : public ::testing::Test {
 protected:
     std::string path = mcfcg::test::unique_test_path("rc_cap_binding.txt");
     void SetUp() override {
-        writeInstance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
+        write_instance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
 };
@@ -36,7 +36,7 @@ class RCMultiSourceCap : public ::testing::Test {
 protected:
     std::string path = mcfcg::test::unique_test_path("rc_multi_cap.txt");
     void SetUp() override {
-        writeInstance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
+        write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
 };

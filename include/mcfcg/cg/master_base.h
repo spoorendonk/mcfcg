@@ -86,6 +86,10 @@ inline SlackMode select_slack_mode(uint32_t num_capped_arcs, uint32_t num_struct
 template <typename Derived, typename ColumnT>
 class MasterBase {
 protected:
+    // Sentinel in purge_aged_columns' old→new column index map, meaning
+    // "this entry must be dropped".
+    static constexpr uint32_t PURGED = std::numeric_limits<uint32_t>::max();
+
     const Instance* _inst = nullptr;
     std::unique_ptr<LPSolver> _lp;
 
@@ -187,10 +191,9 @@ protected:
             if (col_lp.empty()) {
                 return 0;
             }
-            constexpr double SLACK_ACTIVE_EPS = COL_ACTIVE_EPS;
             uint32_t count = 0;
             for (uint32_t lp_col : col_lp) {
-                if (lp_col < primals.size() && primals[lp_col] > SLACK_ACTIVE_EPS) {
+                if (lp_col < primals.size() && primals[lp_col] > COL_ACTIVE_EPS) {
                     ++count;
                 }
             }
@@ -203,11 +206,10 @@ protected:
             if (col_lp.empty()) {
                 return 0;
             }
-            constexpr double SLACK_ACTIVE_EPS = COL_ACTIVE_EPS;
             uint32_t bumped = 0;
             for (uint32_t k = 0; k < col_lp.size(); ++k) {
                 uint32_t lp_col = col_lp[k];
-                if (lp_col >= primals.size() || primals[lp_col] <= SLACK_ACTIVE_EPS) {
+                if (lp_col >= primals.size() || primals[lp_col] <= COL_ACTIVE_EPS) {
                     continue;
                 }
                 if (cost[k] >= cost_ceiling) {
@@ -789,9 +791,7 @@ public:
 
         // Compact internal vectors and record the old→new column index
         // mapping so we can remap _arc_to_col_entries in place instead
-        // of clearing and re-walking every surviving column.  PURGED is
-        // a sentinel meaning "this entry must be dropped".
-        constexpr uint32_t PURGED = std::numeric_limits<uint32_t>::max();
+        // of clearing and re-walking every surviving column.
         std::vector<uint32_t> old_to_new(_columns.size(), PURGED);
         uint32_t write = 0;
         for (uint32_t c = 0; c < _columns.size(); ++c) {

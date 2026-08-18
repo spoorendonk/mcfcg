@@ -17,12 +17,12 @@ struct dijkstra_workspace {
     using arc = uint32_t;
     using length_type = int64_t;
 
-    enum vertex_status : char { PRE_HEAP = 0, IN_HEAP = 1, POST_HEAP = 2 };
+    enum class VertexStatus : char { PreHeap = 0, InHeap = 1, PostHeap = 2 };
 
     static constexpr arc NO_PRED = ~arc{0};
 
     d_ary_heap<4, length_type> heap;
-    static_map<vertex, vertex_status> status;
+    static_map<vertex, VertexStatus> status;
     static_map<vertex, length_type> dist;
     static_map<vertex, arc> pred;
 
@@ -30,11 +30,11 @@ struct dijkstra_workspace {
 
     explicit dijkstra_workspace(uint32_t num_vertices)
         : heap(num_vertices),
-          status(num_vertices, PRE_HEAP),
+          status(num_vertices, VertexStatus::PreHeap),
           dist(num_vertices),
           pred(num_vertices, NO_PRED) {}
 
-    // Track a vertex whose status changed from PRE_HEAP.
+    // Track a vertex whose status changed from VertexStatus::PreHeap.
     void touch(vertex v) noexcept { _touched.push_back(v); }
 
     // Reset for the next shortest-path run. Only clears heap and touched
@@ -43,7 +43,7 @@ struct dijkstra_workspace {
     void reset() noexcept {
         heap.clear();
         for (vertex v : _touched) {
-            status[v] = PRE_HEAP;
+            status[v] = VertexStatus::PreHeap;
         }
         _touched.clear();
     }

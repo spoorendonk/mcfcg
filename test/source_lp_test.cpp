@@ -18,7 +18,7 @@
 //   - arc 6 is a self-loop, whose +1/-1 conservation pair cancels, leaving only
 //     its capacity entry.
 // The two commodities originate at different vertices, so |S| = 2.
-static const char* MIXED_INSTANCE = R"(4
+static const char* const MIXED_INSTANCE = R"(4
 6
 2
 1 2 1 10

@@ -10,12 +10,12 @@ namespace mcfcg {
 enum class TimerCat : uint8_t { LP = 0, Pricing = 1, Separation = 2, Total = 3 };
 
 class Timer {
-    static constexpr size_t kNumCats = 4;
+    static constexpr size_t NUM_CATS = 4;
     using Clock = std::chrono::steady_clock;
     using TimePoint = Clock::time_point;
 
-    std::array<double, kNumCats> _elapsed{};
-    std::array<TimePoint, kNumCats> _start{};
+    std::array<double, NUM_CATS> _elapsed{};
+    std::array<TimePoint, NUM_CATS> _start{};
 
 public:
     void start(TimerCat cat) { _start[static_cast<size_t>(cat)] = Clock::now(); }

@@ -27,9 +27,9 @@ inline std::string unique_test_path(std::string_view base) {
 // followed by arc_lines (each `src dst cost cap`) and commodity_lines
 // (each `origin destination demand`), 1-indexed.  Shared across test
 // files to avoid duplicate local helpers.
-inline void writeInstance(const std::string& path, uint32_t vertices, uint32_t arcs,
-                          uint32_t commodities, const std::string& arc_lines,
-                          const std::string& commodity_lines) {
+inline void write_instance(const std::string& path, uint32_t vertices, uint32_t arcs,
+                           uint32_t commodities, const std::string& arc_lines,
+                           const std::string& commodity_lines) {
     std::ofstream out(path);
     out << vertices << '\n' << arcs << '\n' << commodities << '\n';
     out << arc_lines << commodity_lines;

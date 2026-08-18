@@ -7,13 +7,13 @@ namespace mcfcg {
 template <typename T>
 struct shortest_path_semiring {
     using value_type = T;
-    static constexpr T zero = T{0};
-    static constexpr T infty = std::numeric_limits<T>::max();
+    static constexpr T ZERO = T{0};
+    static constexpr T INFTY = std::numeric_limits<T>::max();
 
     // Saturating addition to avoid overflow with scaled int64_t costs.
     static constexpr T plus(T a, T b) noexcept {
-        if (a > 0 && b > infty - a) {
-            return infty;
+        if (a > 0 && b > INFTY - a) {
+            return INFTY;
         }
         return a + b;
     }

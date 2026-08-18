@@ -19,6 +19,13 @@
 
 namespace mcfcg {
 
+// Largest usable scaled distance, and the single source of truth for the
+// coupling between two roles that must stay equal: it is what
+// compute_lower_bounds_to_targets stores for a vertex that reaches no sink,
+// and what PricerBase::scale_dual saturates a +inf dual to.  Halving INFTY
+// keeps `g + h` addable without overflow.
+inline constexpr int64_t UNREACHED_BOUND = shortest_path_semiring<int64_t>::INFTY / 2;
+
 // Compute lower bounds from every vertex to the nearest sink using original
 // (unscaled) arc costs on the reverse graph.  All unique sink vertices across
 // all commodities are seeded with distance 0 and a single multi-source reverse
@@ -85,10 +92,9 @@ inline static_map<uint32_t, int64_t> compute_lower_bounds_to_targets(const Insta
     }
 
     // Unreached vertices get a large but overflow-safe bound.
-    constexpr int64_t UNREACHED = semiring_t::infty / 2;
     for (uint32_t v : g.vertices()) {
         if (status[v] != 2) {
-            dist[v] = UNREACHED;
+            dist[v] = UNREACHED_BOUND;
         }
     }
 
@@ -130,9 +136,9 @@ public:
     // compute_lower_bounds_to_targets uses the same value as its UNREACHED
     // heuristic, so a frontier at or above it means every frontier vertex is a
     // dead end and the search is effectively exhausted.  A* keys therefore CAN
-    // exceed it (f = g + h saturates only at semiring::infty) — which is why
+    // exceed it (f = g + h saturates only at semiring::INFTY) — which is why
     // price_source_astar refuses to cut there.
-    static constexpr int64_t MAX_BOUND = shortest_path_semiring<int64_t>::infty / 2;
+    static constexpr int64_t MAX_BOUND = UNREACHED_BOUND;
 
 protected:
     const Instance* _inst = nullptr;

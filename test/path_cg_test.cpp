@@ -9,7 +9,7 @@
 #include "mcfcg/instance.h"
 #include "test_paths.h"
 
-using mcfcg::test::writeInstance;
+using mcfcg::test::write_instance;
 
 // --- Instance 1: Single source, no capacity binding ---
 // Graph: 0→1(c=1,u=10), 0→2(c=4,u=10), 1→2(c=2,u=10),
@@ -21,8 +21,8 @@ class PathCGSingleSource : public ::testing::Test {
 protected:
     std::string path = mcfcg::test::unique_test_path("path_cg_single.txt");
     void SetUp() override {
-        writeInstance(path, 4, 5, 2, "1 2 1 10\n1 3 4 10\n2 3 2 10\n2 4 6 10\n3 4 1 10\n",
-                      "1 4 5\n1 3 3\n");
+        write_instance(path, 4, 5, 2, "1 2 1 10\n1 3 4 10\n2 3 2 10\n2 4 6 10\n3 4 1 10\n",
+                       "1 4 5\n1 3 3\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
 };
@@ -42,7 +42,7 @@ class PathCGCapacityBinding : public ::testing::Test {
 protected:
     std::string path = mcfcg::test::unique_test_path("path_cg_cap.txt");
     void SetUp() override {
-        writeInstance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
+        write_instance(path, 4, 4, 1, "1 2 1 3\n1 3 5 10\n2 3 1 10\n3 4 1 10\n", "1 4 5\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
 };
@@ -62,7 +62,7 @@ class PathCGMultiSource : public ::testing::Test {
 protected:
     std::string path = mcfcg::test::unique_test_path("path_cg_multi.txt");
     void SetUp() override {
-        writeInstance(path, 4, 3, 2, "1 3 1 10\n2 3 2 10\n3 4 1 10\n", "1 4 4\n2 4 3\n");
+        write_instance(path, 4, 3, 2, "1 3 1 10\n2 3 2 10\n3 4 1 10\n", "1 4 4\n2 4 3\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
 };
@@ -84,7 +84,7 @@ class PathCGMultiSourceCap : public ::testing::Test {
 protected:
     std::string path = mcfcg::test::unique_test_path("path_cg_multi_cap.txt");
     void SetUp() override {
-        writeInstance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
+        write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 5\n1 4 4 10\n", "1 4 4\n2 4 3\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
 };
@@ -185,7 +185,7 @@ class PathCGEdgeRows : public ::testing::Test {
 protected:
     std::string path = mcfcg::test::unique_test_path("path_cg_edge_rows.txt");
     void SetUp() override {
-        writeInstance(path, 3, 3, 3, "1 2 1 3\n1 3 5 10\n2 3 3 4\n", "1 3 2\n1 3 3\n2 3 1\n");
+        write_instance(path, 3, 3, 3, "1 2 1 3\n1 3 5 10\n2 3 3 4\n", "1 3 2\n1 3 3\n2 3 1\n");
     }
     void TearDown() override { std::remove(path.c_str()); }
 };

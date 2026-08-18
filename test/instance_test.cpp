@@ -10,7 +10,7 @@
 
 // CommaLab/UniPi plain-numeric format:
 // 4 vertices, 5 arcs, 3 commodities
-static const char* SMALL_INSTANCE = R"(4
+static const char* const SMALL_INSTANCE = R"(4
 5
 3
 1 2 1 10
