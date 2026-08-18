@@ -1,11 +1,11 @@
-#include "mcfcg/graph/dijkstra.h"
-#include "mcfcg/graph/dijkstra_workspace.h"
-#include "mcfcg/instance.h"
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+
+#include "mcfcg/graph/dijkstra.h"
+#include "mcfcg/graph/dijkstra_workspace.h"
+#include "mcfcg/instance.h"
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -17,10 +17,8 @@ int main(int argc, char* argv[]) {
     std::string output_path;
 
     for (int i = 2; i < argc; i += 2) {
-        if (i + 1 >= argc)
-            break;
-        if (std::strcmp(argv[i], "--output") == 0)
-            output_path = argv[i + 1];
+        if (i + 1 >= argc) break;
+        if (std::strcmp(argv[i], "--output") == 0) output_path = argv[i + 1];
     }
 
     if (output_path.empty()) {

@@ -1,16 +1,17 @@
 #ifdef MCFCG_USE_COPT
 
-#include "mcfcg/lp/backend_util.h"
-#include "mcfcg/lp/lp_solver.h"
-#include "mcfcg/util/tolerances.h"
+#include <copt.h>
 
 #include <cassert>
 #include <cctype>
-#include <copt.h>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "mcfcg/lp/backend_util.h"
+#include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/util/tolerances.h"
 
 namespace mcfcg {
 

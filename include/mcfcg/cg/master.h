@@ -1,11 +1,11 @@
 #pragma once
 
-#include "mcfcg/cg/column.h"
-#include "mcfcg/cg/master_base.h"
-
 #include <cstdint>
 #include <utility>
 #include <vector>
+
+#include "mcfcg/cg/column.h"
+#include "mcfcg/cg/master_base.h"
 
 namespace mcfcg {
 

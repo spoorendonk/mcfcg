@@ -1,7 +1,8 @@
 #include "mcfcg/lp/lp_solver.h"
 
-#include <cmath>
 #include <gtest/gtest.h>
+
+#include <cmath>
 
 // Solve: min x + 2y  s.t. x + y >= 3, x >= 0, y >= 0
 TEST(LPSolver, SimpleLP) {

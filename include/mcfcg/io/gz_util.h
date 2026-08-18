@@ -1,17 +1,17 @@
 #pragma once
 
+#include <zlib.h>
+
 #include <stdexcept>
 #include <string>
 
-#include <zlib.h>
-
 namespace mcfcg {
 
-inline bool ends_with_gz(const std::string & path) {
+inline bool ends_with_gz(const std::string& path) {
     return path.size() > 3 && path.compare(path.size() - 3, 3, ".gz") == 0;
 }
 
-inline std::string decompress_gz(const std::string & path) {
+inline std::string decompress_gz(const std::string& path) {
     gzFile gz = gzopen(path.c_str(), "rb");
     if (!gz) {
         throw std::runtime_error("Cannot open gzip file: " + path);
@@ -25,10 +25,9 @@ inline std::string decompress_gz(const std::string & path) {
     }
     if (n < 0) {
         int errnum = 0;
-        const char * msg = gzerror(gz, &errnum);
+        const char* msg = gzerror(gz, &errnum);
         gzclose(gz);
-        throw std::runtime_error("gzip read error in " + path + ": " +
-                                 (msg ? msg : "unknown"));
+        throw std::runtime_error("gzip read error in " + path + ": " + (msg ? msg : "unknown"));
     }
     gzclose(gz);
     return result;

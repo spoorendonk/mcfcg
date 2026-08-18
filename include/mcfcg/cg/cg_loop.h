@@ -1,17 +1,17 @@
 #pragma once
 
+#include <algorithm>
+#include <cassert>
+#include <chrono>
+#include <limits>
+#include <vector>
+
 #include "mcfcg/cg/master_base.h"
 #include "mcfcg/cg/path_cg.h"
 #include "mcfcg/cg/pricer_base.h"
 #include "mcfcg/util/limits.h"
 #include "mcfcg/util/thread_pool.h"
 #include "mcfcg/util/timer.h"
-
-#include <algorithm>
-#include <cassert>
-#include <chrono>
-#include <limits>
-#include <vector>
 
 namespace mcfcg {
 
@@ -191,8 +191,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         iter_timer.stop(TimerCat::LP);
         timer.stop(TimerCat::LP);
 
-        if (status != LPStatus::Optimal)
-            break;
+        if (status != LPStatus::Optimal) break;
         solved = true;
 
         double obj = master.get_obj();

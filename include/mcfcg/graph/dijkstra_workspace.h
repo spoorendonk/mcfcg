@@ -1,10 +1,10 @@
 #pragma once
 
-#include "mcfcg/graph/d_ary_heap.h"
-#include "mcfcg/graph/static_map.h"
-
 #include <cstdint>
 #include <vector>
+
+#include "mcfcg/graph/d_ary_heap.h"
+#include "mcfcg/graph/static_map.h"
 
 namespace mcfcg {
 

@@ -4,6 +4,6 @@
 
 namespace mcfcg {
 
-CGResult solve_tree_cg(const Instance & inst, const CGParams & params = {});
+CGResult solve_tree_cg(const Instance& inst, const CGParams& params = {});
 
 }  // namespace mcfcg

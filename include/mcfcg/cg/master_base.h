@@ -1,11 +1,5 @@
 #pragma once
 
-#include "mcfcg/instance.h"
-#include "mcfcg/lp/lp_solver.h"
-#include "mcfcg/util/limits.h"
-#include "mcfcg/util/thread_pool.h"
-#include "mcfcg/util/tolerances.h"
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -18,6 +12,12 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include "mcfcg/instance.h"
+#include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/util/limits.h"
+#include "mcfcg/util/thread_pool.h"
+#include "mcfcg/util/tolerances.h"
 
 namespace mcfcg {
 
@@ -388,8 +388,7 @@ public:
     double slack_cost_upper_bound_value() const { return self().slack_cost_upper_bound(); }
 
     uint32_t add_columns(std::vector<ColumnT> cols) {
-        if (cols.empty())
-            return 0;
+        if (cols.empty()) return 0;
 
         uint32_t n = static_cast<uint32_t>(cols.size());
         std::vector<double> obj(n);
@@ -567,8 +566,7 @@ public:
         auto flow = compute_arc_flow(primals);
         auto new_arcs = find_violated_arcs(flow);
 
-        if (new_arcs.empty())
-            return {};
+        if (new_arcs.empty()) return {};
 
         // Build CSR for new capacity rows
         std::vector<double> row_lb;
@@ -689,8 +687,7 @@ public:
     // Remove capacity rows that have been non-binding for more than
     // inactivity_threshold iterations. Returns the number of rows purged.
     uint32_t purge_nonbinding_capacity_rows(uint32_t current_iter, uint32_t inactivity_threshold) {
-        if (_cap_row_to_arc.empty())
-            return 0;
+        if (_cap_row_to_arc.empty()) return 0;
 
         // Build delete mask for LP (size = total LP rows).  Also remember
         // the arcs whose rows are being purged so the EdgeRows branch
@@ -712,8 +709,7 @@ public:
             }
         }
 
-        if (purge_count == 0)
-            return 0;
+        if (purge_count == 0) return 0;
 
         _lp->delete_rows(mask);
 
@@ -745,8 +741,7 @@ public:
     uint32_t purge_aged_columns(uint32_t age_limit) {
         // age_limit == 0 disables aging; INF_U32 is cg_loop's "aging off"
         // signal under PricerHeavy — either way, no column can exceed it.
-        if (age_limit == 0 || age_limit == INF_U32)
-            return 0;
+        if (age_limit == 0 || age_limit == INF_U32) return 0;
 
         // Build LP-level deletion mask.  Aged columns carry zero primal
         // and non-negative reduced cost to within LP tolerance
@@ -764,8 +759,7 @@ public:
             }
         }
 
-        if (purge_count == 0)
-            return 0;
+        if (purge_count == 0) return 0;
 
         _lp->delete_cols(mask);
 
@@ -898,8 +892,7 @@ private:
         uint32_t num_cols = static_cast<uint32_t>(_columns.size());
         uint32_t num_arcs = _inst->graph.num_arcs();
         auto flow = _inst->graph.create_arc_map<double>(0.0);
-        if (num_cols == 0)
-            return flow;
+        if (num_cols == 0) return flow;
 
         bool use_pool = _pool != nullptr && num_cols >= PAR_COL_THRESHOLD;
 
@@ -908,8 +901,7 @@ private:
             // and accumulate directly into the result.
             for (uint32_t c = 0; c < num_cols; ++c) {
                 double x = primals[_col_to_lp[c]];
-                if (x < FLOW_NEGLIGIBLE_EPS)
-                    continue;
+                if (x < FLOW_NEGLIGIBLE_EPS) continue;
                 self().for_each_arc_coeff(
                     _columns[c], [&](uint32_t arc, double coeff) { flow[arc] += x * coeff; });
             }
@@ -932,8 +924,7 @@ private:
             auto& bucket = _thread_flow[task];
             for (uint32_t c = start; c < end; ++c) {
                 double x = primals[_col_to_lp[c]];
-                if (x < FLOW_NEGLIGIBLE_EPS)
-                    continue;
+                if (x < FLOW_NEGLIGIBLE_EPS) continue;
                 self().for_each_arc_coeff(
                     _columns[c], [&](uint32_t arc, double coeff) { bucket[arc] += x * coeff; });
             }
@@ -981,8 +972,7 @@ private:
                 }
             });
             size_t total = 0;
-            for (auto& v : _thread_violated_arcs)
-                total += v.size();
+            for (auto& v : _thread_violated_arcs) total += v.size();
             new_arcs.reserve(total);
             for (auto& v : _thread_violated_arcs) {
                 new_arcs.insert(new_arcs.end(), v.begin(), v.end());

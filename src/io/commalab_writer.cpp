@@ -1,10 +1,10 @@
-#include "mcfcg/instance.h"
-
 #include <cmath>
 #include <fstream>
 #include <limits>
 #include <ostream>
 #include <stdexcept>
+
+#include "mcfcg/instance.h"
 
 namespace mcfcg {
 

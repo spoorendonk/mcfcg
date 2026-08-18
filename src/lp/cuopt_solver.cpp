@@ -1,17 +1,18 @@
 #ifdef MCFCG_USE_CUOPT
 
-#include "mcfcg/lp/backend_util.h"
-#include "mcfcg/lp/lp_solver.h"
-#include "mcfcg/util/tolerances.h"
+#include <cuopt/linear_programming/constants.h>
+#include <cuopt/linear_programming/cuopt_c.h>
 
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
-#include <cuopt/linear_programming/constants.h>
-#include <cuopt/linear_programming/cuopt_c.h>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "mcfcg/lp/backend_util.h"
+#include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/util/tolerances.h"
 
 #ifdef MCFCG_CUOPT_DELTA_API
 #include <cuopt/linear_programming/cuopt_c_delta.h>

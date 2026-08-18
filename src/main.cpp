@@ -1,11 +1,3 @@
-#include "mcfcg/cg/master.h"
-#include "mcfcg/cg/master_base.h"
-#include "mcfcg/cg/path_cg.h"
-#include "mcfcg/cg/tree_cg.h"
-#include "mcfcg/cg/tree_master.h"
-#include "mcfcg/instance.h"
-#include "mcfcg/source/source_lp.h"
-
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -14,6 +6,14 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+
+#include "mcfcg/cg/master.h"
+#include "mcfcg/cg/master_base.h"
+#include "mcfcg/cg/path_cg.h"
+#include "mcfcg/cg/tree_cg.h"
+#include "mcfcg/cg/tree_master.h"
+#include "mcfcg/instance.h"
+#include "mcfcg/source/source_lp.h"
 
 // Demand coefficients for TNTP instances (from paper's coefs.csv)
 static const std::unordered_map<std::string, double> TNTP_COEFS = {
@@ -27,8 +27,7 @@ static std::string tntp_city_name(const std::string& net_path) {
     auto slash = net_path.rfind('/');
     auto start = (slash == std::string::npos) ? 0 : slash + 1;
     auto underscore = net_path.find('_', start);
-    if (underscore == std::string::npos)
-        return "";
+    if (underscore == std::string::npos) return "";
     return net_path.substr(start, underscore - start);
 }
 
@@ -38,18 +37,15 @@ static std::string tntp_city_name(const std::string& net_path) {
 static std::string tntp_trips_path(const std::string& net_path) {
     std::string suffix = "_net.tntp.gz";
     auto pos = net_path.rfind(suffix);
-    if (pos != std::string::npos)
-        return net_path.substr(0, pos) + "_trips.tntp.gz";
+    if (pos != std::string::npos) return net_path.substr(0, pos) + "_trips.tntp.gz";
     suffix = "_net.tntp";
     pos = net_path.rfind(suffix);
-    if (pos != std::string::npos)
-        return net_path.substr(0, pos) + "_trips.tntp";
+    if (pos != std::string::npos) return net_path.substr(0, pos) + "_trips.tntp";
     return "";
 }
 
 static bool ends_with(const std::string& s, const std::string& suffix) {
-    if (suffix.size() > s.size())
-        return false;
+    if (suffix.size() > s.size()) return false;
     return s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
@@ -233,8 +229,7 @@ int main(int argc, char* argv[]) {
 
     if (is_tntp_net(instance_path)) {
         // TNTP format — auto-detect trips path and coefficient
-        if (trips_path.empty())
-            trips_path = tntp_trips_path(instance_path);
+        if (trips_path.empty()) trips_path = tntp_trips_path(instance_path);
         if (coef == 0.0) {
             auto city = tntp_city_name(instance_path);
             auto it = TNTP_COEFS.find(city);

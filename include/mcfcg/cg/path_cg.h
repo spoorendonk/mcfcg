@@ -1,14 +1,14 @@
 #pragma once
 
+#include <algorithm>
+#include <cstdint>
+#include <functional>
+
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/util/limits.h"
 #include "mcfcg/util/logger.h"
 #include "mcfcg/util/tolerances.h"
-
-#include <algorithm>
-#include <cstdint>
-#include <functional>
 
 namespace mcfcg {
 

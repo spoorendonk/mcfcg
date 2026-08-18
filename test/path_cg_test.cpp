@@ -1,12 +1,13 @@
 #include "mcfcg/cg/path_cg.h"
 
+#include <gtest/gtest.h>
+
+#include <cstdio>
+
 #include "mcfcg/cg/master.h"
 #include "mcfcg/cg/master_base.h"
 #include "mcfcg/instance.h"
 #include "test_paths.h"
-
-#include <cstdio>
-#include <gtest/gtest.h>
 
 using mcfcg::test::writeInstance;
 

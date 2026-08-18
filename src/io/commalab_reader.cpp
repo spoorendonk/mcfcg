@@ -1,14 +1,14 @@
-#include "mcfcg/graph/static_digraph_builder.h"
-#include "mcfcg/instance.h"
-#include "mcfcg/io/gz_util.h"
-#include "mcfcg/util/limits.h"
-
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "mcfcg/graph/static_digraph_builder.h"
+#include "mcfcg/instance.h"
+#include "mcfcg/io/gz_util.h"
+#include "mcfcg/util/limits.h"
 
 namespace mcfcg {
 

@@ -1,10 +1,11 @@
 #include "mcfcg/graph/dijkstra.h"
 
+#include <gtest/gtest.h>
+
+#include <vector>
+
 #include "mcfcg/graph/dijkstra_workspace.h"
 #include "mcfcg/graph/static_digraph_builder.h"
-
-#include <gtest/gtest.h>
-#include <vector>
 
 // Diamond graph with costs: 0→1(1), 0→2(4), 1→3(6), 2→3(1)
 // Shortest path 0→3: 0→2→3 with cost 5

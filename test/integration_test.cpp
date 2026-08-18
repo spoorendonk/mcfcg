@@ -1,3 +1,12 @@
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <unordered_map>
+
 #include "cg_test_util.h"
 #include "mcfcg/cg/master.h"
 #include "mcfcg/cg/master_base.h"
@@ -10,14 +19,6 @@
 #include "mcfcg/instance.h"
 #include "mcfcg/lp/lp_solver.h"
 #include "mcfcg/source/source_lp.h"
-
-#include <algorithm>
-#include <filesystem>
-#include <fstream>
-#include <gtest/gtest.h>
-#include <sstream>
-#include <string>
-#include <unordered_map>
 
 namespace fs = std::filesystem;
 
@@ -119,8 +120,7 @@ TEST(PlanarCorrectness, Planar80) {
 TEST(TransportationCorrectness, Winnipeg) {
     auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
-    if (!fs::exists(net))
-        GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     solve_and_check(inst, opt.at("Winnipeg"));
@@ -134,8 +134,7 @@ TEST(TransportationCorrectness, Winnipeg) {
 TEST(TransportationCorrectness, WinnipegPathPicksEdgeRows) {
     auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
-    if (!fs::exists(net))
-        GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     mcfcg::PathMaster master;
     master.init(inst);
@@ -149,8 +148,7 @@ TEST(TransportationCorrectness, WinnipegPathPicksEdgeRows) {
 TEST(TransportationCorrectness, Barcelona) {
     auto net = data_dir("transportation") + "/Barcelona_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Barcelona_trips.tntp.gz";
-    if (!fs::exists(net))
-        GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 5050.0);
     solve_and_check(inst, opt.at("Barcelona"));
@@ -158,8 +156,7 @@ TEST(TransportationCorrectness, Barcelona) {
 
 TEST(IntermodalCorrectness, Subway308) {
     auto path = data_dir("intermodal") + "/SUBWAY-308-0.txt.gz";
-    if (!fs::exists(path))
-        GTEST_SKIP() << "data/intermodal not found";
+    if (!fs::exists(path)) GTEST_SKIP() << "data/intermodal not found";
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
     solve_intermodal_and_check(inst, opt.at("SUBWAY-308-0"));
@@ -167,8 +164,7 @@ TEST(IntermodalCorrectness, Subway308) {
 
 TEST(IntermodalCorrectness, Subway486) {
     auto path = data_dir("intermodal") + "/SUBWAY-486-0.txt.gz";
-    if (!fs::exists(path))
-        GTEST_SKIP() << "data/intermodal not found";
+    if (!fs::exists(path)) GTEST_SKIP() << "data/intermodal not found";
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
     solve_intermodal_and_check(inst, opt.at("SUBWAY-486-0"));
@@ -176,8 +172,7 @@ TEST(IntermodalCorrectness, Subway486) {
 
 TEST(IntermodalCorrectness, Bus2632) {
     auto path = data_dir("intermodal") + "/BUS-2632-0.txt.gz";
-    if (!fs::exists(path))
-        GTEST_SKIP() << "data/intermodal not found";
+    if (!fs::exists(path)) GTEST_SKIP() << "data/intermodal not found";
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
     solve_intermodal_and_check(inst, opt.at("BUS-2632-0"));
@@ -185,8 +180,7 @@ TEST(IntermodalCorrectness, Bus2632) {
 
 TEST(IntermodalCorrectness, Bus7896) {
     auto path = data_dir("intermodal") + "/BUS-7896-0.txt.gz";
-    if (!fs::exists(path))
-        GTEST_SKIP() << "data/intermodal not found";
+    if (!fs::exists(path)) GTEST_SKIP() << "data/intermodal not found";
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
     solve_intermodal_and_check(inst, opt.at("BUS-7896-0"));
@@ -245,8 +239,7 @@ TEST(RCValidation, Planar100Tree) {
 TEST(RCValidation, WinnipegPath) {
     auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
-    if (!fs::exists(net))
-        GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     solve_and_validate_path_rc(inst, opt.at("Winnipeg"));
@@ -255,8 +248,7 @@ TEST(RCValidation, WinnipegPath) {
 TEST(RCValidation, WinnipegTree) {
     auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
-    if (!fs::exists(net))
-        GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     solve_and_validate_tree_rc(inst, opt.at("Winnipeg"));
@@ -313,8 +305,7 @@ TEST(ThreadedExecution, Grid2Tree) {
 TEST(ThreadedExecution, WinnipegPath) {
     auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
-    if (!fs::exists(net))
-        GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     solve_threaded(inst, opt.at("Winnipeg"), mcfcg::solve_path_cg, 4);
@@ -646,12 +637,8 @@ static mcfcg::Instance build_two_sources_and_spare_arc() {
 
 // Match key for a column: each commodity (path) / source (tree) yields at most
 // one column per sweep, so the key identifies a column within one price() call.
-inline uint64_t column_key(const mcfcg::Column& col) {
-    return col.commodity;
-}
-inline uint64_t column_key(const mcfcg::TreeColumn& col) {
-    return col.source_idx;
-}
+inline uint64_t column_key(const mcfcg::Column& col) { return col.commodity; }
+inline uint64_t column_key(const mcfcg::TreeColumn& col) { return col.source_idx; }
 
 // Bit-equality, not EXPECT_NEAR.  A cutoff run settles its sinks in the same
 // order as a full run — run_until_targets is the same settle_next loop as the
@@ -1241,9 +1228,5 @@ static void check_source_lp(const std::string& family, const std::string& name) 
     EXPECT_NEAR(lp->get_obj(), ref, std::abs(ref) * 1e-6);
 }
 
-TEST(SourceFormulation, Grid1) {
-    check_source_lp("grid", "grid1");
-}
-TEST(SourceFormulation, Planar30) {
-    check_source_lp("planar", "planar30");
-}
+TEST(SourceFormulation, Grid1) { check_source_lp("grid", "grid1"); }
+TEST(SourceFormulation, Planar30) { check_source_lp("planar", "planar30"); }

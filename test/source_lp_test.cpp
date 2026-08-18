@@ -1,11 +1,12 @@
 #include "mcfcg/source/source_lp.h"
 
-#include "mcfcg/instance.h"
-#include "test_paths.h"
+#include <gtest/gtest.h>
 
 #include <cstdio>
 #include <fstream>
-#include <gtest/gtest.h>
+
+#include "mcfcg/instance.h"
+#include "test_paths.h"
 
 // CommaLab/UniPi plain-numeric: 4 vertices, 6 arcs, 2 commodities.
 //

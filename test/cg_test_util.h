@@ -1,5 +1,12 @@
 #pragma once
 
+#include <gtest/gtest.h>
+
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <vector>
+
 #include "mcfcg/cg/cg_loop.h"
 #include "mcfcg/cg/column.h"
 #include "mcfcg/cg/master.h"
@@ -9,12 +16,6 @@
 #include "mcfcg/cg/tree_pricer.h"
 #include "mcfcg/graph/static_map.h"
 #include "mcfcg/instance.h"
-
-#include <cmath>
-#include <cstdint>
-#include <gtest/gtest.h>
-#include <limits>
-#include <vector>
 
 namespace mcfcg::test {
 

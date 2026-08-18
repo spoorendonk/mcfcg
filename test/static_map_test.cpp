@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
-
 #include "mcfcg/graph/static_map.h"
+
+#include <gtest/gtest.h>
 
 TEST(StaticMap, DefaultConstruction) {
     mcfcg::static_map<uint32_t, int> m;
@@ -65,7 +65,8 @@ TEST(StaticMap, Iteration) {
     m[1] = 20;
     m[2] = 30;
     int sum = 0;
-    for (int v : m)
+    for (int v : m) {
         sum += v;
+    }
     EXPECT_EQ(sum, 60);
 }

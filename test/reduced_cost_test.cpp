@@ -1,10 +1,11 @@
+#include <gtest/gtest.h>
+
+#include <cstdio>
+#include <string>
+
 #include "cg_test_util.h"
 #include "mcfcg/instance.h"
 #include "test_paths.h"
-
-#include <cstdio>
-#include <gtest/gtest.h>
-#include <string>
 
 using mcfcg::test::writeInstance;
 

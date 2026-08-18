@@ -1,11 +1,11 @@
 #pragma once
 
-#include "mcfcg/graph/static_digraph.h"
-#include "mcfcg/graph/static_map.h"
-
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "mcfcg/graph/static_digraph.h"
+#include "mcfcg/graph/static_map.h"
 
 namespace mcfcg {
 

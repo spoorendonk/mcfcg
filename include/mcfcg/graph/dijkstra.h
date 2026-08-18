@@ -1,12 +1,12 @@
 #pragma once
 
+#include <cassert>
+#include <cstdint>
+
 #include "mcfcg/graph/dijkstra_workspace.h"
 #include "mcfcg/graph/semiring.h"
 #include "mcfcg/graph/static_digraph.h"
 #include "mcfcg/graph/static_map.h"
-
-#include <cassert>
-#include <cstdint>
 
 namespace mcfcg {
 
@@ -86,8 +86,7 @@ public:
 
         for (arc a : _graph->out_arcs(u)) {
             vertex w = _graph->arc_target(a);
-            if (_ws->status[w] == vertex_status::POST_HEAP)
-                continue;
+            if (_ws->status[w] == vertex_status::POST_HEAP) continue;
 
             length_type new_dist = semiring::plus(u_dist, (*_length_map)[a]);
 
@@ -110,8 +109,7 @@ public:
     }
 
     void run() noexcept {
-        while (!finished())
-            advance();
+        while (!finished()) advance();
     }
 
     bool reached(vertex u) const noexcept { return _ws->status[u] != vertex_status::PRE_HEAP; }
@@ -204,8 +202,7 @@ public:
 
         for (arc a : _graph->out_arcs(u)) {
             vertex w = _graph->arc_target(a);
-            if (_ws->status[w] == vertex_status::POST_HEAP)
-                continue;
+            if (_ws->status[w] == vertex_status::POST_HEAP) continue;
 
             length_type new_g = semiring::plus(u_dist, (*_length_map)[a]);
             length_type new_f = semiring::plus(new_g, (*_heuristic)[w]);
@@ -233,8 +230,7 @@ public:
     }
 
     void run() noexcept {
-        while (!finished())
-            settle_next();
+        while (!finished()) settle_next();
     }
 
     // Run until num_targets target vertices have been settled.

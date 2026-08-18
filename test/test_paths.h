@@ -9,11 +9,12 @@
 // `unique_test_path(base)` returns a path that includes the current process
 // id, so concurrent test processes never collide.
 
+#include <unistd.h>
+
 #include <cstdint>
 #include <fstream>
 #include <string>
 #include <string_view>
-#include <unistd.h>
 
 namespace mcfcg::test {
 

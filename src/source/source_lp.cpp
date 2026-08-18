@@ -1,8 +1,5 @@
 #include "mcfcg/source/source_lp.h"
 
-#include "mcfcg/io/gz_util.h"
-#include "mcfcg/util/limits.h"
-
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -10,6 +7,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "mcfcg/io/gz_util.h"
+#include "mcfcg/util/limits.h"
 
 namespace mcfcg {
 

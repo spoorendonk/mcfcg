@@ -14,14 +14,14 @@ namespace mcfcg {
 // Index map uses static_map for O(1) lookup.
 template <std::size_t D, typename P>
 class d_ary_heap {
-   public:
+public:
     using vertex = uint32_t;
     using priority_type = P;
     using size_type = std::size_t;
 
     static constexpr size_type INVALID = std::numeric_limits<size_type>::max();
 
-   private:
+private:
     struct entry {
         vertex v;
         priority_type p;
@@ -30,11 +30,10 @@ class d_ary_heap {
     std::vector<entry> _heap;
     static_map<vertex, size_type> _index;
 
-   public:
+public:
     d_ary_heap() = default;
 
-    explicit d_ary_heap(uint32_t num_vertices)
-        : _index(num_vertices, INVALID) {}
+    explicit d_ary_heap(uint32_t num_vertices) : _index(num_vertices, INVALID) {}
 
     void init(uint32_t num_vertices) {
         _heap.clear();
@@ -99,19 +98,15 @@ class d_ary_heap {
     }
 
     void clear() noexcept {
-        for (auto & e : _heap) {
+        for (auto& e : _heap) {
             _index[e.v] = INVALID;
         }
         _heap.clear();
     }
 
-   private:
-    static constexpr size_type parent_of(size_type i) noexcept {
-        return (i - 1) / D;
-    }
-    static constexpr size_type first_child_of(size_type i) noexcept {
-        return i * D + 1;
-    }
+private:
+    static constexpr size_type parent_of(size_type i) noexcept { return (i - 1) / D; }
+    static constexpr size_type first_child_of(size_type i) noexcept { return i * D + 1; }
 
     void sift_up(size_type pos) noexcept {
         entry e = _heap[pos];

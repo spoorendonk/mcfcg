@@ -1,10 +1,10 @@
 #pragma once
 
-#include "mcfcg/instance.h"
-
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "mcfcg/instance.h"
 
 namespace mcfcg {
 

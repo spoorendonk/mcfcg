@@ -1,5 +1,11 @@
 #include "mcfcg/cg/tree_cg.h"
 
+#include <gtest/gtest.h>
+
+#include <cstdio>
+#include <string>
+#include <vector>
+
 #include "mcfcg/cg/master_base.h"
 #include "mcfcg/cg/path_cg.h"
 #include "mcfcg/cg/tree_master.h"
@@ -7,11 +13,6 @@
 #include "mcfcg/instance.h"
 #include "mcfcg/util/limits.h"
 #include "test_paths.h"
-
-#include <cstdio>
-#include <gtest/gtest.h>
-#include <string>
-#include <vector>
 
 using mcfcg::test::writeInstance;
 

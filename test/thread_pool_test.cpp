@@ -1,9 +1,10 @@
 #include "mcfcg/util/thread_pool.h"
 
+#include <gtest/gtest.h>
+
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <gtest/gtest.h>
 #include <thread>
 #include <vector>
 

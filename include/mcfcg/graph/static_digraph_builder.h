@@ -13,7 +13,7 @@ namespace mcfcg {
 
 template <typename... Props>
 class static_digraph_builder {
-   public:
+public:
     using vertex = uint32_t;
     using arc = uint32_t;
 
@@ -23,13 +23,12 @@ class static_digraph_builder {
         std::tuple<Props...> props;
     };
 
-   private:
+private:
     uint32_t _num_vertices;
     std::vector<arc_entry> _arcs;
 
-   public:
-    explicit static_digraph_builder(uint32_t num_vertices)
-        : _num_vertices(num_vertices) {}
+public:
+    explicit static_digraph_builder(uint32_t num_vertices) : _num_vertices(num_vertices) {}
 
     void add_arc(vertex u, vertex v, Props... props) {
         _arcs.push_back({u, v, std::tuple<Props...>{std::move(props)...}});
@@ -37,9 +36,7 @@ class static_digraph_builder {
 
     auto build() {
         std::sort(_arcs.begin(), _arcs.end(),
-                  [](const arc_entry & a, const arc_entry & b) {
-                      return a.source < b.source;
-                  });
+                  [](const arc_entry& a, const arc_entry& b) { return a.source < b.source; });
 
         uint32_t m = static_cast<uint32_t>(_arcs.size());
         std::vector<vertex> sources(m);
@@ -53,11 +50,10 @@ class static_digraph_builder {
 
         auto prop_maps = build_prop_maps(std::index_sequence_for<Props...>{});
 
-        return std::tuple_cat(std::make_tuple(std::move(graph)),
-                              std::move(prop_maps));
+        return std::tuple_cat(std::make_tuple(std::move(graph)), std::move(prop_maps));
     }
 
-   private:
+private:
     template <std::size_t... Is>
     auto build_prop_maps(std::index_sequence<Is...>) {
         return std::make_tuple(build_one_map<Is>()...);

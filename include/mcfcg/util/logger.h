@@ -1,10 +1,10 @@
 #pragma once
 
-#include "mcfcg/util/limits.h"
-
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+
+#include "mcfcg/util/limits.h"
 
 namespace mcfcg {
 

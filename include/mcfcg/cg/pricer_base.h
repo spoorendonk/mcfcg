@@ -1,12 +1,5 @@
 #pragma once
 
-#include "mcfcg/cg/column.h"
-#include "mcfcg/graph/dijkstra.h"
-#include "mcfcg/instance.h"
-#include "mcfcg/util/limits.h"
-#include "mcfcg/util/thread_pool.h"
-#include "mcfcg/util/tolerances.h"
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -16,6 +9,13 @@
 #include <optional>
 #include <unordered_set>
 #include <vector>
+
+#include "mcfcg/cg/column.h"
+#include "mcfcg/graph/dijkstra.h"
+#include "mcfcg/instance.h"
+#include "mcfcg/util/limits.h"
+#include "mcfcg/util/thread_pool.h"
+#include "mcfcg/util/tolerances.h"
 
 namespace mcfcg {
 
@@ -66,8 +66,7 @@ inline static_map<uint32_t, int64_t> compute_lower_bounds_to_targets(const Insta
 
         for (uint32_t a : g.in_arcs(u)) {
             uint32_t w = g.arc_source(a);
-            if (status[w] == 2)
-                continue;
+            if (status[w] == 2) continue;
 
             int64_t new_dist = semiring_t::plus(u_dist, orig_cost_scaled[a]);
 
@@ -294,21 +293,18 @@ public:
             while (batch.size() < effective_batch && sources_scanned < n_sources) {
                 uint32_t s_idx = (start + sources_scanned) % n_sources;
                 ++sources_scanned;
-                if (!final_round && _source_postponed[s_idx])
-                    continue;
+                if (!final_round && _source_postponed[s_idx]) continue;
                 batch.push_back(s_idx);
                 ++priced_count;
             }
 
-            if (batch.empty())
-                continue;
+            if (batch.empty()) continue;
 
             // Price batch (parallel if pool available)
             auto batch_cols = price_batch(batch, duals, mu);
             all_columns.insert(all_columns.end(), std::make_move_iterator(batch_cols.begin()),
                                std::make_move_iterator(batch_cols.end()));
-            for (uint32_t s_idx : batch)
-                cut_count += _source_cut[s_idx];
+            for (uint32_t s_idx : batch) cut_count += _source_cut[s_idx];
 
             if (max_cols > 0 && all_columns.size() >= max_cols) {
                 break;
@@ -378,8 +374,7 @@ public:
         if (_pool != nullptr && n >= PAR_SOURCE_THRESHOLD) {
             _pool->parallel_for(n, [&](uint32_t s, uint32_t /*tid*/) { body(s); });
         } else {
-            for (uint32_t s = 0; s < n; ++s)
-                body(s);
+            for (uint32_t s = 0; s < n; ++s) body(s);
         }
     }
 
@@ -404,10 +399,8 @@ protected:
     // and the warm start still explores the full reachable graph.
     static int64_t scale_dual(double dual) noexcept {
         double raw = dual * SCALE;
-        if (!(raw < static_cast<double>(MAX_BOUND)))
-            return MAX_BOUND;
-        if (raw <= -static_cast<double>(MAX_BOUND))
-            return -MAX_BOUND;
+        if (!(raw < static_cast<double>(MAX_BOUND))) return MAX_BOUND;
+        if (raw <= -static_cast<double>(MAX_BOUND)) return -MAX_BOUND;
         return static_cast<int64_t>(std::ceil(raw));
     }
 
@@ -422,8 +415,7 @@ protected:
         if (_pool != nullptr && n_arcs >= PAR_ARC_THRESHOLD) {
             _pool->parallel_for(n_arcs, [&](uint32_t a, uint32_t /*tid*/) { body(a); });
         } else {
-            for (uint32_t a = 0; a < n_arcs; ++a)
-                body(a);
+            for (uint32_t a = 0; a < n_arcs; ++a) body(a);
         }
     }
 
@@ -435,14 +427,12 @@ protected:
         if (!_pool || _pool->num_threads() <= 1 || batch_n <= 1) {
             // Sequential
             std::vector<ColumnT> cols;
-            for (uint32_t s_idx : batch)
-                price_one_source(s_idx, duals, mu, cols, 0);
+            for (uint32_t s_idx : batch) price_one_source(s_idx, duals, mu, cols, 0);
             return cols;
         }
 
         // Parallel: each thread accumulates into its own vector
-        for (auto& tc : _thread_columns)
-            tc.clear();
+        for (auto& tc : _thread_columns) tc.clear();
 
         _pool->parallel_for(batch_n, [&](uint32_t task_i, uint32_t tid) {
             price_one_source(batch[task_i], duals, mu, _thread_columns[tid], tid);
@@ -450,8 +440,7 @@ protected:
 
         // Concatenate
         size_t total = 0;
-        for (auto& tc : _thread_columns)
-            total += tc.size();
+        for (auto& tc : _thread_columns) total += tc.size();
         std::vector<ColumnT> result;
         result.reserve(total);
         for (auto& tc : _thread_columns)
@@ -520,8 +509,7 @@ protected:
                 // suppress the partial column the non-cutoff path emits for a
                 // disconnected source.  Reachable targets have h=0, hence a
                 // frontier below MAX_BOUND, so all of them are already settled.
-                if (frontier >= MAX_BOUND)
-                    break;
+                if (frontier >= MAX_BOUND) break;
                 if (frontier > tracker.bound()) {
                     cutoff_f = frontier;
                     break;
@@ -541,8 +529,7 @@ protected:
         self().process_source(s_idx, src, duals, mu, dijk, new_columns, thread_id, cutoff_f);
 
         // Clear only the sinks we set (O(commodities-per-source), not O(V)).
-        for (uint32_t k : src.commodity_indices)
-            is_target[_inst->commodities[k].sink] = false;
+        for (uint32_t k : src.commodity_indices) is_target[_inst->commodities[k].sink] = false;
     }
 
     // Whether this call should refresh _source_arcs[s_idx].  A cut search

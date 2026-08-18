@@ -1,14 +1,15 @@
 #ifdef MCFCG_USE_MOSEK
 
-#include "mcfcg/lp/backend_util.h"
-#include "mcfcg/lp/lp_solver.h"
-#include "mcfcg/util/tolerances.h"
+#include <mosek.h>
 
 #include <cassert>
-#include <mosek.h>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "mcfcg/lp/backend_util.h"
+#include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/util/tolerances.h"
 
 namespace mcfcg {
 

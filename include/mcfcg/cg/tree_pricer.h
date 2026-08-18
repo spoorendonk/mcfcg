@@ -1,13 +1,13 @@
 #pragma once
 
-#include "mcfcg/cg/pricer_base.h"
-#include "mcfcg/cg/tree_column.h"
-
 #include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <unordered_map>
 #include <vector>
+
+#include "mcfcg/cg/pricer_base.h"
+#include "mcfcg/cg/tree_column.h"
 
 namespace mcfcg {
 

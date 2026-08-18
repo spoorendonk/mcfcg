@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
-
 #include "mcfcg/graph/d_ary_heap.h"
+
+#include <gtest/gtest.h>
 
 TEST(DAryHeap, BasicPushPop) {
     mcfcg::d_ary_heap<4, int64_t> heap(10);

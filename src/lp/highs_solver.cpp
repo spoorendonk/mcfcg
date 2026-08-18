@@ -1,12 +1,13 @@
-#include "mcfcg/lp/lp_solver.h"
-#include "mcfcg/util/tolerances.h"
+#include <Highs.h>
 
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <Highs.h>
 #include <thread>
+
+#include "mcfcg/lp/lp_solver.h"
+#include "mcfcg/util/tolerances.h"
 
 namespace mcfcg {
 
