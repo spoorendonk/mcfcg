@@ -10,19 +10,19 @@ TEST(DAryHeap, BasicPushPop) {
     heap.push(5, 50);
     heap.push(2, 20);
 
-    EXPECT_EQ(heap.size(), 4u);
-    EXPECT_EQ(heap.top_vertex(), 1u);
+    EXPECT_EQ(heap.size(), 4U);
+    EXPECT_EQ(heap.top_vertex(), 1U);
     EXPECT_EQ(heap.top_priority(), 10);
 
     heap.pop();
-    EXPECT_EQ(heap.top_vertex(), 2u);
+    EXPECT_EQ(heap.top_vertex(), 2U);
     EXPECT_EQ(heap.top_priority(), 20);
 
     heap.pop();
-    EXPECT_EQ(heap.top_vertex(), 3u);
+    EXPECT_EQ(heap.top_vertex(), 3U);
 
     heap.pop();
-    EXPECT_EQ(heap.top_vertex(), 5u);
+    EXPECT_EQ(heap.top_vertex(), 5U);
 
     heap.pop();
     EXPECT_TRUE(heap.empty());
@@ -43,10 +43,10 @@ TEST(DAryHeap, Promote) {
     heap.push(2, 200);
     heap.push(3, 300);
 
-    EXPECT_EQ(heap.top_vertex(), 1u);
+    EXPECT_EQ(heap.top_vertex(), 1U);
 
     heap.promote(3, 50);
-    EXPECT_EQ(heap.top_vertex(), 3u);
+    EXPECT_EQ(heap.top_vertex(), 3U);
     EXPECT_EQ(heap.top_priority(), 50);
 }
 
@@ -78,7 +78,7 @@ TEST(DAryHeap, Clear) {
 
     // Can re-add after clear
     heap.push(1, 5);
-    EXPECT_EQ(heap.top_vertex(), 1u);
+    EXPECT_EQ(heap.top_vertex(), 1U);
 }
 
 TEST(DAryHeap, BinaryHeap) {
@@ -88,7 +88,7 @@ TEST(DAryHeap, BinaryHeap) {
     heap.push(2, 7);
     heap.push(3, 1);
 
-    EXPECT_EQ(heap.top_vertex(), 3u);
+    EXPECT_EQ(heap.top_vertex(), 3U);
     heap.pop();
-    EXPECT_EQ(heap.top_vertex(), 1u);
+    EXPECT_EQ(heap.top_vertex(), 1U);
 }

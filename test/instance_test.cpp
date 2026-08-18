@@ -38,15 +38,15 @@ protected:
 TEST_F(InstanceTest, ReadCommalab) {
     auto inst = mcfcg::read_commalab(path);
 
-    EXPECT_EQ(inst.graph.num_vertices(), 4u);
-    EXPECT_EQ(inst.graph.num_arcs(), 5u);
-    EXPECT_EQ(inst.commodities.size(), 3u);
+    EXPECT_EQ(inst.graph.num_vertices(), 4U);
+    EXPECT_EQ(inst.graph.num_arcs(), 5U);
+    EXPECT_EQ(inst.commodities.size(), 3U);
 
-    EXPECT_EQ(inst.commodities[0].source, 0u);
-    EXPECT_EQ(inst.commodities[0].sink, 3u);
+    EXPECT_EQ(inst.commodities[0].source, 0U);
+    EXPECT_EQ(inst.commodities[0].sink, 3U);
     EXPECT_DOUBLE_EQ(inst.commodities[0].demand, 5.0);
 
-    EXPECT_EQ(inst.sources.size(), 2u);
+    EXPECT_EQ(inst.sources.size(), 2U);
 }
 
 TEST_F(InstanceTest, SourceGrouping) {
@@ -107,7 +107,7 @@ TEST_F(InstanceTest, RoundTripFractionalCostAndInfCap) {
     }
     auto inst = mcfcg::read_commalab(in_path);
 
-    ASSERT_EQ(inst.graph.num_arcs(), 2u);
+    ASSERT_EQ(inst.graph.num_arcs(), 2U);
     // -1 cap should have been mapped to INF on read.
     EXPECT_TRUE(std::isinf(inst.capacity[0]));
     EXPECT_DOUBLE_EQ(inst.cost[0], 0.5);

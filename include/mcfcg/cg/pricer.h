@@ -38,7 +38,9 @@ class PathPricer : public PricerBase<PathPricer, Column> {
 
         void on_settle(const auto& dijk, uint32_t /*sink*/, int64_t /*g_dist*/) noexcept {
             auto& entries = *_entries;
-            while (_head < entries.size() && dijk.visited(entries[_head].sink)) ++_head;
+            while (_head < entries.size() && dijk.visited(entries[_head].sink)) {
+                ++_head;
+            }
             // Only reachable once every target is settled, when the driver
             // loop is about to stop anyway; cut rather than run unbounded.
             _bound = _head < entries.size() ? entries[_head].key : -MAX_BOUND;
@@ -59,8 +61,9 @@ class PathPricer : public PricerBase<PathPricer, Column> {
         // is negative and dominates at any realistic V, so this is in practice
         // a slightly tighter bound than the naive SCALE·π_k, not a looser one.
         double allowance = _round_slack_per_demand + _neg_rc_tol;
-        for (uint32_t k : src.commodity_indices)
+        for (uint32_t k : src.commodity_indices) {
             scratch.push_back({_inst->commodities[k].sink, scale_dual(pi[k] + allowance), 0.0});
+        }
         std::sort(scratch.begin(), scratch.end(),
                   [](const CutoffEntry& lhs, const CutoffEntry& rhs) { return lhs.key > rhs.key; });
         return Cutoff(scratch);
@@ -72,7 +75,9 @@ class PathPricer : public PricerBase<PathPricer, Column> {
                         std::optional<int64_t> cutoff_f) {
         bool found_any = false;
         const bool record_arcs = should_record_arcs(cutoff_f);
-        if (record_arcs) _source_arcs[s_idx].clear();
+        if (record_arcs) {
+            _source_arcs[s_idx].clear();
+        }
 
         // Per-source LB accumulators.  All commodities rooted at this
         // source are processed sequentially in this call, so local
@@ -117,7 +122,9 @@ class PathPricer : public PricerBase<PathPricer, Column> {
             while (dijk.has_pred(v)) {
                 uint32_t a = dijk.pred_arc(v);
                 col.arcs.push_back(a);
-                if (record_arcs) _source_arcs[s_idx].push_back(a);
+                if (record_arcs) {
+                    _source_arcs[s_idx].push_back(a);
+                }
                 col.cost += _inst->cost[a];
                 true_rc += _inst->cost[a] - mu[a];
                 path_rc_sum += _inst->cost[a] - mu[a];
@@ -136,7 +143,9 @@ class PathPricer : public PricerBase<PathPricer, Column> {
             source_lagr_sum += demand * path_rc_sum;
             source_rc_error += demand * static_cast<double>(col.arcs.size()) * LP_FEAS_TOL;
 
-            if (true_rc >= _neg_rc_tol) continue;
+            if (true_rc >= _neg_rc_tol) {
+                continue;
+            }
 
             col.reduced_cost = true_rc;
             found_any = true;

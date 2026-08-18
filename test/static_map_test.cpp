@@ -4,17 +4,17 @@
 
 TEST(StaticMap, DefaultConstruction) {
     mcfcg::static_map<uint32_t, int> m;
-    EXPECT_EQ(m.size(), 0u);
+    EXPECT_EQ(m.size(), 0U);
 }
 
 TEST(StaticMap, SizedConstruction) {
     mcfcg::static_map<uint32_t, int> m(10);
-    EXPECT_EQ(m.size(), 10u);
+    EXPECT_EQ(m.size(), 10U);
 }
 
 TEST(StaticMap, InitValueConstruction) {
     mcfcg::static_map<uint32_t, int> m(5, 42);
-    EXPECT_EQ(m.size(), 5u);
+    EXPECT_EQ(m.size(), 5U);
     for (uint32_t i = 0; i < 5; ++i) {
         EXPECT_EQ(m[i], 42);
     }
@@ -55,7 +55,7 @@ TEST(StaticMap, CopyConstruction) {
 TEST(StaticMap, MoveConstruction) {
     mcfcg::static_map<uint32_t, int> m(3, 7);
     mcfcg::static_map<uint32_t, int> m2(std::move(m));
-    EXPECT_EQ(m2.size(), 3u);
+    EXPECT_EQ(m2.size(), 3U);
     EXPECT_EQ(m2[0], 7);
 }
 

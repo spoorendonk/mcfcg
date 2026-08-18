@@ -47,14 +47,14 @@ TEST_F(SourceLPSizeTest, CountsCapacitatedAndSelfLoopArcs) {
     auto inst = mcfcg::read_commalab(path);
     const auto size = mcfcg::source_lp_size(inst);
 
-    ASSERT_EQ(inst.sources.size(), 2u);
-    EXPECT_EQ(size.capacitated_arcs, 4u);  // arcs 1, 3, 5, 6 (2 and 4 are INF)
-    EXPECT_EQ(size.self_loop_arcs, 1u);    // arc 6: 2 -> 2
+    ASSERT_EQ(inst.sources.size(), 2U);
+    EXPECT_EQ(size.capacitated_arcs, 4U);  // arcs 1, 3, 5, 6 (2 and 4 are INF)
+    EXPECT_EQ(size.self_loop_arcs, 1U);    // arc 6: 2 -> 2
 
-    EXPECT_EQ(size.cols, 12u);  // |S| * |E| = 2 * 6
-    EXPECT_EQ(size.rows, 12u);  // |S| * |V| + capacitated = 2 * 4 + 4
+    EXPECT_EQ(size.cols, 12U);  // |S| * |E| = 2 * 6
+    EXPECT_EQ(size.rows, 12U);  // |S| * |V| + capacitated = 2 * 4 + 4
     // Per source: 3 + 2 + 3 + 2 + 3 + 1 = 14 entries, twice.
-    EXPECT_EQ(size.nnz, 28u);
+    EXPECT_EQ(size.nnz, 28U);
 }
 
 // 3*|S|*|E| is an upper bound, not the count: 36 here against an actual 28.
@@ -63,7 +63,7 @@ TEST_F(SourceLPSizeTest, ExactNnzIsBelowTheThreeTimesUpperBound) {
     const auto size = mcfcg::source_lp_size(inst);
 
     const uint64_t upper_bound = 3ULL * inst.sources.size() * inst.graph.num_arcs();
-    EXPECT_EQ(upper_bound, 36u);
+    EXPECT_EQ(upper_bound, 36U);
     EXPECT_LT(size.nnz, upper_bound);
 }
 

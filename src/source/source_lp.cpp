@@ -214,7 +214,7 @@ public:
     }
 
 private:
-    static constexpr size_t FLUSH = 1u << 20;
+    static constexpr size_t FLUSH = 1U << 20;
     bool _gz;
     bool _failed = false;
     gzFile _gzf = nullptr;

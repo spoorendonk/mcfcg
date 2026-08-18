@@ -25,7 +25,9 @@ namespace mcfcg {
 // emits for intermodal instances (and Lienkamp & Schiffer's upstream
 // start_run.py emits for `arc.capacity >= 9999`).
 static Instance parse_commalab(std::istream& file, const std::string& path) {
-    uint32_t num_vertices = 0, num_arcs = 0, num_commodities = 0;
+    uint32_t num_vertices = 0;
+    uint32_t num_arcs = 0;
+    uint32_t num_commodities = 0;
     file >> num_vertices >> num_arcs >> num_commodities;
     if (file.fail()) {
         throw std::runtime_error("Failed to read header from: " + path);
@@ -39,8 +41,10 @@ static Instance parse_commalab(std::istream& file, const std::string& path) {
     arc_data.reserve(num_arcs);
 
     for (uint32_t i = 0; i < num_arcs; ++i) {
-        uint32_t src = 0, dst = 0;
-        double cost = 0.0, cap = 0.0;
+        uint32_t src = 0;
+        uint32_t dst = 0;
+        double cost = 0.0;
+        double cap = 0.0;
         file >> src >> dst >> cost >> cap;
         if (cap < 0.0) {
             cap = INF;
@@ -55,7 +59,8 @@ static Instance parse_commalab(std::istream& file, const std::string& path) {
     commodities.reserve(num_commodities);
 
     for (uint32_t i = 0; i < num_commodities; ++i) {
-        uint32_t src, dst;
+        uint32_t src;
+        uint32_t dst;
         double demand;
         file >> src >> dst >> demand;
         commodities.push_back({src - 1, dst - 1, demand});

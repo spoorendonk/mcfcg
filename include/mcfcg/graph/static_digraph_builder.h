@@ -55,7 +55,7 @@ public:
 
 private:
     template <std::size_t... Is>
-    auto build_prop_maps(std::index_sequence<Is...>) {
+    auto build_prop_maps(std::index_sequence<Is...> /*unused*/) {
         return std::make_tuple(build_one_map<Is>()...);
     }
 

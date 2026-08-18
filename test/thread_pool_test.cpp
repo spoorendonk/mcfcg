@@ -71,7 +71,7 @@ TEST(ThreadPool, NOneRunsOnce) {
     thread_pool pool(4);
     std::atomic<int> calls{0};
     pool.parallel_for(1, [&](uint32_t idx, uint32_t /*tid*/) {
-        EXPECT_EQ(idx, 0u);
+        EXPECT_EQ(idx, 0U);
         calls.fetch_add(1);
     });
     EXPECT_EQ(calls.load(), 1);
@@ -97,7 +97,7 @@ TEST(ThreadPool, SingleThreadedPool) {
     constexpr uint32_t n = 100;
     std::vector<int> visited(n, 0);
     pool.parallel_for(n, [&](uint32_t idx, uint32_t tid) {
-        EXPECT_EQ(tid, 0u);
+        EXPECT_EQ(tid, 0U);
         visited[idx]++;
     });
     for (uint32_t i = 0; i < n; ++i) {

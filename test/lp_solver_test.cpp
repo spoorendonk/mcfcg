@@ -69,7 +69,7 @@ TEST(LPSolver, Duals) {
     ASSERT_EQ(status, mcfcg::LPStatus::Optimal);
 
     auto duals = lp->get_duals();
-    EXPECT_EQ(duals.size(), 1u);
+    EXPECT_EQ(duals.size(), 1U);
     // Dual of x >= 5 should be 1.0 (shadow price)
     EXPECT_NEAR(std::abs(duals[0]), 1.0, 1e-6);
 }
@@ -90,7 +90,7 @@ TEST(LPSolver, IncrementalColumns) {
     // But adding a column to existing row requires re-adding the row
     // For now just verify column addition works
     lp->add_cols({0.5}, {0.0}, {1e20});
-    EXPECT_EQ(lp->num_cols(), 2u);
+    EXPECT_EQ(lp->num_cols(), 2U);
 }
 
 #ifdef MCFCG_USE_CUOPT

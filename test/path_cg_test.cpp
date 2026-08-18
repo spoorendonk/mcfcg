@@ -69,7 +69,7 @@ protected:
 
 TEST_F(PathCGMultiSource, OptimalObjective) {
     auto inst = mcfcg::read_commalab(path);
-    ASSERT_EQ(inst.sources.size(), 2u);
+    ASSERT_EQ(inst.sources.size(), 2U);
 
     auto result = mcfcg::solve_path_cg(inst);
 
@@ -91,7 +91,7 @@ protected:
 
 TEST_F(PathCGMultiSourceCap, OptimalWithCapacity) {
     auto inst = mcfcg::read_commalab(path);
-    ASSERT_EQ(inst.sources.size(), 2u);
+    ASSERT_EQ(inst.sources.size(), 2U);
 
     auto result = mcfcg::solve_path_cg(inst);
 
@@ -113,7 +113,7 @@ TEST_F(PathCGCapacityBinding, RowPurgeDoesNotChangeObjective) {
 
 TEST_F(PathCGMultiSourceCap, RowPurgeDoesNotChangeObjective) {
     auto inst = mcfcg::read_commalab(path);
-    ASSERT_EQ(inst.sources.size(), 2u);
+    ASSERT_EQ(inst.sources.size(), 2U);
 
     mcfcg::CGParams params;
     params.row_inactivity_threshold = 1;

@@ -59,10 +59,10 @@ TEST_F(DijkstraTest, ShortestPaths) {
         path.push_back(a);
         v = graph.arc_source(a);
     }
-    EXPECT_EQ(v, 0u);  // Reached source
+    EXPECT_EQ(v, 0U);  // Reached source
 
     // Path should be 2 arcs: arc(2→3) then arc(0→2)
-    EXPECT_EQ(path.size(), 2u);
+    EXPECT_EQ(path.size(), 2U);
 }
 
 TEST_F(DijkstraTest, StepByStep) {
@@ -73,25 +73,25 @@ TEST_F(DijkstraTest, StepByStep) {
 
     // First settled: vertex 0 with dist 0
     auto [v0, d0] = d.current();
-    EXPECT_EQ(v0, 0u);
+    EXPECT_EQ(v0, 0U);
     EXPECT_EQ(d0, 0);
     d.advance();
 
     // Next: vertex 1 with dist 1
     auto [v1, d1] = d.current();
-    EXPECT_EQ(v1, 1u);
+    EXPECT_EQ(v1, 1U);
     EXPECT_EQ(d1, 1);
     d.advance();
 
     // Next: vertex 2 with dist 4
     auto [v2, d2] = d.current();
-    EXPECT_EQ(v2, 2u);
+    EXPECT_EQ(v2, 2U);
     EXPECT_EQ(d2, 4);
     d.advance();
 
     // Next: vertex 3 with dist 5
     auto [v3, d3] = d.current();
-    EXPECT_EQ(v3, 3u);
+    EXPECT_EQ(v3, 3U);
     EXPECT_EQ(d3, 5);
     d.advance();
 

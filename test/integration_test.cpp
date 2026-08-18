@@ -120,7 +120,9 @@ TEST(PlanarCorrectness, Planar80) {
 TEST(TransportationCorrectness, Winnipeg) {
     auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
-    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) {
+        GTEST_SKIP() << "data/transportation not found";
+    }
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     solve_and_check(inst, opt.at("Winnipeg"));
@@ -134,7 +136,9 @@ TEST(TransportationCorrectness, Winnipeg) {
 TEST(TransportationCorrectness, WinnipegPathPicksEdgeRows) {
     auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
-    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) {
+        GTEST_SKIP() << "data/transportation not found";
+    }
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     mcfcg::PathMaster master;
     master.init(inst);
@@ -148,7 +152,9 @@ TEST(TransportationCorrectness, WinnipegPathPicksEdgeRows) {
 TEST(TransportationCorrectness, Barcelona) {
     auto net = data_dir("transportation") + "/Barcelona_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Barcelona_trips.tntp.gz";
-    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) {
+        GTEST_SKIP() << "data/transportation not found";
+    }
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 5050.0);
     solve_and_check(inst, opt.at("Barcelona"));
@@ -156,7 +162,9 @@ TEST(TransportationCorrectness, Barcelona) {
 
 TEST(IntermodalCorrectness, Subway308) {
     auto path = data_dir("intermodal") + "/SUBWAY-308-0.txt.gz";
-    if (!fs::exists(path)) GTEST_SKIP() << "data/intermodal not found";
+    if (!fs::exists(path)) {
+        GTEST_SKIP() << "data/intermodal not found";
+    }
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
     solve_intermodal_and_check(inst, opt.at("SUBWAY-308-0"));
@@ -164,7 +172,9 @@ TEST(IntermodalCorrectness, Subway308) {
 
 TEST(IntermodalCorrectness, Subway486) {
     auto path = data_dir("intermodal") + "/SUBWAY-486-0.txt.gz";
-    if (!fs::exists(path)) GTEST_SKIP() << "data/intermodal not found";
+    if (!fs::exists(path)) {
+        GTEST_SKIP() << "data/intermodal not found";
+    }
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
     solve_intermodal_and_check(inst, opt.at("SUBWAY-486-0"));
@@ -172,7 +182,9 @@ TEST(IntermodalCorrectness, Subway486) {
 
 TEST(IntermodalCorrectness, Bus2632) {
     auto path = data_dir("intermodal") + "/BUS-2632-0.txt.gz";
-    if (!fs::exists(path)) GTEST_SKIP() << "data/intermodal not found";
+    if (!fs::exists(path)) {
+        GTEST_SKIP() << "data/intermodal not found";
+    }
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
     solve_intermodal_and_check(inst, opt.at("BUS-2632-0"));
@@ -180,7 +192,9 @@ TEST(IntermodalCorrectness, Bus2632) {
 
 TEST(IntermodalCorrectness, Bus7896) {
     auto path = data_dir("intermodal") + "/BUS-7896-0.txt.gz";
-    if (!fs::exists(path)) GTEST_SKIP() << "data/intermodal not found";
+    if (!fs::exists(path)) {
+        GTEST_SKIP() << "data/intermodal not found";
+    }
     auto opt = load_optimal(data_dir("intermodal"));
     auto inst = mcfcg::read_commalab(path);
     solve_intermodal_and_check(inst, opt.at("BUS-7896-0"));
@@ -239,7 +253,9 @@ TEST(RCValidation, Planar100Tree) {
 TEST(RCValidation, WinnipegPath) {
     auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
-    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) {
+        GTEST_SKIP() << "data/transportation not found";
+    }
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     solve_and_validate_path_rc(inst, opt.at("Winnipeg"));
@@ -248,7 +264,9 @@ TEST(RCValidation, WinnipegPath) {
 TEST(RCValidation, WinnipegTree) {
     auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
-    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) {
+        GTEST_SKIP() << "data/transportation not found";
+    }
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     solve_and_validate_tree_rc(inst, opt.at("Winnipeg"));
@@ -305,7 +323,9 @@ TEST(ThreadedExecution, Grid2Tree) {
 TEST(ThreadedExecution, WinnipegPath) {
     auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
     auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
-    if (!fs::exists(net)) GTEST_SKIP() << "data/transportation not found";
+    if (!fs::exists(net)) {
+        GTEST_SKIP() << "data/transportation not found";
+    }
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     solve_threaded(inst, opt.at("Winnipeg"), mcfcg::solve_path_cg, 4);
@@ -355,8 +375,8 @@ TEST(FeatureTests, PathPricerSkipsUnreachableSink) {
 
     auto cols = pricer.price(pi, mu);
     // One column for the reachable commodity; none for the unreachable one.
-    ASSERT_EQ(cols.size(), 1u);
-    EXPECT_EQ(cols[0].commodity, 0u);  // reachable commodity index
+    ASSERT_EQ(cols.size(), 1U);
+    EXPECT_EQ(cols[0].commodity, 0U);  // reachable commodity index
     EXPECT_FALSE(cols[0].arcs.empty());
 }
 
@@ -373,13 +393,13 @@ TEST(FeatureTests, TreePricerEmitsPartialTreeOnUnreachableSink) {
     // Exactly one partial-tree column for source 0, covering only the
     // reachable sink (vertex 2).  The unreachable sink (3) contributes
     // no arc flow.
-    ASSERT_EQ(cols.size(), 1u);
-    EXPECT_EQ(cols[0].source_idx, 0u);
+    ASSERT_EQ(cols.size(), 1U);
+    EXPECT_EQ(cols[0].source_idx, 0U);
     EXPECT_FALSE(cols[0].arc_flows.empty());
     // All arc flows must be on arcs reachable from source 0 — none of
     // them terminate at vertex 3 (which has no in-arcs anyway).
     for (const auto& af : cols[0].arc_flows) {
-        EXPECT_NE(inst.graph.arc_target(af.arc), 3u);
+        EXPECT_NE(inst.graph.arc_target(af.arc), 3U);
     }
 }
 

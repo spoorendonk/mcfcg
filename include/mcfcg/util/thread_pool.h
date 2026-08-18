@@ -141,7 +141,7 @@ private:
 
 inline std::unique_ptr<thread_pool> make_thread_pool(uint32_t num_threads) {
     if (num_threads == 0) {
-        num_threads = std::max(1u, std::thread::hardware_concurrency());
+        num_threads = std::max(1U, std::thread::hardware_concurrency());
     }
     if (num_threads <= 1) {
         return nullptr;
