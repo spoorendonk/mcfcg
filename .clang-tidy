@@ -75,10 +75,17 @@ CheckOptions:
   - key: readability-identifier-naming.TemplateParameterCase
     value: CamelCase
 
-# Stays empty until the tree is clean; Step 6 of the clang-tidy plan turns
-# on the curated gate (clang-diagnostic-*, bugprone-*, performance-*,
-# readability-identifier-naming).
-WarningsAsErrors: ''
+# The gate. Curated on purpose: these four are the categories where a hit
+# means something is wrong, so `tidy` (and CI, and pre-push) fail on them.
+# clang-diagnostic-* in particular is what would have caught the graph
+# header that only GCC would compile. Everything else in Checks above stays
+# advisory -- notably readability-function-cognitive-complexity, which is
+# real signal but not a thing to block a push on.
+WarningsAsErrors: >
+  clang-diagnostic-*,
+  bugprone-*,
+  performance-*,
+  readability-identifier-naming
 
 # NOTE: this value is NOT honoured when clang-tidy auto-discovers this
 # file — pass --config-file=<repo>/.clang-tidy AND an anchored

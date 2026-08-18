@@ -2,6 +2,23 @@ name: CI
 
 on:
   workflow_dispatch:
+  pull_request:
+  # Deliberately no `push:`. A hard gate that only ever runs on
+  # workflow_dispatch is not a gate, but running a full sweep on every WIP
+  # commit is the cost this workflow was made manual to avoid. pull_request
+  # covers the merge boundary, which is the one that matters for a published
+  # artifact.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned, not `apt-get install clang-tidy`: ubuntu-24.04 ships clang-tidy 18,
+  # which disagrees with local development (20) about which checks exist at all
+  # -- modernize-use-ranges among them. A gate that is green locally and red in
+  # CI (or the reverse) is worse than no gate.
+  LLVM_VERSION: "20"
 
 jobs:
   build-and-test:
@@ -22,3 +39,59 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure -j$(nproc)
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake zlib1g-dev
+
+      - name: Install clang-tidy ${{ env.LLVM_VERSION }}
+        run: |
+          set -euxo pipefail
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" \
+            | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
+          sudo apt-get install -y "clang-tidy-${LLVM_VERSION}"
+          "clang-tidy-${LLVM_VERSION}" --version
+
+      # FetchContent clones HiGHS and googletest at CONFIGURE time, and that
+      # clone is the slow part of this job. Cache the populated source trees
+      # only -- never build/CMakeCache.txt, which pins absolute paths. The
+      # HiGHS PATCH_COMMAND is idempotent, so restoring an already-patched
+      # highs-src is safe.
+      - name: Cache FetchContent sources
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/patches/*.patch') }}
+          restore-keys: deps-${{ runner.os }}-
+
+      # Configure only. clang-tidy needs compile_commands.json and HiGHS'
+      # generated headers, both of which exist after configure -- HConfig.h
+      # comes from configure_file and highs_export.h from
+      # generate_export_header. Building would cost ~10 min of HiGHS compile
+      # for nothing. MCFCG_NATIVE_ARCH=OFF keeps -march=native out of the
+      # compile database so the result does not depend on the runner's CPU.
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DMCFCG_NATIVE_ARCH=OFF \
+            -DCLANG_TIDY_EXE=/usr/bin/clang-tidy-${LLVM_VERSION}
+
+      # The find_program guard in CMakeLists makes a missing clang-tidy a
+      # silent skip, so without this a broken install would turn the gate into
+      # a passing no-op -- the worst outcome available.
+      - name: Assert the tidy target exists
+        run: cmake --build build --target help | grep -qw tidy
+
+      # Fails the job on its own: WarningsAsErrors makes clang-tidy exit
+      # non-zero, which fails the custom command, which fails the build.
+      - name: clang-tidy
+        run: cmake --build build --target tidy -j$(nproc)
