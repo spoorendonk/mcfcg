@@ -56,7 +56,7 @@ void write_commalab(const Instance& inst, const std::string& path) {
         file << '\n';
     }
 
-    for (auto& k : inst.commodities) {
+    for (const auto& k : inst.commodities) {
         file << (k.source + 1) << ' ' << (k.sink + 1) << ' ';
         write_double(file, k.demand);
         file << '\n';

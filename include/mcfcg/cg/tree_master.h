@@ -16,11 +16,11 @@ class TreeMaster : public MasterBase<TreeMaster, TreeColumn> {
         return static_cast<uint32_t>(_inst->sources.size());
     }
 
-    std::pair<double, double> structural_row_bounds([[maybe_unused]] uint32_t k) const {
+    static std::pair<double, double> structural_row_bounds([[maybe_unused]] uint32_t k) {
         return {1.0, 1.0};
     }
 
-    uint32_t structural_row_index(const TreeColumn& col) const { return col.source_idx; }
+    static uint32_t structural_row_index(const TreeColumn& col) { return col.source_idx; }
 
     void for_each_arc_coeff(const TreeColumn& col, auto&& callback) const {
         for (const auto& af : col.arc_flows) {

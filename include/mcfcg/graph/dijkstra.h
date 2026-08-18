@@ -67,9 +67,9 @@ public:
         }
     }
 
-    bool finished() const noexcept { return _ws->heap.empty(); }
+    [[nodiscard]] bool finished() const noexcept { return _ws->heap.empty(); }
 
-    std::pair<vertex, length_type> current() const noexcept {
+    [[nodiscard]] std::pair<vertex, length_type> current() const noexcept {
         assert(!finished());
         auto top = _ws->heap.top();
         return {top.v, top.p};
@@ -116,24 +116,28 @@ public:
         }
     }
 
-    bool reached(vertex u) const noexcept { return _ws->status[u] != VertexStatus::PreHeap; }
-    bool visited(vertex u) const noexcept { return _ws->status[u] == VertexStatus::PostHeap; }
+    [[nodiscard]] bool reached(vertex u) const noexcept {
+        return _ws->status[u] != VertexStatus::PreHeap;
+    }
+    [[nodiscard]] bool visited(vertex u) const noexcept {
+        return _ws->status[u] == VertexStatus::PostHeap;
+    }
 
-    length_type dist(vertex u) const noexcept
+    [[nodiscard]] length_type dist(vertex u) const noexcept
         requires(Traits::STORE_DISTANCES)
     {
         assert(visited(u));
         return _ws->dist[u];
     }
 
-    arc pred_arc(vertex u) const noexcept
+    [[nodiscard]] arc pred_arc(vertex u) const noexcept
         requires(Traits::STORE_PATHS)
     {
         assert(reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED);
         return _ws->pred[u];
     }
 
-    bool has_pred(vertex u) const noexcept
+    [[nodiscard]] bool has_pred(vertex u) const noexcept
         requires(Traits::STORE_PATHS)
     {
         return reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED;
@@ -182,7 +186,7 @@ public:
         }
     }
 
-    bool finished() const noexcept { return _ws->heap.empty(); }
+    [[nodiscard]] bool finished() const noexcept { return _ws->heap.empty(); }
 
     // Smallest f = g + h on the frontier.  With a consistent heuristic the
     // settled f-sequence is non-decreasing, so this is a lower bound on the
@@ -190,7 +194,7 @@ public:
     // unsettled vertex whose h is 0.  The dual pricing cutoff relies on
     // exactly that, applied to target sinks (compute_lower_bounds_to_targets
     // seeds every sink at distance 0, so h(sink) = 0).
-    length_type min_f() const noexcept {
+    [[nodiscard]] length_type min_f() const noexcept {
         assert(!finished());
         return _ws->heap.top().p;
     }
@@ -255,24 +259,28 @@ public:
         }
     }
 
-    bool reached(vertex u) const noexcept { return _ws->status[u] != VertexStatus::PreHeap; }
-    bool visited(vertex u) const noexcept { return _ws->status[u] == VertexStatus::PostHeap; }
+    [[nodiscard]] bool reached(vertex u) const noexcept {
+        return _ws->status[u] != VertexStatus::PreHeap;
+    }
+    [[nodiscard]] bool visited(vertex u) const noexcept {
+        return _ws->status[u] == VertexStatus::PostHeap;
+    }
 
-    length_type dist(vertex u) const noexcept
+    [[nodiscard]] length_type dist(vertex u) const noexcept
         requires(Traits::STORE_DISTANCES)
     {
         assert(visited(u));
         return _ws->dist[u];
     }
 
-    arc pred_arc(vertex u) const noexcept
+    [[nodiscard]] arc pred_arc(vertex u) const noexcept
         requires(Traits::STORE_PATHS)
     {
         assert(reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED);
         return _ws->pred[u];
     }
 
-    bool has_pred(vertex u) const noexcept
+    [[nodiscard]] bool has_pred(vertex u) const noexcept
         requires(Traits::STORE_PATHS)
     {
         return reached(u) && _ws->pred[u] != dijkstra_workspace::NO_PRED;

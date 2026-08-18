@@ -98,7 +98,7 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
         const auto& mu = master.get_capacity_duals();
 
         auto new_cap_arcs = master.add_violated_capacity_constraints(primals);
-        uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
+        auto num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
 
         // Existing-column RC invariant holds only against the current
         // LP's row set.  When separation found new violations this iter,
@@ -205,7 +205,7 @@ inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj,
         const auto& mu = master.get_capacity_duals();
 
         auto new_cap_arcs = master.add_violated_capacity_constraints(primals);
-        uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
+        auto num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
 
         // See solve_and_validate_path_rc for the gating rationale.
         if (num_new_caps == 0) {

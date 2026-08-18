@@ -44,7 +44,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     const uint32_t effective_col_age_limit = pricer_heavy ? INF_U32 : params.col_age_limit;
     const bool effective_pricing_filter = pricer_heavy || params.pricing_filter;
     const uint32_t pool_threads = pool ? pool->num_threads() : 1U;
-    const uint32_t n_sources = static_cast<uint32_t>(inst.sources.size());
+    const auto n_sources = static_cast<uint32_t>(inst.sources.size());
     const uint32_t effective_batch_size = compute_partial_pricing_batch_size(
         params.pricing_batch_size, pricer_heavy, pool_threads, n_sources);
 
@@ -230,7 +230,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         iter_timer.stop(TimerCat::Separation);
         timer.stop(TimerCat::Separation);
 
-        uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
+        auto num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
 
         // Tighten the running UB only when the LP primal is
         // MCF-feasible: no slack basic AND separation found no new

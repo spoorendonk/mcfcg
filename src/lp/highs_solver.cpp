@@ -79,7 +79,7 @@ public:
     uint32_t add_cols(const std::vector<double>& obj, const std::vector<double>& lb,
                       const std::vector<double>& ub) override {
         uint32_t first = _num_cols;
-        HighsInt n = static_cast<HighsInt>(obj.size());
+        auto n = static_cast<HighsInt>(obj.size());
         _highs.addCols(n, obj.data(), lb.data(), ub.data(), 0, nullptr, nullptr, nullptr);
         _num_cols += static_cast<uint32_t>(n);
         return first;
@@ -92,8 +92,8 @@ public:
         assert(starts.size() == obj.size() + 1 && starts.back() == values.size() &&
                "add_cols requires starts.size() == n+1 with starts.back() == values.size()");
         uint32_t first = _num_cols;
-        HighsInt n = static_cast<HighsInt>(obj.size());
-        HighsInt nnz = static_cast<HighsInt>(values.size());
+        auto n = static_cast<HighsInt>(obj.size());
+        auto nnz = static_cast<HighsInt>(values.size());
 
         // Convert uint32_t starts/indices to HighsInt
         std::vector<HighsInt> h_starts(starts.size());
@@ -117,8 +117,8 @@ public:
         assert(starts.size() == lb.size() + 1 && starts.back() == values.size() &&
                "add_rows requires starts.size() == m+1 with starts.back() == values.size()");
         uint32_t first = _num_rows;
-        HighsInt m = static_cast<HighsInt>(lb.size());
-        HighsInt nnz = static_cast<HighsInt>(values.size());
+        auto m = static_cast<HighsInt>(lb.size());
+        auto nnz = static_cast<HighsInt>(values.size());
 
         std::vector<HighsInt> h_starts(starts.size());
         for (size_t i = 0; i < starts.size(); ++i) {
@@ -199,17 +199,17 @@ public:
     }
 
     std::vector<double> get_primals() const override {
-        auto& sol = _highs.getSolution();
+        const auto& sol = _highs.getSolution();
         return sol.col_value;
     }
 
     std::vector<double> get_duals() const override {
-        auto& sol = _highs.getSolution();
+        const auto& sol = _highs.getSolution();
         return sol.row_dual;
     }
 
     std::vector<double> get_reduced_costs() const override {
-        auto& sol = _highs.getSolution();
+        const auto& sol = _highs.getSolution();
         return sol.col_dual;
     }
 

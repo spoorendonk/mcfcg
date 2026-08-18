@@ -40,20 +40,20 @@ public:
         _index = static_map<vertex, size_type>(num_vertices, INVALID);
     }
 
-    bool empty() const noexcept { return _heap.empty(); }
-    size_type size() const noexcept { return _heap.size(); }
+    [[nodiscard]] bool empty() const noexcept { return _heap.empty(); }
+    [[nodiscard]] size_type size() const noexcept { return _heap.size(); }
 
-    entry top() const noexcept {
+    [[nodiscard]] entry top() const noexcept {
         assert(!empty());
         return _heap[0];
     }
 
-    vertex top_vertex() const noexcept { return top().v; }
-    priority_type top_priority() const noexcept { return top().p; }
+    [[nodiscard]] vertex top_vertex() const noexcept { return top().v; }
+    [[nodiscard]] priority_type top_priority() const noexcept { return top().p; }
 
-    bool contains(vertex v) const noexcept { return _index[v] != INVALID; }
+    [[nodiscard]] bool contains(vertex v) const noexcept { return _index[v] != INVALID; }
 
-    priority_type priority(vertex v) const noexcept {
+    [[nodiscard]] priority_type priority(vertex v) const noexcept {
         assert(contains(v));
         return _heap[_index[v]].p;
     }

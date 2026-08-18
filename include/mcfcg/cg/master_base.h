@@ -72,7 +72,9 @@ inline SlackMode select_slack_mode(uint32_t num_capped_arcs, uint32_t num_struct
 // LP init, column management, solve/duals, lazy capacity constraints,
 // column aging, and row/column purging.
 //
-// Derived must implement the following hooks (private + friend, or public):
+// Derived must implement the following hooks (private + friend, or public).
+// They are called as self().hook(...), so a hook that needs no instance
+// state may equivalently be declared static rather than const:
 //   uint32_t num_structural_entities() const;
 //   std::pair<double, double> structural_row_bounds(uint32_t k) const;
 //   uint32_t structural_row_index(const ColumnT& col) const;
@@ -406,7 +408,7 @@ public:
             return 0;
         }
 
-        uint32_t n = static_cast<uint32_t>(cols.size());
+        auto n = static_cast<uint32_t>(cols.size());
         std::vector<double> obj(n);
         std::vector<double> lb(n, 0.0);
         std::vector<double> ub(n, INF);
@@ -480,7 +482,7 @@ public:
         // Update mapping and the arc->columns reverse index used by
         // add_violated_capacity_constraints.
         for (uint32_t i = 0; i < n; ++i) {
-            uint32_t local_idx = static_cast<uint32_t>(_columns.size());
+            auto local_idx = static_cast<uint32_t>(_columns.size());
             _col_to_lp.push_back(first_lp + i);
             _columns.push_back(std::move(cols[i]));
             _col_age.push_back(0);
@@ -622,7 +624,7 @@ public:
         // here; in CommodityRows mode they are populated at init() and
         // this branch is never reached.
         if (_slack.mode == SlackMode::EdgeRows) {
-            uint32_t n = static_cast<uint32_t>(new_arcs.size());
+            auto n = static_cast<uint32_t>(new_arcs.size());
             std::vector<double> slack_obj(n, _max_cost);
             std::vector<double> slack_lb(n, 0.0);
             std::vector<double> slack_ub(n, INF);
@@ -913,7 +915,7 @@ private:
     // for assigning chunks to threads — only the column→bucket mapping
     // needs to be deterministic.
     static_map<uint32_t, double> compute_arc_flow(const std::vector<double>& primals) {
-        uint32_t num_cols = static_cast<uint32_t>(_columns.size());
+        auto num_cols = static_cast<uint32_t>(_columns.size());
         uint32_t num_arcs = _inst->graph.num_arcs();
         auto flow = _inst->graph.create_arc_map<double>(0.0);
         if (num_cols == 0) {

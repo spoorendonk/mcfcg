@@ -56,10 +56,10 @@ public:
 
     constexpr iterator begin() noexcept { return _data.get(); }
     constexpr iterator end() noexcept { return _data.get() + _size; }
-    constexpr const_iterator begin() const noexcept { return _data.get(); }
-    constexpr const_iterator end() const noexcept { return _data.get() + _size; }
+    [[nodiscard]] constexpr const_iterator begin() const noexcept { return _data.get(); }
+    [[nodiscard]] constexpr const_iterator end() const noexcept { return _data.get() + _size; }
 
-    constexpr size_type size() const noexcept { return _size; }
+    [[nodiscard]] constexpr size_type size() const noexcept { return _size; }
 
     constexpr mapped_type &operator[](key_type i) noexcept {
         assert(static_cast<size_type>(i) < _size);
@@ -73,7 +73,7 @@ public:
     void fill(const mapped_type &v) noexcept { std::fill(_data.get(), _data.get() + _size, v); }
 
     constexpr mapped_type *data() noexcept { return _data.get(); }
-    constexpr const mapped_type *data() const noexcept { return _data.get(); }
+    [[nodiscard]] constexpr const mapped_type *data() const noexcept { return _data.get(); }
 };
 
 }  // namespace mcfcg

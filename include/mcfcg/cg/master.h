@@ -20,7 +20,7 @@ class PathMaster : public MasterBase<PathMaster, Column> {
         return {_inst->commodities[k].demand, INF};
     }
 
-    uint32_t structural_row_index(const Column& col) const { return col.commodity; }
+    static uint32_t structural_row_index(const Column& col) { return col.commodity; }
 
     void for_each_arc_coeff(const Column& col, auto&& callback) const {
         for (uint32_t arc : col.arcs) {

@@ -83,7 +83,7 @@ public:
         _task_fn = nullptr;
     }
 
-    uint32_t num_threads() const noexcept { return _num_threads; }
+    [[nodiscard]] uint32_t num_threads() const noexcept { return _num_threads; }
 
 private:
     void worker_loop(uint32_t thread_id) {

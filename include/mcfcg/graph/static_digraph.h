@@ -30,18 +30,24 @@ public:
     static_digraph &operator=(const static_digraph &) = default;
     static_digraph &operator=(static_digraph &&) = default;
 
-    constexpr uint32_t num_vertices() const noexcept {
+    [[nodiscard]] constexpr uint32_t num_vertices() const noexcept {
         return static_cast<uint32_t>(_out_arc_begin.size());
     }
-    constexpr uint32_t num_arcs() const noexcept {
+    [[nodiscard]] constexpr uint32_t num_arcs() const noexcept {
         return static_cast<uint32_t>(_arc_target.size());
     }
 
-    constexpr bool is_valid_vertex(vertex u) const noexcept { return u < num_vertices(); }
-    constexpr bool is_valid_arc(arc a) const noexcept { return a < num_arcs(); }
+    [[nodiscard]] constexpr bool is_valid_vertex(vertex u) const noexcept {
+        return u < num_vertices();
+    }
+    [[nodiscard]] constexpr bool is_valid_arc(arc a) const noexcept { return a < num_arcs(); }
 
-    constexpr auto vertices() const noexcept { return std::views::iota(vertex{0}, num_vertices()); }
-    constexpr auto arcs() const noexcept { return std::views::iota(arc{0}, num_arcs()); }
+    [[nodiscard]] constexpr auto vertices() const noexcept {
+        return std::views::iota(vertex{0}, num_vertices());
+    }
+    [[nodiscard]] constexpr auto arcs() const noexcept {
+        return std::views::iota(arc{0}, num_arcs());
+    }
 
     // Declared above the constructor on purpose: the constructor body calls
     // arcs(), and a deduced return type must be defined before use.  GCC
@@ -77,14 +83,14 @@ public:
         }
     }
 
-    constexpr auto out_arcs(vertex u) const noexcept {
+    [[nodiscard]] constexpr auto out_arcs(vertex u) const noexcept {
         assert(is_valid_vertex(u));
         arc begin = _out_arc_begin[u];
         arc end = (u + 1 < num_vertices()) ? _out_arc_begin[u + 1] : num_arcs();
         return std::views::iota(begin, end);
     }
 
-    constexpr auto in_arcs(vertex u) const noexcept {
+    [[nodiscard]] constexpr auto in_arcs(vertex u) const noexcept {
         assert(is_valid_vertex(u));
         const arc *begin = _in_arcs.data() + _in_arc_begin[u];
         const arc *end = (u + 1 < num_vertices()) ? _in_arcs.data() + _in_arc_begin[u + 1]
@@ -92,30 +98,30 @@ public:
         return std::span<const arc>(begin, end);
     }
 
-    constexpr vertex arc_source(arc a) const noexcept {
+    [[nodiscard]] constexpr vertex arc_source(arc a) const noexcept {
         assert(is_valid_arc(a));
         return _arc_source[a];
     }
-    constexpr vertex arc_target(arc a) const noexcept {
+    [[nodiscard]] constexpr vertex arc_target(arc a) const noexcept {
         assert(is_valid_arc(a));
         return _arc_target[a];
     }
 
     template <typename T>
-    constexpr auto create_vertex_map() const noexcept {
+    [[nodiscard]] constexpr auto create_vertex_map() const noexcept {
         return static_map<vertex, T>(num_vertices());
     }
     template <typename T>
-    constexpr auto create_vertex_map(const T &val) const noexcept {
+    [[nodiscard]] [[nodiscard]] constexpr auto create_vertex_map(const T &val) const noexcept {
         return static_map<vertex, T>(num_vertices(), val);
     }
 
     template <typename T>
-    constexpr auto create_arc_map() const noexcept {
+    [[nodiscard]] [[nodiscard]] constexpr auto create_arc_map() const noexcept {
         return static_map<arc, T>(num_arcs());
     }
     template <typename T>
-    constexpr auto create_arc_map(const T &val) const noexcept {
+    [[nodiscard]] constexpr auto create_arc_map(const T &val) const noexcept {
         return static_map<arc, T>(num_arcs(), val);
     }
 };

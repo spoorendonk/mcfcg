@@ -63,7 +63,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             recompute();
         }
 
-        int64_t bound() const noexcept { return _bound; }
+        [[nodiscard]] int64_t bound() const noexcept { return _bound; }
 
         void on_settle(const auto& /*dijk*/, uint32_t sink, int64_t g_dist) noexcept {
             auto& entries = *_entries;

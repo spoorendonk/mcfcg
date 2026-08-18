@@ -38,7 +38,7 @@ public:
         std::sort(_arcs.begin(), _arcs.end(),
                   [](const arc_entry& a, const arc_entry& b) { return a.source < b.source; });
 
-        uint32_t m = static_cast<uint32_t>(_arcs.size());
+        auto m = static_cast<uint32_t>(_arcs.size());
         std::vector<vertex> sources(m);
         std::vector<vertex> targets(m);
         for (uint32_t i = 0; i < m; ++i) {
@@ -62,7 +62,7 @@ private:
     template <std::size_t I>
     auto build_one_map() {
         using T = std::tuple_element_t<I, std::tuple<Props...>>;
-        uint32_t m = static_cast<uint32_t>(_arcs.size());
+        auto m = static_cast<uint32_t>(_arcs.size());
         static_map<arc, T> map(m);
         for (uint32_t i = 0; i < m; ++i) {
             map[i] = std::get<I>(_arcs[i].props);

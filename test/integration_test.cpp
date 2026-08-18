@@ -1006,11 +1006,13 @@ public:
 
     // Control flow follows the baseline; the reported cutoff stats follow the
     // shadow, which is the pricer those numbers describe.
-    bool priced_all() const noexcept { return _base.priced_all(); }
-    double lagrangian_path_sum() const noexcept { return _base.lagrangian_path_sum(); }
-    double lb_error_bound() const noexcept { return _base.lb_error_bound(); }
-    uint64_t last_cutoff_count() const noexcept { return _cut.last_cutoff_count(); }
-    uint64_t last_priced_count() const noexcept { return _cut.last_priced_count(); }
+    [[nodiscard]] bool priced_all() const noexcept { return _base.priced_all(); }
+    [[nodiscard]] double lagrangian_path_sum() const noexcept {
+        return _base.lagrangian_path_sum();
+    }
+    [[nodiscard]] double lb_error_bound() const noexcept { return _base.lb_error_bound(); }
+    [[nodiscard]] uint64_t last_cutoff_count() const noexcept { return _cut.last_cutoff_count(); }
+    [[nodiscard]] uint64_t last_priced_count() const noexcept { return _cut.last_priced_count(); }
 
     void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
         _base.filter_for_new_caps(new_cap_arcs);
@@ -1156,7 +1158,7 @@ TEST(FeatureTests, LagrangianBoundValidWhileSlacksBasic) {
         uint32_t slacks = master.count_active_slacks(primals);
 
         auto new_cap_arcs = master.add_violated_capacity_constraints(primals);
-        uint32_t num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
+        auto num_new_caps = static_cast<uint32_t>(new_cap_arcs.size());
 
         auto new_cols = pricer.price(pi_s, mu, false);
         if (new_cols.empty()) {

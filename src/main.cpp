@@ -363,7 +363,7 @@ int run_cli(int argc, char* argv[]) {
     // backend init chatter).  Single source of truth is select_slack_mode
     // in master_base.h — MasterBase::init calls the same helper.
     uint32_t num_capped_arcs = mcfcg::count_capacitated_arcs(inst);
-    uint32_t num_structural_rows = static_cast<uint32_t>(
+    auto num_structural_rows = static_cast<uint32_t>(
         formulation == "tree" ? inst.sources.size() : inst.commodities.size());
     mcfcg::SlackMode chosen_mode = mcfcg::select_slack_mode(num_capped_arcs, num_structural_rows);
     std::fprintf(stderr, "Slack mode: %s (struct=%u, capped_arcs=%u)\n",

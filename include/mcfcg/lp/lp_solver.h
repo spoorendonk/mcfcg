@@ -91,26 +91,26 @@ public:
     // vertex). HiGHS/COPT/MOSEK override to true; the cuOpt GPU barrier has no
     // crossover so it stays false. The CG loop uses this to avoid a redundant
     // re-solve on backends where a certify retry would change nothing.
-    virtual bool certify_runs_crossover() const { return false; }
+    [[nodiscard]] virtual bool certify_runs_crossover() const { return false; }
 
     // Get solution info (valid after solve returns Optimal)
-    virtual double get_obj() const = 0;
-    virtual std::vector<double> get_primals() const = 0;
-    virtual std::vector<double> get_duals() const = 0;
+    [[nodiscard]] virtual double get_obj() const = 0;
+    [[nodiscard]] virtual std::vector<double> get_primals() const = 0;
+    [[nodiscard]] virtual std::vector<double> get_duals() const = 0;
 
     // Returns per-column reduced costs from the last solve. Default
     // returns an empty vector for backends that do not expose them.
-    virtual std::vector<double> get_reduced_costs() const { return {}; }
+    [[nodiscard]] virtual std::vector<double> get_reduced_costs() const { return {}; }
 
-    virtual uint32_t num_cols() const = 0;
-    virtual uint32_t num_rows() const = 0;
+    [[nodiscard]] virtual uint32_t num_cols() const = 0;
+    [[nodiscard]] virtual uint32_t num_rows() const = 0;
 
     // Returns true if a valid basis is available (simplex solvers).
-    virtual bool has_basis() const { return false; }
+    [[nodiscard]] virtual bool has_basis() const { return false; }
 
     // Returns per-column basis status: true = basic, false = non-basic.
     // Only valid when has_basis() returns true.
-    virtual std::vector<bool> get_basic_cols() const { return {}; }
+    [[nodiscard]] virtual std::vector<bool> get_basic_cols() const { return {}; }
 
     // Upper bound on the slack-cost ceiling this backend can tolerate without
     // numerical trouble (MasterBase::init clamps the per-instance ceiling to
@@ -120,7 +120,7 @@ public:
     // override this higher so that instances with expensive columns (per-row
     // cost > 1e7, e.g. planar2500 tree) can still price their slacks out and
     // reach a slack-free upper bound.
-    virtual double max_slack_cost() const { return 1e7; }
+    [[nodiscard]] virtual double max_slack_cost() const { return 1e7; }
 };
 
 // Emit a one-line provenance banner to stderr at solver construction (captured

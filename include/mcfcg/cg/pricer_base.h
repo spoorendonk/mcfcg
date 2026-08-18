@@ -286,7 +286,7 @@ public:
         _last_cutoff_count = 0;
         _last_priced_count = 0;
 
-        uint32_t n_sources = static_cast<uint32_t>(_inst->sources.size());
+        auto n_sources = static_cast<uint32_t>(_inst->sources.size());
         if (n_sources == 0) {
             _last_priced_all = true;
             return {};
@@ -360,18 +360,18 @@ public:
         return all_columns;
     }
 
-    bool priced_all() const noexcept { return _last_priced_all; }
+    [[nodiscard]] bool priced_all() const noexcept { return _last_priced_all; }
 
     // Sources priced by the last price() call, and how many of those the dual
     // cutoff stopped short.  Always 0/N when the cutoff is disabled.
-    uint64_t last_priced_count() const noexcept { return _last_priced_count; }
-    uint64_t last_cutoff_count() const noexcept { return _last_cutoff_count; }
+    [[nodiscard]] uint64_t last_priced_count() const noexcept { return _last_priced_count; }
+    [[nodiscard]] uint64_t last_cutoff_count() const noexcept { return _last_cutoff_count; }
 
     // π-free capacity-relaxation Lagrangian path sum Σ_k d_k·sp_k(c−μ) from
     // the last price() call.  Add Σ_a cap_a·μ_a and subtract lb_error_bound()
     // to obtain L(μ) ≤ OPT, valid for any μ≤0 independent of slack state.
     // Valid only when priced_all() is true.
-    double lagrangian_path_sum() const noexcept { return _last_lagr_path_sum; }
+    [[nodiscard]] double lagrangian_path_sum() const noexcept { return _last_lagr_path_sum; }
 
     // Upper bound on the rounding error in lagrangian_path_sum().  Edge
     // weights are scaled to int64 at SCALE=1e9 in compute_rc, so A* returns
@@ -380,17 +380,17 @@ public:
     // L the path length in arcs, doubled to account for both the
     // chosen path's and the true-min path's rounding).  Subtract this
     // from the Lagrangian bound to certify it.
-    double lb_error_bound() const noexcept { return _last_rc_error_bound; }
+    [[nodiscard]] double lb_error_bound() const noexcept { return _last_rc_error_bound; }
 
     // Round-robin cursor parked by the last price() call; exposed for
     // tests that verify partial pricing (PricerHeavy) advances it
     // mid-sweep when the max_cols early break fires.
-    uint32_t last_source_idx() const noexcept { return _last_source_idx; }
+    [[nodiscard]] uint32_t last_source_idx() const noexcept { return _last_source_idx; }
 
     void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
         assert(_track_arcs && "filter_for_new_caps requires set_track_arcs(true)");
         std::unordered_set<uint32_t> cap_set(new_cap_arcs.begin(), new_cap_arcs.end());
-        uint32_t n = static_cast<uint32_t>(_source_postponed.size());
+        auto n = static_cast<uint32_t>(_source_postponed.size());
         auto body = [&](uint32_t s) {
             // Deliberately reads _source_arcs even when the dual cutoff left it
             // describing an older routing (see should_record_arcs): re-pricing
@@ -458,7 +458,7 @@ protected:
     std::vector<ColumnT> price_batch(const std::vector<uint32_t>& batch,
                                      const std::vector<double>& duals,
                                      const static_map<uint32_t, double>& mu) {
-        uint32_t batch_n = static_cast<uint32_t>(batch.size());
+        auto batch_n = static_cast<uint32_t>(batch.size());
 
         if (!_pool || _pool->num_threads() <= 1 || batch_n <= 1) {
             // Sequential
@@ -601,7 +601,7 @@ protected:
     // filtering — SBT-56295 alone paid +68% at an unchanged iteration count.
     // (With warm_start=false a source cut on its very first price keeps an
     // *empty* set, which reads as "unaffected"; same convergence-speed caveat.)
-    bool should_record_arcs(std::optional<int64_t> cutoff_f) const noexcept {
+    [[nodiscard]] bool should_record_arcs(std::optional<int64_t> cutoff_f) const noexcept {
         return _track_arcs && !cutoff_f.has_value();
     }
 
@@ -615,7 +615,8 @@ protected:
     // but at convergence the cutoff fires on nearly every source, and a bound
     // that then collapses to Σ cap·μ would trade pricing time for the gap exit
     // the bound exists to trigger.
-    double salvage_lagr_term(std::optional<int64_t> cutoff_f, double demand) const noexcept {
+    [[nodiscard]] double salvage_lagr_term(std::optional<int64_t> cutoff_f,
+                                           double demand) const noexcept {
         if (!cutoff_f.has_value()) {
             return 0.0;  // heap exhausted: the sink is genuinely unreachable
         }

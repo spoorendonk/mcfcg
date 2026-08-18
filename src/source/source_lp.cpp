@@ -69,7 +69,7 @@ SourceLPSize source_lp_size(const Instance& inst) {
 
 SourceLP build_source_lp(const Instance& inst) {
     const auto& g = inst.graph;
-    const uint32_t n_sources = static_cast<uint32_t>(inst.sources.size());
+    const auto n_sources = static_cast<uint32_t>(inst.sources.size());
     const uint32_t n_vertices = g.num_vertices();
     const uint32_t n_arcs = g.num_arcs();
 
@@ -169,7 +169,7 @@ public:
     MpsSink(const MpsSink&) = delete;
     MpsSink& operator=(const MpsSink&) = delete;
 
-    bool ok() const { return _gz ? _gzf != nullptr : _fp != nullptr; }
+    [[nodiscard]] bool ok() const { return _gz ? _gzf != nullptr : _fp != nullptr; }
 
     void word(const char* s) { _buf.append(s); }
     void word(const std::string& s) { _buf.append(s); }
