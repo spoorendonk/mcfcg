@@ -49,7 +49,7 @@ TEST_F(DiamondGraph, OutArcs) {
     for (auto a : graph.out_arcs(0)) {
         targets.push_back(graph.arc_target(a));
     }
-    std::sort(targets.begin(), targets.end());
+    std::ranges::sort(targets);
     EXPECT_EQ(targets, (std::vector<uint32_t>{1, 2}));
 
     // Vertex 3 has no out-arcs
@@ -72,7 +72,7 @@ TEST_F(DiamondGraph, InArcs) {
     for (auto a : graph.in_arcs(3)) {
         sources.push_back(graph.arc_source(a));
     }
-    std::sort(sources.begin(), sources.end());
+    std::ranges::sort(sources);
     EXPECT_EQ(sources, (std::vector<uint32_t>{1, 2}));
 
     // Vertex 0 has no in-arcs

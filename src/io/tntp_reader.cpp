@@ -204,8 +204,11 @@ Instance read_tntp(const std::string& net_path, const std::string& trips_path, d
     auto sources = group_by_source(commodities);
 
     return Instance{
-        std::move(graph),       std::move(cost_map), std::move(cap_map),
-        std::move(commodities), std::move(sources),
+        .graph = std::move(graph),
+        .cost = std::move(cost_map),
+        .capacity = std::move(cap_map),
+        .commodities = std::move(commodities),
+        .sources = std::move(sources),
     };
 }
 

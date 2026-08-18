@@ -64,8 +64,9 @@ class PathPricer : public PricerBase<PathPricer, Column> {
         for (uint32_t k : src.commodity_indices) {
             scratch.push_back({_inst->commodities[k].sink, scale_dual(pi[k] + allowance), 0.0});
         }
-        std::sort(scratch.begin(), scratch.end(),
-                  [](const CutoffEntry& lhs, const CutoffEntry& rhs) { return lhs.key > rhs.key; });
+        std::ranges::sort(scratch, [](const CutoffEntry& lhs, const CutoffEntry& rhs) {
+            return lhs.key > rhs.key;
+        });
         return Cutoff(scratch);
     }
 
@@ -149,7 +150,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
 
             col.reduced_cost = true_rc;
             found_any = true;
-            std::reverse(col.arcs.begin(), col.arcs.end());
+            std::ranges::reverse(col.arcs);
             new_columns.push_back(std::move(col));
         }
 

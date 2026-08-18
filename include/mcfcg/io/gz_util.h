@@ -8,12 +8,12 @@
 namespace mcfcg {
 
 inline bool ends_with_gz(const std::string& path) {
-    return path.size() > 3 && path.compare(path.size() - 3, 3, ".gz") == 0;
+    return path.size() > 3 && path.ends_with(".gz");
 }
 
 inline std::string decompress_gz(const std::string& path) {
     gzFile gz = gzopen(path.c_str(), "rb");
-    if (!gz) {
+    if (gz == nullptr) {
         throw std::runtime_error("Cannot open gzip file: " + path);
     }
 
@@ -27,7 +27,8 @@ inline std::string decompress_gz(const std::string& path) {
         int errnum = 0;
         const char* msg = gzerror(gz, &errnum);
         gzclose(gz);
-        throw std::runtime_error("gzip read error in " + path + ": " + (msg ? msg : "unknown"));
+        throw std::runtime_error("gzip read error in " + path + ": " +
+                                 (msg != nullptr ? msg : "unknown"));
     }
     gzclose(gz);
     return result;

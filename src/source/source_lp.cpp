@@ -202,11 +202,11 @@ public:
     // (including the final deflate/close) succeeded. Idempotent.
     bool close() {
         flush();
-        if (_gzf) {
+        if (_gzf != nullptr) {
             _failed = _failed || gzclose(_gzf) != Z_OK;
             _gzf = nullptr;
         }
-        if (_fp) {
+        if (_fp != nullptr) {
             _failed = _failed || std::fclose(_fp) != 0;
             _fp = nullptr;
         }

@@ -351,12 +351,15 @@ static mcfcg::Instance build_disconnected() {
     auto [graph, cost_map, cap_map] = builder.build();
 
     std::vector<mcfcg::Commodity> commodities = {
-        {0, 2, 1.0},  // reachable
-        {0, 3, 1.0},  // unreachable — sink 3 has no in-arcs
+        {.source = 0, .sink = 2, .demand = 1.0},  // reachable
+        {.source = 0, .sink = 3, .demand = 1.0},  // unreachable — sink 3 has no in-arcs
     };
     auto sources = mcfcg::group_by_source(commodities);
-    return mcfcg::Instance{std::move(graph), std::move(cost_map), std::move(cap_map),
-                           std::move(commodities), std::move(sources)};
+    return mcfcg::Instance{.graph = std::move(graph),
+                           .cost = std::move(cost_map),
+                           .capacity = std::move(cap_map),
+                           .commodities = std::move(commodities),
+                           .sources = std::move(sources)};
 }
 }  // namespace unreachable_test
 
@@ -598,12 +601,15 @@ static mcfcg::Instance build_deadend() {
     auto [graph, cost_map, cap_map] = builder.build();
 
     std::vector<mcfcg::Commodity> commodities = {
-        {0, 2, 1.0},  // reachable
-        {0, 3, 1.0},  // unreachable — sink 3 has no incident arcs
+        {.source = 0, .sink = 2, .demand = 1.0},  // reachable
+        {.source = 0, .sink = 3, .demand = 1.0},  // unreachable — sink 3 has no incident arcs
     };
     auto sources = mcfcg::group_by_source(commodities);
-    return mcfcg::Instance{std::move(graph), std::move(cost_map), std::move(cap_map),
-                           std::move(commodities), std::move(sources)};
+    return mcfcg::Instance{.graph = std::move(graph),
+                           .cost = std::move(cost_map),
+                           .capacity = std::move(cap_map),
+                           .commodities = std::move(commodities),
+                           .sources = std::move(sources)};
 }
 
 // 4-vertex chain 0→1→2→3.  The near sinks carry all the demand and the far sink
@@ -626,13 +632,22 @@ static mcfcg::Instance build_zero_demand() {
     auto [graph, cost_map, cap_map] = builder.build();
 
     std::vector<mcfcg::Commodity> commodities = {
-        {0, 1, 8.446},  // near sinks carry all the demand; the fractional values
-        {0, 2, 7.582},  // make the residue land just *below* zero, not at +0.0
-        {0, 3, 0.0},    // far sink, zero demand (CommaLab keeps these verbatim)
+        {.source = 0,
+         .sink = 1,
+         .demand = 8.446},  // near sinks carry all the demand; the fractional values
+        {.source = 0,
+         .sink = 2,
+         .demand = 7.582},  // make the residue land just *below* zero, not at +0.0
+        {.source = 0,
+         .sink = 3,
+         .demand = 0.0},  // far sink, zero demand (CommaLab keeps these verbatim)
     };
     auto sources = mcfcg::group_by_source(commodities);
-    return mcfcg::Instance{std::move(graph), std::move(cost_map), std::move(cap_map),
-                           std::move(commodities), std::move(sources)};
+    return mcfcg::Instance{.graph = std::move(graph),
+                           .cost = std::move(cost_map),
+                           .capacity = std::move(cap_map),
+                           .commodities = std::move(commodities),
+                           .sources = std::move(sources)};
 }
 
 // Two independent source→sink pairs plus a spare arc 0→5 that lies on no
@@ -647,12 +662,15 @@ static mcfcg::Instance build_two_sources_and_spare_arc() {
     auto [graph, cost_map, cap_map] = builder.build();
 
     std::vector<mcfcg::Commodity> commodities = {
-        {0, 2, 1.0},
-        {3, 4, 1.0},
+        {.source = 0, .sink = 2, .demand = 1.0},
+        {.source = 3, .sink = 4, .demand = 1.0},
     };
     auto sources = mcfcg::group_by_source(commodities);
-    return mcfcg::Instance{std::move(graph), std::move(cost_map), std::move(cap_map),
-                           std::move(commodities), std::move(sources)};
+    return mcfcg::Instance{.graph = std::move(graph),
+                           .cost = std::move(cost_map),
+                           .capacity = std::move(cap_map),
+                           .commodities = std::move(commodities),
+                           .sources = std::move(sources)};
 }
 
 // Match key for a column: each commodity (path) / source (tree) yields at most
@@ -693,8 +711,8 @@ inline std::string column_diff(const mcfcg::TreeColumn& base, const mcfcg::TreeC
     // arc_flows is dumped from an unordered_map, so its order is not part of
     // the contract even though both pricers build the map identically.
     auto by_arc = [](std::vector<mcfcg::TreeColumn::ArcFlow> flows) {
-        std::sort(flows.begin(), flows.end(),
-                  [](const auto& lhs, const auto& rhs) { return lhs.arc < rhs.arc; });
+        std::ranges::sort(flows,
+                          [](const auto& lhs, const auto& rhs) { return lhs.arc < rhs.arc; });
         return flows;
     };
     auto base_flows = by_arc(base.arc_flows);

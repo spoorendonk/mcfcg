@@ -51,15 +51,8 @@ static std::string tntp_trips_path(const std::string& net_path) {
     return "";
 }
 
-static bool ends_with(const std::string& s, const std::string& suffix) {
-    if (suffix.size() > s.size()) {
-        return false;
-    }
-    return s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
-}
-
 static bool is_tntp_net(const std::string& path) {
-    return ends_with(path, "_net.tntp") || ends_with(path, "_net.tntp.gz");
+    return path.ends_with("_net.tntp") || path.ends_with("_net.tntp.gz");
 }
 
 static void print_usage(std::FILE* out) {
@@ -140,6 +133,11 @@ static bool configure_solver(const std::string& solver, bool verbose_solver, int
 
 namespace {
 
+// One flat argument-parsing dispatch followed by the solve it configures.
+// The one part that was its own concern -- backend selection -- is already
+// extracted as configure_solver above; splitting the rest would only pass
+// the same dozen option locals between functions.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 int run_cli(int argc, char* argv[]) {
     if (argc < 2) {
         print_usage(stderr);

@@ -265,14 +265,17 @@ TEST(TreeCGEdgeRowsBinding, EdgeRowsLazySlackInsertion) {
     auto [graph, cost_map, cap_map] = builder.build();
 
     std::vector<Commodity> commodities = {
-        {0, 2, 2.0},  // source 1 → sink 3, demand 2
-        {0, 2, 3.0},  // source 1 → sink 3, demand 3
-        {1, 2, 1.0},  // source 2 → sink 3, demand 1
+        {.source = 0, .sink = 2, .demand = 2.0},  // source 1 → sink 3, demand 2
+        {.source = 0, .sink = 2, .demand = 3.0},  // source 1 → sink 3, demand 3
+        {.source = 1, .sink = 2, .demand = 1.0},  // source 2 → sink 3, demand 1
     };
     auto sources = group_by_source(commodities);
 
-    Instance inst{std::move(graph), std::move(cost_map), std::move(cap_map), std::move(commodities),
-                  std::move(sources)};
+    Instance inst{.graph = std::move(graph),
+                  .cost = std::move(cost_map),
+                  .capacity = std::move(cap_map),
+                  .commodities = std::move(commodities),
+                  .sources = std::move(sources)};
 
     TreeMaster master;
     master.init(inst);

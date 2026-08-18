@@ -538,7 +538,7 @@ public:
 
     std::vector<double> get_structural_duals() const {
         auto all = _lp->get_duals();
-        return std::vector<double>(all.begin(), all.begin() + _num_structural_rows);
+        return {all.begin(), all.begin() + _num_structural_rows};
     }
 
     // Capacity-dual contribution Σ_a cap_a · μ_a over the currently-existing
@@ -875,8 +875,8 @@ private:
         // N sits between user columns added in iter N-1 and those added
         // in iter N+1 — so deleting a slack at LP index S shifts every
         // user column with index > S down by one.
-        for (uint32_t c = 0; c < _col_to_lp.size(); ++c) {
-            _col_to_lp[c] = static_cast<uint32_t>(col_mask[_col_to_lp[c]]);
+        for (uint32_t& lp_col : _col_to_lp) {
+            lp_col = static_cast<uint32_t>(col_mask[lp_col]);
         }
 
         // Compact _slack.col_lp / _slack.cost, drop the deleted slacks,
@@ -998,8 +998,7 @@ private:
                 _thread_violated_arcs[tid].clear();
             }
             _pool->parallel_for(num_arcs, [&](uint32_t a, uint32_t tid) {
-                if (flow[a] > _inst->capacity[a] + CAP_VIOL_TOL &&
-                    _arc_to_cap_row.find(a) == _arc_to_cap_row.end()) {
+                if (flow[a] > _inst->capacity[a] + CAP_VIOL_TOL && !_arc_to_cap_row.contains(a)) {
                     _thread_violated_arcs[tid].push_back(a);
                 }
             });
@@ -1011,11 +1010,10 @@ private:
             for (auto& v : _thread_violated_arcs) {
                 new_arcs.insert(new_arcs.end(), v.begin(), v.end());
             }
-            std::sort(new_arcs.begin(), new_arcs.end());
+            std::ranges::sort(new_arcs);
         } else {
             for (uint32_t a = 0; a < num_arcs; ++a) {
-                if (flow[a] > _inst->capacity[a] + CAP_VIOL_TOL &&
-                    _arc_to_cap_row.find(a) == _arc_to_cap_row.end()) {
+                if (flow[a] > _inst->capacity[a] + CAP_VIOL_TOL && !_arc_to_cap_row.contains(a)) {
                     new_arcs.push_back(a);
                 }
             }

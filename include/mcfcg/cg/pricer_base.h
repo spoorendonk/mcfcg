@@ -296,8 +296,8 @@ public:
         // not revisited this call (postponed under non-final_round) keep
         // their zero and contribute nothing — correct since priced_all
         // will be false in that case and the LB gate skips reading.
-        std::fill(_source_rc_error.begin(), _source_rc_error.end(), 0.0);
-        std::fill(_source_lagr_sum.begin(), _source_lagr_sum.end(), 0.0);
+        std::ranges::fill(_source_rc_error, 0.0);
+        std::ranges::fill(_source_lagr_sum, 0.0);
 
         uint32_t effective_batch = (_batch_size > 0) ? _batch_size : n_sources;
         uint32_t start = final_round ? 0 : _last_source_idx;
@@ -315,7 +315,7 @@ public:
             while (batch.size() < effective_batch && sources_scanned < n_sources) {
                 uint32_t s_idx = (start + sources_scanned) % n_sources;
                 ++sources_scanned;
-                if (!final_round && _source_postponed[s_idx]) {
+                if (!final_round && _source_postponed[s_idx] != 0) {
                     continue;
                 }
                 batch.push_back(s_idx);
@@ -409,7 +409,7 @@ public:
     }
 
     void reset_postponed() {
-        std::fill(_source_postponed.begin(), _source_postponed.end(), uint8_t{0});
+        std::ranges::fill(_source_postponed, uint8_t{0});
         _last_source_idx = 0;
     }
 
@@ -418,9 +418,7 @@ public:
     // pricing resumes from where it parked next iter, rather than
     // restarting at source 0 every iter.  Calling reset_postponed here
     // would silently defeat partial pricing under CGStrategy::PricerHeavy.
-    void clear_postponed() {
-        std::fill(_source_postponed.begin(), _source_postponed.end(), uint8_t{0});
-    }
+    void clear_postponed() { std::ranges::fill(_source_postponed, uint8_t{0}); }
 
 protected:
     // Scale a dual to the pricer's integer distance units, saturating instead
@@ -460,7 +458,7 @@ protected:
                                      const static_map<uint32_t, double>& mu) {
         auto batch_n = static_cast<uint32_t>(batch.size());
 
-        if (!_pool || _pool->num_threads() <= 1 || batch_n <= 1) {
+        if (_pool == nullptr || _pool->num_threads() <= 1 || batch_n <= 1) {
             // Sequential
             std::vector<ColumnT> cols;
             for (uint32_t s_idx : batch) {

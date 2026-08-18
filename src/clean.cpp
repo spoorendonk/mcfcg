@@ -75,8 +75,11 @@ int run_clean(int argc, char* argv[]) {
     // Rebuild instance with kept commodities
     auto sources = mcfcg::group_by_source(kept);
     mcfcg::Instance cleaned{
-        std::move(inst.graph), std::move(inst.cost), std::move(inst.capacity),
-        std::move(kept),       std::move(sources),
+        .graph = std::move(inst.graph),
+        .cost = std::move(inst.cost),
+        .capacity = std::move(inst.capacity),
+        .commodities = std::move(kept),
+        .sources = std::move(sources),
     };
 
     mcfcg::write_commalab(cleaned, output_path);

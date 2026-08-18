@@ -90,9 +90,9 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             scratch.push_back({_inst->commodities[k].sink, 0, demand});
             rem_demand += demand;
         }
-        std::sort(
-            scratch.begin(), scratch.end(),
-            [](const CutoffEntry& lhs, const CutoffEntry& rhs) { return lhs.sink < rhs.sink; });
+        std::ranges::sort(scratch, [](const CutoffEntry& lhs, const CutoffEntry& rhs) {
+            return lhs.sink < rhs.sink;
+        });
         // Budget = SCALE·π_s, plus an allowance that makes the cut provably no
         // more aggressive than _neg_rc_tol.  The search compares integer-scaled
         // distances, which overstate SCALE·(true cost) by at most
@@ -114,7 +114,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         // rests on warm start seeding every structural row).  NaN still lands
         // in the !(_budget > 0) branch and cuts, as documented there.
         double budget = (pi_s[s_idx] + rem_demand * _round_slack_per_demand + _neg_rc_tol) * SCALE;
-        return Cutoff(scratch, budget, rem_demand);
+        return {scratch, budget, rem_demand};
     }
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
