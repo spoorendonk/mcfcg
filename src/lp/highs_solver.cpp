@@ -168,7 +168,7 @@ public:
         _num_rows = surviving;
     }
 
-    bool certify_runs_crossover() const override { return true; }
+    [[nodiscard]] bool certify_runs_crossover() const override { return true; }
 
     LPStatus solve(bool certify) override {
         // Crossover is requested only on a certify solve (the CG loop's stall
@@ -192,33 +192,33 @@ public:
         }
     }
 
-    double get_obj() const override {
+    [[nodiscard]] double get_obj() const override {
         double val = 0.0;
         _highs.getInfoValue("objective_function_value", val);
         return val;
     }
 
-    std::vector<double> get_primals() const override {
+    [[nodiscard]] std::vector<double> get_primals() const override {
         const auto& sol = _highs.getSolution();
         return sol.col_value;
     }
 
-    std::vector<double> get_duals() const override {
+    [[nodiscard]] std::vector<double> get_duals() const override {
         const auto& sol = _highs.getSolution();
         return sol.row_dual;
     }
 
-    std::vector<double> get_reduced_costs() const override {
+    [[nodiscard]] std::vector<double> get_reduced_costs() const override {
         const auto& sol = _highs.getSolution();
         return sol.col_dual;
     }
 
-    uint32_t num_cols() const override { return _num_cols; }
-    uint32_t num_rows() const override { return _num_rows; }
+    [[nodiscard]] uint32_t num_cols() const override { return _num_cols; }
+    [[nodiscard]] uint32_t num_rows() const override { return _num_rows; }
 
-    bool has_basis() const override { return _highs.getBasis().valid; }
+    [[nodiscard]] bool has_basis() const override { return _highs.getBasis().valid; }
 
-    std::vector<bool> get_basic_cols() const override {
+    [[nodiscard]] std::vector<bool> get_basic_cols() const override {
         const auto& basis = _highs.getBasis();
         std::vector<bool> result(basis.col_status.size());
         for (size_t i = 0; i < basis.col_status.size(); ++i) {

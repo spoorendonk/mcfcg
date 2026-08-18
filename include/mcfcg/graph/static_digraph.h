@@ -61,9 +61,13 @@ public:
           _arc_source(std::forward<S>(sources)),
           _in_arc_begin(num_verts, arc{0}),
           _in_arcs(_arc_target.size()) {
-        // Read the members, not the parameters: both were forwarded into
-        // _arc_target/_arc_source above, so an rvalue argument leaves them
-        // moved-from and the counting loops would silently see nothing.
+        // Read the members, not the parameters.  Note this is NOT fixing a
+        // live bug: static_map's range constructor delegates to the iterator
+        // pair and std::copy's, so the forwarded arguments are never actually
+        // moved-from and the old parameter reads were correct --
+        // bugprone-use-after-move is a false positive on this pattern.  The
+        // members are still the better source to read, because they stay
+        // correct if static_map ever does start consuming its range.
         assert(std::ranges::is_sorted(_arc_source));
         static_map<vertex, arc> in_count(num_verts, arc{0});
         for (auto s : _arc_source) {
@@ -112,12 +116,12 @@ public:
         return static_map<vertex, T>(num_vertices());
     }
     template <typename T>
-    [[nodiscard]] [[nodiscard]] constexpr auto create_vertex_map(const T &val) const noexcept {
+    [[nodiscard]] constexpr auto create_vertex_map(const T &val) const noexcept {
         return static_map<vertex, T>(num_vertices(), val);
     }
 
     template <typename T>
-    [[nodiscard]] [[nodiscard]] constexpr auto create_arc_map() const noexcept {
+    [[nodiscard]] constexpr auto create_arc_map() const noexcept {
         return static_map<arc, T>(num_arcs());
     }
     template <typename T>
