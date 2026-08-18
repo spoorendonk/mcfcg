@@ -324,8 +324,13 @@ else()
                     "--header-filter=${MCFCG_TIDY_HEADER_FILTER}"
                     "${_src}"
             COMMAND "${CMAKE_COMMAND}" -E touch "${_stamp}"
+            # compile_commands.json is in DEPENDS so a *reconfigure* invalidates
+            # every stamp. Without it, turning a backend on (or switching build
+            # type, or bumping -std) leaves src/main.cpp's stamp newer than its
+            # source, so its now-live #ifdef MCFCG_USE_COPT block is never linted.
             DEPENDS "${_src}" ${MCFCG_TIDY_HEADERS}
                     "${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy"
+                    "${CMAKE_BINARY_DIR}/compile_commands.json"
             COMMENT "clang-tidy ${_rel}"
             VERBATIM)
         list(APPEND _tidy_stamps "${_stamp}")
@@ -362,7 +367,9 @@ else()
     add_custom_target(tidy-fix
         COMMAND "${CMAKE_COMMAND}" -E echo
                 "tidy-fix: requires a clean worktree (fixes are reviewed via git diff)"
-        COMMAND git -C "${CMAKE_CURRENT_SOURCE_DIR}" diff --quiet HEAD --
+        COMMAND "${CMAKE_COMMAND}"
+                -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TidyFixGuard.cmake"
         COMMAND "${CMAKE_COMMAND}"
                 -DCLANG_TIDY_EXE=${CLANG_TIDY_EXE}
                 -DBUILD_DIR=${CMAKE_BINARY_DIR}

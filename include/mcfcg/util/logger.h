@@ -28,13 +28,11 @@ public:
                      "-cut", "t_LP", "t_PR", "t_SP", "t_Tot", "t_acc");
     }
 
-    // NOLINTBEGIN(bugprone-easily-swappable-parameters)
     void print_iteration(uint32_t iter, double upper_bound, double lower_bound, double lp_obj,
                          uint32_t num_col, uint32_t num_row, uint32_t num_active_slacks,
                          uint32_t added_col, bool added_not_committed, uint32_t removed_col,
                          uint32_t added_cut, uint32_t removed_cut, double t_lp, double t_pr,
                          double t_sp, double t_tot) {
-        // NOLINTEND(bugprone-easily-swappable-parameters)
         _t_acc += t_tot;
         if (_verbosity < Verbosity::Iteration) {
             return;
@@ -81,10 +79,8 @@ public:
     // only show a numeric gap when BOTH bounds are finite — otherwise print
     // UB/LB=inf and gap=inf rather than letting an INF fallback masquerade as a
     // zero-gap optimum.
-    // NOLINTBEGIN(bugprone-easily-swappable-parameters)
     void print_summary(uint32_t iters, double upper_bound, bool optimal, double lower_bound,
                        double gap_tol, double t_lp, double t_pr, double t_sp, double t_tot) const {
-        // NOLINTEND(bugprone-easily-swappable-parameters)
         if (_verbosity < Verbosity::Summary) {
             return;
         }

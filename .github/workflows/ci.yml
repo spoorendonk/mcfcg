@@ -3,11 +3,16 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
-  # Deliberately no `push:`. A hard gate that only ever runs on
-  # workflow_dispatch is not a gate, but running a full sweep on every WIP
-  # commit is the cost this workflow was made manual to avoid. pull_request
-  # covers the merge boundary, which is the one that matters for a published
-  # artifact.
+  push:
+    branches: [main]
+  # `push: [main]` is not redundant with `pull_request` here: CLAUDE.md's Git
+  # Workflow is trunk-based -- commit straight to main, feature branches
+  # optional -- so for most changes there is no PR and pull_request would
+  # never fire. Scoping push to main means a feature-branch commit is still
+  # covered exactly once, by its PR.
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,7 +27,7 @@ env:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +46,7 @@ jobs:
         run: ctest --test-dir build --output-on-failure -j$(nproc)
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -71,7 +76,11 @@ jobs:
         with:
           path: build/_deps
           key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/patches/*.patch') }}
-          restore-keys: deps-${{ runner.os }}-
+          # No restore-keys on purpose. A fallback would restore a tree
+          # populated at the same GIT_TAG, and FetchContent then skips the
+          # download AND the PATCH_COMMAND -- so an edited
+          # cmake/patches/*.patch would never be applied, silently defeating
+          # the patch hash this key exists to track.
 
       # Configure only. clang-tidy needs compile_commands.json and HiGHS'
       # generated headers, both of which exist after configure -- HConfig.h
@@ -86,10 +95,24 @@ jobs:
             -DCLANG_TIDY_EXE=/usr/bin/clang-tidy-${LLVM_VERSION}
 
       # The find_program guard in CMakeLists makes a missing clang-tidy a
-      # silent skip, so without this a broken install would turn the gate into
-      # a passing no-op -- the worst outcome available.
+      # silent skip, so without these a broken install would turn the gate into
+      # a passing no-op -- the worst outcome available. `grep -qw tidy` is not
+      # enough: -w treats '-' as a word boundary, so it also matches the
+      # tidy-fix line and would pass even if `tidy` itself were gone.
       - name: Assert the tidy target exists
-        run: cmake --build build --target help | grep -qw tidy
+        run: cmake --build build --target help | grep -qxE '\.\.\. tidy'
+
+      # This job configures HiGHS-only, so COPT/MOSEK/cuOpt are absent from the
+      # compile database and src/lp/{copt,cuopt,mosek}_solver.cpp are NOT
+      # linted here -- they are covered by the local pre-push hook, which
+      # configures a separate build-tidy dir with whatever SDKs the machine
+      # has. Pin the count so a silently shrinking source list goes red rather
+      # than quietly gating less than it claims to.
+      - name: Assert the expected TU count
+        run: |
+          cmake -B build -DMCFCG_NATIVE_ARCH=OFF \
+            -DCLANG_TIDY_EXE=/usr/bin/clang-tidy-${LLVM_VERSION} 2>&1 \
+            | grep -qE "'tidy' lints 22 TUs"
 
       # Fails the job on its own: WarningsAsErrors makes clang-tidy exit
       # non-zero, which fails the custom command, which fails the build.

@@ -28,12 +28,16 @@ This is a preference, not a prohibition. Shelling out to `grep`/`rg` is fine whe
   |---|---|---|
   | Functions (free and member) | `lower_case` | `solve_cg`, `compute_rc` |
   | Locals, parameters, public members | `lower_case` | `pricer_heavy`, `demand` |
-  | Private/protected members | **leading** `_` | `_source_arcs`, `_last_source_idx` |
+  | Private members | **leading** `_` | `_source_arcs`, `_last_source_idx` |
   | Constants (global, class, static) | `UPPER_CASE` | `NEG_RC_TOL`, `MAX_BOUND` |
   | Enums and enumerators | `CamelCase` | `SlackMode::EdgeRows` |
   | Namespaces | `lower_case` | `mcfcg::detail` |
   | Macros | `UPPER_CASE` | |
   | Files | `snake_case.h` / `.cpp` | |
+
+  Protected members are deliberately **unconstrained** — gtest fixtures use bare
+  `protected:` members, so the `_` prefix is a library-code convention that
+  `.clang-tidy` does not enforce.
 
   Type names are deliberately two-tier and **not** enforced: `CamelCase` for the
   domain layer (`MasterBase`, `LPSolver`, `TreePricer`), `snake_case` for the
@@ -47,8 +51,9 @@ This is a preference, not a prohibition. Shelling out to `grep`/`rg` is fine whe
 
 `cmake --build build --target tidy` — the gate. Stamped per translation unit, so
 it is ~30s at `-j` from cold and a no-op when nothing changed. It needs only
-`cmake -B build`, not a compiled tree. `tidy-fix` applies fix-its serially and
-refuses to run on a dirty worktree.
+`cmake -B build`, not a compiled tree. `tidy-fix` applies fix-its serially and refuses to run
+outside a git checkout or with a dirty worktree under `include/`, `src/` or
+`test/`. Narrow a bulk fix with `-DMCFCG_TIDY_FIX_CHECKS='-*,some-check'`.
 
 `WarningsAsErrors` covers `clang-diagnostic-*`, `bugprone-*`, `performance-*`
 and `readability-identifier-naming`; those block. Everything else — notably
@@ -83,7 +88,8 @@ processes rewrite the same file and corrupt it.
 
 - `set(CMAKE_EXPORT_COMPILE_COMMANDS ON)` for clang-tidy.
 - Use FetchContent for dependencies.
-- One `CMakeLists.txt` per directory with source files.
+- A single root `CMakeLists.txt`; the project is small enough that per-directory
+  files would only add indirection.
 
 ## Testing (GoogleTest)
 
@@ -103,7 +109,7 @@ plan (non-trivial) → implement → test → push to main
 
 Hooks auto-format on save (and type-check Python; C++ gets formatting only) — don't fix formatting manually. Run tests locally before considering work done — don't skip the suite even on changes that look trivial. The pre-push hook is the final gate.
 
-Git hooks (`.git/hooks/*`) and Claude Code hooks (`.claude/`) are local-only and gitignored — not part of the published artifact, and not cloned with it. They were originally installed from an external toolkit; that dependency is gone, and the scripts are now plain local copies owned by this repo. The clang-tidy gate deliberately does not live in them: its substance is the `tidy` CMake target plus the CI lint job, both tracked, so a fresh clone still gets the gate. **Never use `git push --no-verify` or `git commit --no-verify`** unless explicitly asked. A failing hook is a signal — fix the root cause.
+Git hooks (`.git/hooks/*`) and Claude Code hooks (`.claude/`) are local-only and gitignored — not part of the published artifact, and not cloned with it. They were originally installed from an external toolkit; that dependency is gone, and the scripts are now plain local copies owned by this repo. The clang-tidy gate deliberately does not live in them: its substance is the `tidy` CMake target plus the CI lint job, both tracked, so a fresh clone can run the gate — via CI automatically, or `--target tidy` by hand. **Never use `git push --no-verify` or `git commit --no-verify`** unless explicitly asked. A failing hook is a signal — fix the root cause.
 
 ## Git Workflow
 
