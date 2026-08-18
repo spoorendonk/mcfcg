@@ -103,7 +103,7 @@ plan (non-trivial) → implement → test → push to main
 
 Hooks auto-format on save (and type-check Python; C++ gets formatting only) — don't fix formatting manually. Run tests locally before considering work done — don't skip the suite even on changes that look trivial. The pre-push hook is the final gate.
 
-Git hooks (`.git/hooks/*`) and Claude Code hooks are installed locally from an external toolkit and are not part of the published artifact. **Never use `git push --no-verify` or `git commit --no-verify`** unless explicitly asked. A failing hook is a signal — fix the root cause.
+Git hooks (`.git/hooks/*`) and Claude Code hooks (`.claude/`) are local-only and gitignored — not part of the published artifact, and not cloned with it. They were originally installed from an external toolkit; that dependency is gone, and the scripts are now plain local copies owned by this repo. The clang-tidy gate deliberately does not live in them: its substance is the `tidy` CMake target plus the CI lint job, both tracked, so a fresh clone still gets the gate. **Never use `git push --no-verify` or `git commit --no-verify`** unless explicitly asked. A failing hook is a signal — fix the root cause.
 
 ## Git Workflow
 

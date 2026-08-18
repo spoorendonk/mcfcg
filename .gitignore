@@ -5,7 +5,6 @@ data/intermodal-repo/
 data/intermodal/raw/
 
 # Local agent/dev tooling — not part of the published artifact.
-.devkit/
 .claude/
 .codex/
 
