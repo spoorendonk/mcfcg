@@ -101,10 +101,10 @@ public:
     }
 
     ~CoptSolver() override {
-        if (_prob) {
+        if (_prob != nullptr) {
             COPT_DeleteProb(&_prob);
         }
-        if (_env) {
+        if (_env != nullptr) {
             COPT_DeleteEnv(&_env);
         }
     }
@@ -206,7 +206,7 @@ public:
         check_copt(COPT_SetColObj(_prob, 1, &idx, &cost), "SetColObj");
     }
 
-    bool certify_runs_crossover() const override { return true; }
+    [[nodiscard]] bool certify_runs_crossover() const override { return true; }
 
     LPStatus solve(bool certify) override {
         // Steady state runs crossover off (pinned, fast). The CG loop requests
@@ -236,40 +236,40 @@ public:
         }
     }
 
-    double get_obj() const override {
+    [[nodiscard]] double get_obj() const override {
         double val = 0.0;
         check_copt(COPT_GetDblAttr(_prob, COPT_DBLATTR_LPOBJVAL, &val), "GetLpObjval");
         return val;
     }
 
-    std::vector<double> get_primals() const override {
+    [[nodiscard]] std::vector<double> get_primals() const override {
         std::vector<double> vals(num_cols());
         check_copt(COPT_GetLpSolution(_prob, vals.data(), nullptr, nullptr, nullptr),
                    "GetLpSolution(primals)");
         return vals;
     }
 
-    std::vector<double> get_duals() const override {
+    [[nodiscard]] std::vector<double> get_duals() const override {
         std::vector<double> vals(num_rows());
         check_copt(COPT_GetLpSolution(_prob, nullptr, nullptr, vals.data(), nullptr),
                    "GetLpSolution(duals)");
         return vals;
     }
 
-    std::vector<double> get_reduced_costs() const override {
+    [[nodiscard]] std::vector<double> get_reduced_costs() const override {
         std::vector<double> vals(num_cols());
         check_copt(COPT_GetLpSolution(_prob, nullptr, nullptr, nullptr, vals.data()),
                    "GetLpSolution(redCost)");
         return vals;
     }
 
-    uint32_t num_cols() const override {
+    [[nodiscard]] uint32_t num_cols() const override {
         int n = 0;
         check_copt(COPT_GetIntAttr(_prob, COPT_INTATTR_COLS, &n), "GetIntAttr(Cols)");
         return static_cast<uint32_t>(n);
     }
 
-    uint32_t num_rows() const override {
+    [[nodiscard]] uint32_t num_rows() const override {
         int m = 0;
         check_copt(COPT_GetIntAttr(_prob, COPT_INTATTR_ROWS, &m), "GetIntAttr(Rows)");
         return static_cast<uint32_t>(m);
@@ -279,7 +279,7 @@ public:
     // higher slack-cost ceiling than the 1e7 default so expensive-column
     // instances (per-row cost > 1e7) can price their slacks out.  See
     // LPSolver::max_slack_cost and the MOSEK override.
-    double max_slack_cost() const override { return 1e9; }
+    [[nodiscard]] double max_slack_cost() const override { return 1e9; }
 };
 
 std::unique_ptr<LPSolver> create_copt_solver(bool verbose, int gpu_mode) {
