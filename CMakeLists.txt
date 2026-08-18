@@ -86,7 +86,7 @@ if(MCFCG_USE_CUOPT)
     target_sources(mcfcg PRIVATE src/lp/cuopt_solver.cpp)
     # SYSTEM so clang-tidy (pre-commit --fix) never analyzes/rewrites the
     # vendor SDK headers — a PRIVATE include let modernize-* fix-its corrupt
-    # an out-of-repo header. See devkit hook issue.
+    # an out-of-repo header.
     target_include_directories(mcfcg SYSTEM PRIVATE ${CUOPT_INCLUDE_DIR})
     target_link_libraries(mcfcg PRIVATE ${CUOPT_LIBRARY})
     # Embed the cuOpt library's directory as a build RPATH so the executables

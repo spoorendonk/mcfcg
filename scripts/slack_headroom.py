@@ -5,7 +5,9 @@ The CG master makes infeasibility feasible with SLACK columns whose cost is
 bumped up until they leave the basis (see MasterBase in include/mcfcg/cg/).
 For that to work — and for the solver not to certify a too-low optimum — the
 slack-cost ceiling must dominate the real column costs. The ceiling is
-`clamp(10 * slack_cost_upper_bound, 1e6, 1e7)`, where slack_cost_upper_bound is
+`clamp(10 * slack_cost_upper_bound, 1e6, LPSolver::max_slack_cost())` — the
+upper cap is backend-dependent (1e7 for HiGHS/cuOpt, 1e9 for MOSEK/COPT), so
+pass the `--solver` you intend to run. slack_cost_upper_bound is
 a WORST-CASE bound (path: |V|*max_arc_cost; tree: *max_src_demand_sum). That
 worst case is far looser than typical column costs, so the right risk metric is
 the ceiling against a REALISTIC per-source column-cost proxy (optimum / #sources
@@ -20,7 +22,8 @@ the reference optimum, and reports:
 
 RISKY  = ceiling < per-source proxy: slacks may not out-price real columns, so
          they can stay basic (no early UB) or the LP could certify too low.
-CLAMPED= 10*slack_cost_upper_bound > 1e7: the formula ceiling was clamped down;
+CLAMPED= 10*slack_cost_upper_bound exceeded the backend cap, so the formula
+         ceiling was clamped down;
          usually benign (the bound is loose) but worth noting on high-cost
          instances where it may bind below real costs.
 
@@ -45,8 +48,6 @@ from benchmark_solvers import (  # noqa: E402
     load_optimal,
     parse_csv_row,
 )
-
-CEILING_CLAMP_HI = 1e7  # MasterBase::init upper clamp
 
 
 def run_stats(binary, instance, formulation, extra, timeout, solver="highs"):
@@ -142,8 +143,11 @@ def main():
             flag = "OK"
             if per_row is not None and ceiling < per_row:
                 flag = "RISKY"  # ceiling below typical per-row column cost
-            elif 10.0 * ub > CEILING_CLAMP_HI:
-                flag = "CLAMPED"  # formula ceiling clamped down (usually benign)
+            elif 10.0 * ub > ceiling:
+                # Formula ceiling clamped down to the backend max (usually
+                # benign).  Compared against the reported ceiling rather than a
+                # hardcoded constant, since the cap is backend-dependent.
+                flag = "CLAMPED"
 
             rec = {"family": family, "instance": key, "formulation": formulation,
                    "vertices": s["vertices"], "sources": sources,

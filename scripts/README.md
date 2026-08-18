@@ -491,3 +491,23 @@ committed table from the logs is unaffected:
 ```bash
 python3 scripts/consolidate_mps_logs.py            # rebuild the results CSV
 ```
+
+## Diagnostics
+
+### `slack_headroom.py`
+
+Checks that the master's slack-cost ceiling actually dominates real column costs
+on every instance — the precondition for slacks pricing out, and therefore for
+early termination and for the LP not certifying below the true optimum. Runs
+`mcfcg_cli --stats-only` (no solve) over the suite, joins the reference optimum,
+and writes a CSV flagging each cell `OK`, `RISKY` (ceiling below a realistic
+per-row cost proxy) or `CLAMPED` (worst-case formula ceiling capped at the
+backend maximum — usually benign, since that bound is loose).
+
+```
+python3 scripts/slack_headroom.py --solver copt --out slack-headroom.csv
+```
+
+Pass the backend you intend to run: the cap is `LPSolver::max_slack_cost()`,
+which is `1e7` for HiGHS/cuOpt and `1e9` for the robust MOSEK/COPT barriers. A
+diagnostic only — it produces no committed output and feeds no results table.

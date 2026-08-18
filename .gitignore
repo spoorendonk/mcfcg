@@ -4,6 +4,11 @@ __pycache__/
 data/intermodal-repo/
 data/intermodal/raw/
 
+# Local agent/dev tooling — not part of the published artifact.
+.devkit/
+.claude/
+.codex/
+
 # Derived MPS dumps (regenerable via scripts/write_mps.sh) — large, not committed.
 *.mps.gz
 *.mps
