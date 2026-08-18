@@ -21,9 +21,63 @@ This is a preference, not a prohibition. Shelling out to `grep`/`rg` is fine whe
 ## C++
 
 - Target C++23. Use modern features (`std::expected`, concepts, ranges, `constexpr`).
-- Style: Google-based, enforced by `.clang-format` and `.clang-tidy`.
+- **Formatting** is Google, via `.clang-format`. **Naming is not Google** — it
+  is STL-flavoured, and `.clang-tidy` enforces it:
+
+  | Kind | Style | Example |
+  |---|---|---|
+  | Functions (free and member) | `lower_case` | `solve_cg`, `compute_rc` |
+  | Locals, parameters, public members | `lower_case` | `pricer_heavy`, `demand` |
+  | Private/protected members | **leading** `_` | `_source_arcs`, `_last_source_idx` |
+  | Constants (global, class, static) | `UPPER_CASE` | `NEG_RC_TOL`, `MAX_BOUND` |
+  | Enums and enumerators | `CamelCase` | `SlackMode::EdgeRows` |
+  | Namespaces | `lower_case` | `mcfcg::detail` |
+  | Macros | `UPPER_CASE` | |
+  | Files | `snake_case.h` / `.cpp` | |
+
+  Type names are deliberately two-tier and **not** enforced: `CamelCase` for the
+  domain layer (`MasterBase`, `LPSolver`, `TreePricer`), `snake_case` for the
+  STL-like containers and graph algorithms (`static_map`, `d_ary_heap`,
+  `thread_pool`, `dijkstra`). clang-tidy cannot express "either", so `ClassCase`
+  is intentionally absent from the config — match the layer you are in.
 - Use `#pragma once` for include guards.
 - Minimize includes in headers. Forward-declare where possible.
+
+## clang-tidy
+
+`cmake --build build --target tidy` — the gate. Stamped per translation unit, so
+it is ~30s at `-j` from cold and a no-op when nothing changed. It needs only
+`cmake -B build`, not a compiled tree. `tidy-fix` applies fix-its serially and
+refuses to run on a dirty worktree.
+
+`WarningsAsErrors` covers `clang-diagnostic-*`, `bugprone-*`, `performance-*`
+and `readability-identifier-naming`; those block. Everything else — notably
+`readability-function-cognitive-complexity` — is advisory signal. Suppress an
+advisory finding with a `NOLINTNEXTLINE(check)` plus a comment saying why, never
+by widening the config. Note that `NOLINTNEXTLINE` applies to the *literal* next
+line, so put the prose above it and the pragma last, and for a template put it
+between the `template<...>` line and the signature.
+
+**Invoking clang-tidy by hand needs two flags the config cannot supply.**
+`HeaderFilterRegex` is silently ignored when clang-tidy auto-discovers
+`.clang-tidy`: `clang-tidy -p build src/cg/tree_cg.cpp` reports 2 diagnostics
+where the same command with `--config-file=.clang-tidy` reports 481 — every
+header, which is where nearly all of this codebase lives. And a bare `.*`
+header filter is wrong even with the config file, because it matches
+`build/_deps/highs-src/**`. So:
+
+```
+clang-tidy -p build --config-file=.clang-tidy \
+  --header-filter="^$PWD/(include|src|test)/" --quiet <file.cpp>
+```
+
+Prefer the `tidy` target, which does both for you.
+
+Two traps when fixing in bulk. `run-clang-tidy -fix` was measured reporting a
+set of warnings and then silently applying only a fraction of them — use the
+serial `tidy-fix` target instead. And never run `clang-tidy --fix` in parallel
+here: every template lives in a header under `include/mcfcg`, so concurrent
+processes rewrite the same file and corrupt it.
 
 ## CMake
 
@@ -47,7 +101,7 @@ Install `clangd-lsp@claude-plugins-official` plus `clangd` itself (`apt install 
 plan (non-trivial) → implement → test → push to main
 ```
 
-Hooks auto-format and type-check on save — don't fix formatting manually. Run tests locally before considering work done — don't skip the suite even on changes that look trivial. The pre-push hook is the final gate.
+Hooks auto-format on save (and type-check Python; C++ gets formatting only) — don't fix formatting manually. Run tests locally before considering work done — don't skip the suite even on changes that look trivial. The pre-push hook is the final gate.
 
 Git hooks (`.git/hooks/*`) and Claude Code hooks are installed locally from an external toolkit and are not part of the published artifact. **Never use `git push --no-verify` or `git commit --no-verify`** unless explicitly asked. A failing hook is a signal — fix the root cause.
 
