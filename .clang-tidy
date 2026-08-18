@@ -1,4 +1,8 @@
 ---
+# Naming here is the project's own STL-flavoured house style, NOT Google
+# naming.  Google *formatting* comes from .clang-format; the identifiers
+# are snake_case functions, `_`-prefixed private members, UPPER_CASE
+# constants and CamelCase types/enumerators.  See CLAUDE.md.
 Checks: >
   -*,
   bugprone-*,
@@ -6,24 +10,80 @@ Checks: >
   performance-*,
   readability-*,
   -modernize-use-trailing-return-type,
-  -readability-magic-numbers
+  -readability-magic-numbers,
+  -readability-identifier-length,
+  -bugprone-easily-swappable-parameters,
+  -modernize-avoid-c-arrays,
+  -modernize-use-std-print
+
+# Why the four extra checks above are off:
+#   readability-identifier-length     — the solver's notation is `a` (arc),
+#       `mu`/`pi` (duals), `u`/`v` (vertex), `k` (commodity), `rc`, `lb`/`ub`.
+#       Google mandates no minimum name length and enables no such check.
+#   bugprone-easily-swappable-parameters — fires on unavoidable APIs such as
+#       Cutoff(double, double); logger.h already carried a NOLINT for it.
+#   modernize-avoid-c-arrays — false positives on the two deliberate idioms
+#       here: unique_ptr<T[]> with make_unique_for_overwrite in static_map
+#       (skipping zero-init is the point) and the snprintf scratch buffers
+#       in util/logger.h.
+#   modernize-use-std-print — util/logger.h's fprintf calls emit the
+#       fixed-width iteration table that scripts/*.py parse; std::print
+#       would change the format and needs libstdc++ >= 14.
 
 CheckOptions:
   - key: readability-function-cognitive-complexity.Threshold
     value: 25
-  - key: readability-identifier-naming.ClassCase
-    value: CamelCase
-  - key: readability-identifier-naming.FunctionCase
-    value: camelBack
-  - key: readability-identifier-naming.VariableCase
-    value: lower_case
-  - key: readability-identifier-naming.ConstantCase
-    value: UPPER_CASE
-  - key: readability-identifier-naming.PrivateMemberSuffix
-    value: _
+
+  # No ClassCase / StructCase / TypeAliasCase on purpose: the type
+  # vocabulary is deliberately two-tier — CamelCase for the domain layer
+  # (MasterBase, LPSolver, TreePricer) and snake_case for the STL-like
+  # containers and graph algorithms (static_map, d_ary_heap, thread_pool).
+  # clang-tidy cannot express "either", so this stays unenforced.
+  #
+  # No LocalConstantCase / ConstexprVariableCase either: setting them to
+  # UPPER_CASE flags every `const bool pricer_heavy` local.  They fall
+  # back to VariableCase.
   - key: readability-identifier-naming.NamespaceCase
     value: lower_case
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.PublicMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: lower_case
+  # Prefix, not suffix: members are `_source_arcs`, not `source_arcs_`.
+  # Protected is deliberately unconstrained — gtest fixtures use bare
+  # protected members, so the `_` rule is library-code-only in practice.
+  - key: readability-identifier-naming.PrivateMemberPrefix
+    value: _
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.ClassConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.StaticConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.TemplateParameterCase
+    value: CamelCase
 
+# Stays empty until the tree is clean; Step 6 of the clang-tidy plan turns
+# on the curated gate (clang-diagnostic-*, bugprone-*, performance-*,
+# readability-identifier-naming).
 WarningsAsErrors: ''
-HeaderFilterRegex: '.*'
+
+# NOTE: this value is NOT honoured when clang-tidy auto-discovers this
+# file — pass --config-file=<repo>/.clang-tidy AND an anchored
+# --header-filter='^<repo>/(include|src|test)/' explicitly.  Plain '.*'
+# would also drag in build/_deps/highs-src.  The `tidy` CMake target does
+# both for you.
+HeaderFilterRegex: '^.*/(include|src|test)/'
 FormatStyle: file

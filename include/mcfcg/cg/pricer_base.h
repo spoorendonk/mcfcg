@@ -203,19 +203,28 @@ protected:
 
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
 
-    // Still in the protected section above, deliberately: this is a CRTP
-    // base, so a public constructor would let it be instantiated directly
-    // as a plain template class.
+private:
+    // CRTP contract: the constructors are private and Derived is a friend,
+    // so this base cannot be instantiated or inherited from as a plain
+    // template class.  Derived's own implicit constructors still reach
+    // them through the friendship.
     PricerBase() = default;
-    // Non-copyable: per-thread workspaces and Dijkstra state are not
-    // meaningful to clone.  A default copy would compile but silently
-    // share nothing useful.
-    PricerBase(const PricerBase&) = delete;
-    PricerBase& operator=(const PricerBase&) = delete;
     PricerBase(PricerBase&&) noexcept = default;
-    PricerBase& operator=(PricerBase&&) noexcept = default;
+    friend Derived;
 
 public:
+    // Non-copyable: per-thread workspaces and Dijkstra state are not
+    // meaningful to clone.  A default copy would compile but silently
+    // share nothing useful.  Deleted members stay public so the diagnostic
+    // on a copy attempt is "deleted", not "inaccessible"; that is also what
+    // modernize-use-equals-delete asks for.  The CRTP check disagrees, but
+    // a deleted constructor constructs nothing, so it cannot be the escape
+    // hatch that check exists to close.
+    // NOLINTNEXTLINE(bugprone-crtp-constructor-accessibility)
+    PricerBase(const PricerBase&) = delete;
+    PricerBase& operator=(const PricerBase&) = delete;
+    PricerBase& operator=(PricerBase&&) noexcept = default;
+
     void init(const Instance& inst, thread_pool* pool = nullptr, uint32_t batch_size = 0,
               double neg_rc_tol = NEG_RC_TOL, bool dual_cutoff = false) {
         _inst = &inst;

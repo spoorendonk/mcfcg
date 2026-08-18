@@ -56,6 +56,10 @@ inline double recompute_tree_rc(const TreeColumn& col, const std::vector<double>
 // at the captured duals (LP optimality of the previous solve).  New
 // cols must have RC < NEW_COL_RC_TOL at the captured duals (pricer's
 // own decision, so this is the self-consistency check).
+// Deliberately a straight-line transcription of the production loop so it
+// can be diffed against cg_loop.h by eye; factoring it would break that
+// correspondence.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
                                        double tol = RELATIVE_FEAS_TOL * 10,
                                        bool check_duplicates = false) {
@@ -164,6 +168,8 @@ inline void solve_and_validate_path_rc(const Instance& inst, double ref_obj,
 // Run tree CG manually, validating RC at each iteration.
 // Mirrors the production single-solve-per-iter flow in cg_loop.h; see
 // solve_and_validate_path_rc for the full rationale.
+// Same deliberate mirroring of cg_loop.h as solve_and_validate_path_rc.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 inline void solve_and_validate_tree_rc(const Instance& inst, double ref_obj,
                                        double tol = RELATIVE_FEAS_TOL * 10,
                                        bool check_duplicates = false) {

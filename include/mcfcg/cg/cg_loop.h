@@ -26,7 +26,13 @@ inline constexpr double SLACK_BUMP_FACTOR = 10.0;
 
 // Generic CG loop parameterized on Master, Pricer, and a dual-extraction callable.
 // GetDuals: (const Master&) -> std::vector<double>
+// The domain is the complexity: this is one CG iteration's full state
+// machine — bounds, slack bumping, lazy separation, column aging, source
+// postponement, and four termination conditions all read and write the
+// same locals.  Splitting it would hand those locals between functions
+// rather than remove them.
 template <typename Master, typename Pricer, typename GetDuals>
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pricing_duals,
                   uint32_t num_entities) {
     auto pool = make_thread_pool(params.num_threads);
@@ -191,7 +197,9 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         iter_timer.stop(TimerCat::LP);
         timer.stop(TimerCat::LP);
 
-        if (status != LPStatus::Optimal) break;
+        if (status != LPStatus::Optimal) {
+            break;
+        }
         solved = true;
 
         double obj = master.get_obj();

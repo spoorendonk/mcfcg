@@ -225,19 +225,28 @@ protected:
     Derived& self() noexcept { return static_cast<Derived&>(*this); }
     const Derived& self() const noexcept { return static_cast<const Derived&>(*this); }
 
-    // Still in the protected section above, deliberately: this is a CRTP
-    // base, so a public constructor would let it be instantiated directly
-    // as a plain template class.
+private:
+    // CRTP contract: the constructors are private and Derived is a friend,
+    // so this base cannot be instantiated or inherited from as a plain
+    // template class.  Derived's own implicit constructors still reach
+    // them through the friendship.
     MasterBase() = default;
-    // Non-copyable: LP ownership and per-thread workspaces do not copy
-    // meaningfully.  unique_ptr already blocks copy; the explicit
-    // declarations make the contract visible.
-    MasterBase(const MasterBase&) = delete;
-    MasterBase& operator=(const MasterBase&) = delete;
     MasterBase(MasterBase&&) noexcept = default;
-    MasterBase& operator=(MasterBase&&) noexcept = default;
+    friend Derived;
 
 public:
+    // Non-copyable: LP ownership and per-thread workspaces do not copy
+    // meaningfully.  unique_ptr already blocks copy; the explicit
+    // declarations make the contract visible.  Deleted members stay public
+    // so the diagnostic on a copy attempt is "deleted", not "inaccessible";
+    // that is also what modernize-use-equals-delete asks for.  The CRTP
+    // check disagrees, but a deleted constructor constructs nothing, so
+    // it cannot be the escape hatch that check exists to close.
+    // NOLINTNEXTLINE(bugprone-crtp-constructor-accessibility)
+    MasterBase(const MasterBase&) = delete;
+    MasterBase& operator=(const MasterBase&) = delete;
+    MasterBase& operator=(MasterBase&&) noexcept = default;
+
     void init(const Instance& inst, std::unique_ptr<LPSolver> lp = nullptr,
               thread_pool* pool = nullptr, bool warm_start = true) {
         _inst = &inst;
