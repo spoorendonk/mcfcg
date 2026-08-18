@@ -240,3 +240,141 @@ target_compile_definitions(mcfcg_integration_tests PRIVATE
     MCFCG_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 gtest_discover_tests(mcfcg_integration_tests)
+
+# ---------------------------------------------------------------------------
+# clang-tidy: `tidy` (check) and `tidy-fix` (apply fixes).
+#
+# Deliberately NOT wired in as CMAKE_CXX_CLANG_TIDY: that re-lints on every
+# compile and roughly doubles build time. These are opt-in targets; CI runs
+# `tidy`.
+#
+# Both pass --config-file and an anchored --header-filter explicitly, and
+# both are necessary:
+#   * HeaderFilterRegex from an auto-discovered .clang-tidy is NOT applied.
+#     Without --config-file, `clang-tidy -p build src/cg/tree_cg.cpp` reports
+#     2 diagnostics where the same run with it reports 481 -- i.e. every
+#     header, which is where nearly all of this codebase lives, goes
+#     unchecked.
+#   * A bare '.*' header filter is the wrong value even so: it matches
+#     build/_deps/highs-src/**, where src/lp/highs_solver.cpp alone yields
+#     351 diagnostics out of Highs.h. Anchor it at the source dir instead.
+# ---------------------------------------------------------------------------
+find_program(CLANG_TIDY_EXE
+    NAMES clang-tidy-20 clang-tidy-19 clang-tidy-18 clang-tidy
+    DOC "clang-tidy binary used by the 'tidy' and 'tidy-fix' targets")
+
+if(NOT CLANG_TIDY_EXE)
+    message(STATUS
+        "clang-tidy not found -- 'tidy'/'tidy-fix' targets disabled. "
+        "Install clang-tidy and re-run cmake to enable them.")
+else()
+    # Source list derived from the targets themselves, never a glob: when a
+    # backend option is OFF its .cpp is not in the target and therefore not in
+    # compile_commands.json, and clang-tidy hard-errors on a file missing from
+    # the compilation database. Reading SOURCES keeps the lint set equal to the
+    # compile-DB set by construction, and a new .cpp is enrolled automatically.
+    set(MCFCG_TIDY_TARGETS
+        mcfcg mcfcg_cli mcfcg_clean mcfcg_tests mcfcg_integration_tests)
+    set(MCFCG_TIDY_SOURCES "")
+    foreach(_tgt IN LISTS MCFCG_TIDY_TARGETS)
+        get_target_property(_tgt_dir ${_tgt} SOURCE_DIR)
+        get_target_property(_tgt_srcs ${_tgt} SOURCES)
+        foreach(_src IN LISTS _tgt_srcs)
+            if(NOT _src MATCHES "\\.(cpp|cc|cxx)$")
+                continue()  # headers are covered through --header-filter
+            endif()
+            if(IS_ABSOLUTE "${_src}")
+                list(APPEND MCFCG_TIDY_SOURCES "${_src}")
+            else()
+                list(APPEND MCFCG_TIDY_SOURCES "${_tgt_dir}/${_src}")
+            endif()
+        endforeach()
+    endforeach()
+    list(REMOVE_DUPLICATES MCFCG_TIDY_SOURCES)
+    list(LENGTH MCFCG_TIDY_SOURCES MCFCG_TIDY_COUNT)
+
+    # Escape every character that is not [A-Za-z0-9_/-] so a checkout path
+    # containing '.', '+' or '(' cannot alter the regex.
+    string(REGEX REPLACE "([^A-Za-z0-9_/-])" "\\\\\\1"
+           _mcfcg_root_re "${CMAKE_CURRENT_SOURCE_DIR}")
+    set(MCFCG_TIDY_HEADER_FILTER "^${_mcfcg_root_re}/(include|src|test)/")
+
+    # clang-tidy emits no depfile, so a stamp cannot track #includes. This repo
+    # is header-dominated (every template lives in include/mcfcg), so treat any
+    # first-party header edit as invalidating every stamp. Coarse but correct.
+    file(GLOB_RECURSE MCFCG_TIDY_HEADERS CONFIGURE_DEPENDS
+         "${CMAKE_CURRENT_SOURCE_DIR}/include/mcfcg/*.h"
+         "${CMAKE_CURRENT_SOURCE_DIR}/test/*.h")
+
+    # One custom command per TU, each with a stamp: parallelism comes from the
+    # build system's own -j, and editing one .cpp re-lints one TU (~16s) rather
+    # than all of them (~6 min serially).
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/tidy")
+    set(_tidy_stamps "")
+    foreach(_src IN LISTS MCFCG_TIDY_SOURCES)
+        file(RELATIVE_PATH _rel "${CMAKE_CURRENT_SOURCE_DIR}" "${_src}")
+        string(REPLACE "/" "_" _stamp_name "${_rel}")
+        set(_stamp "${CMAKE_BINARY_DIR}/tidy/${_stamp_name}.stamp")
+        add_custom_command(
+            OUTPUT "${_stamp}"
+            COMMAND "${CLANG_TIDY_EXE}"
+                    -p "${CMAKE_BINARY_DIR}"
+                    --quiet
+                    "--config-file=${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy"
+                    "--header-filter=${MCFCG_TIDY_HEADER_FILTER}"
+                    "${_src}"
+            COMMAND "${CMAKE_COMMAND}" -E touch "${_stamp}"
+            DEPENDS "${_src}" ${MCFCG_TIDY_HEADERS}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy"
+            COMMENT "clang-tidy ${_rel}"
+            VERBATIM)
+        list(APPEND _tidy_stamps "${_stamp}")
+    endforeach()
+
+    add_custom_target(tidy DEPENDS ${_tidy_stamps})
+    # No add_dependencies on the build targets: HiGHS' generated headers
+    # (HConfig.h via configure_file, highs_export.h via generate_export_header)
+    # are written at CONFIGURE time, and FetchContent populates highs-src and
+    # googletest-src at configure time too. `cmake -B build` alone is enough to
+    # lint -- nothing has to be compiled first, which is what lets CI skip the
+    # HiGHS build entirely.
+
+    # tidy-fix applies fix-its. Two rails:
+    #   1. Refuse to run on a dirty worktree. add_custom_target aborts on the
+    #      first non-zero COMMAND, so `git diff --quiet` IS the gate: it
+    #      guarantees the whole effect is reviewable as one `git diff` and
+    #      revertible with `git checkout .`.
+    #   2. Serial, one file at a time -- NOT run-clang-tidy -fix, and never a
+    #      parallel loop. Concurrent `clang-tidy --fix` processes would rewrite
+    #      the same shared header in include/mcfcg simultaneously. run-clang-tidy
+    #      avoids that by batching through clang-apply-replacements, but it was
+    #      measured here silently applying only a fraction of the fixes it had
+    #      just reported, which is worse than being slow.
+    # The anchored --header-filter is what keeps fix-its inside
+    # include|src|test; the SYSTEM include dirs for the vendor SDKs above are
+    # the independent second mechanism.
+    set(MCFCG_TIDY_FIX_CHECKS ""
+        CACHE STRING "Restrict tidy-fix to these checks; empty uses .clang-tidy.")
+    set(_tidy_fix_args "")
+    if(MCFCG_TIDY_FIX_CHECKS)
+        set(_tidy_fix_args "--checks=${MCFCG_TIDY_FIX_CHECKS}")
+    endif()
+    add_custom_target(tidy-fix
+        COMMAND "${CMAKE_COMMAND}" -E echo
+                "tidy-fix: requires a clean worktree (fixes are reviewed via git diff)"
+        COMMAND git -C "${CMAKE_CURRENT_SOURCE_DIR}" diff --quiet HEAD --
+        COMMAND "${CMAKE_COMMAND}"
+                -DCLANG_TIDY_EXE=${CLANG_TIDY_EXE}
+                -DBUILD_DIR=${CMAKE_BINARY_DIR}
+                -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+                "-DHEADER_FILTER=${MCFCG_TIDY_HEADER_FILTER}"
+                "-DEXTRA_ARGS=${_tidy_fix_args}"
+                "-DSOURCES=${MCFCG_TIDY_SOURCES}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TidyFix.cmake"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "clang-tidy --fix over ${MCFCG_TIDY_COUNT} first-party TUs (serial)"
+        USES_TERMINAL VERBATIM)
+
+    message(STATUS
+        "clang-tidy: ${CLANG_TIDY_EXE} -- 'tidy' lints ${MCFCG_TIDY_COUNT} TUs")
+endif()
