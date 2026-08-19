@@ -1,0 +1,279 @@
+#!/bin/bash
+# Git pre-push hook.
+# Final gate before sharing code — catches what pre-commit doesn't.
+#
+# Flow:
+#   1. Clean build + test → block on failure
+#   2. clang-tidy `tidy` target → block on failure (the curated WarningsAsErrors
+#      set in .clang-tidy; everything else it reports stays advisory)
+#   3. Remaining issues (complexity, type errors, warnings) → warn and continue
+#
+# There is no /review stamp gate; it was removed together with the .claude/
+# review skill when this repo was prepared for publication.
+
+set -e
+
+# Get changed files vs main
+MAIN_BRANCH="main"
+git rev-parse --verify "origin/$MAIN_BRANCH" &>/dev/null || MAIN_BRANCH="master"
+git fetch origin "$MAIN_BRANCH" --quiet 2>/dev/null || true
+CHANGED_FILES=$(git diff --name-only "origin/$MAIN_BRANCH"...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || true)
+
+[ -z "$CHANGED_FILES" ] && exit 0
+
+CPP_FILES=$(echo "$CHANGED_FILES" | grep -E '\.(cpp|cc|cxx|h|hpp|hxx)$' || true)
+# Changing the gate's own config or the target that runs it must re-lint too --
+# otherwise tightening .clang-tidy is the one push that never gets checked.
+LINT_TRIGGERS=$(echo "$CHANGED_FILES" | grep -E '^(\.clang-tidy|CMakeLists\.txt|cmake/TidyFix.*\.cmake)$' || true)
+PY_FILES=$(echo "$CHANGED_FILES" | grep -E '\.py$' || true)
+SH_FILES=$(echo "$CHANGED_FILES" | grep -E '\.sh$|^\.githooks/[^/.]+$' || true)
+
+# Python venv — required for all Python tooling
+if [ -n "$PY_FILES" ] || [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
+  source "$(dirname "$0")/resolve-venv.sh"
+fi
+
+# Check if only non-code files changed (skip build+test for docs-only pushes)
+# .githooks/ is excluded: a hook change cannot alter build or test outcomes, so
+# a hooks-only push should not pay for a clean rebuild.
+CODE_FILES=$(echo "$CHANGED_FILES" | grep -vE '^(LICENSE|CHANGELOG)' | grep -vE '\.(md|txt|rst)$' | grep -vE '^\.(gitignore|gitattributes)$' | grep -vE '^\.githooks/' || true)
+
+# ============================================================
+# Step 1: Clean build + test (hard block)
+# ============================================================
+
+# Extract a fenced code block under "## Build & Test" by tag (e.g. ```build ... ```)
+extract_block() {
+  local tag="$1"
+  if [ -f "CLAUDE.md" ]; then
+    sed -n -e '/^## Build & Test/,/^## /{' \
+      -e "/^\`\`\`${tag}$/,/^\`\`\`$/{ /^\`\`\`/d; p; }" \
+      -e '}' CLAUDE.md
+  fi
+}
+
+if [ -z "$CODE_FILES" ]; then
+  echo ""
+  echo "=== Skipping build+test (docs-only) ==="
+else
+  BUILD_FAILED=0
+  CLEAN_CMD=$(extract_block clean)
+  BUILD_CMD=$(extract_block build)
+  TEST_CMD=$(extract_block test)
+
+  if [ -n "$BUILD_CMD" ] || [ -n "$TEST_CMD" ]; then
+    # Use commands from CLAUDE.md
+    if [ -n "$CLEAN_CMD" ]; then
+      echo ""
+      echo "=== Clean ==="
+      set +e; eval "$CLEAN_CMD"; rc=$?; set -e
+      if [ "$rc" -ne 0 ]; then BUILD_FAILED=1; fi
+    fi
+    if [ -n "$BUILD_CMD" ] && [ "$BUILD_FAILED" -eq 0 ]; then
+      echo ""
+      echo "=== Build ==="
+      set +e; eval "$BUILD_CMD"; rc=$?; set -e
+      if [ "$rc" -ne 0 ]; then BUILD_FAILED=1; fi
+    fi
+    if [ -n "$TEST_CMD" ] && [ "$BUILD_FAILED" -eq 0 ]; then
+      echo ""
+      echo "=== Test ==="
+      set +e; eval "$TEST_CMD"; rc=$?; set -e
+      if [ "$rc" -ne 0 ]; then BUILD_FAILED=1; fi
+    fi
+  else
+    # Auto-detect from project files
+    if [ -f "CMakeLists.txt" ] && command -v cmake &>/dev/null; then
+      echo ""
+      echo "=== Clean build + test (C++) ==="
+      rm -rf build
+      if cmake -B build && cmake --build build -j"$(nproc 2>/dev/null || echo 4)"; then
+        if command -v ctest &>/dev/null; then
+          if ! GTEST_BRIEF=1 ctest --test-dir build --output-on-failure --progress -j"$(nproc 2>/dev/null || echo 4)"; then
+            BUILD_FAILED=1
+          fi
+        fi
+      else
+        BUILD_FAILED=1
+      fi
+    fi
+
+    if [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
+      if [ -x "$VENV_BIN/pytest" ]; then
+        echo ""
+        echo "=== Running tests (Python) ==="
+        rc=0; "$VENV_BIN/pytest" --tb=short -q || rc=$?
+        # rc=0: passed, rc=5: no tests collected (all skipped) — both OK
+        if [ "$rc" -ne 0 ] && [ "$rc" -ne 5 ]; then
+          BUILD_FAILED=1
+        fi
+      fi
+    fi
+  fi
+
+  if [ "$BUILD_FAILED" -ne 0 ]; then
+    echo ""
+    echo "Push blocked: build or tests failed."
+    exit 1
+  fi
+fi
+
+# ============================================================
+# Step 2: Remaining issues (warn and continue)
+# ============================================================
+
+ISSUES=""
+
+# clang-tidy -- HARD GATE over EVERY backend, delegated to the tracked `tidy`
+# CMake target.
+#
+# Step 1 above deliberately builds HiGHS-only: fast, no licences, no GPU. But
+# that leaves src/lp/{copt,cuopt,mosek}_solver.cpp out of its compile database,
+# so linting there covers 22 TUs instead of 25 and the three backend files are
+# never checked. clang-tidy needs only a *configure*, never a compiled tree
+# (HiGHS writes its generated headers at configure time), so lint from a
+# separate configure-only dir with whatever backends this machine has, reusing
+# the sources step 1 already fetched. ~3s to configure, ~30s to lint, and
+# nothing is compiled twice.
+#
+# This replaces an earlier warn-only per-file clang-tidy loop. A changed .h is not a translation unit
+# and has no compile-DB entry, so clang-tidy aborts on it; and the loop passed
+# neither --config-file nor --header-filter, so it skipped every header --
+# which is where nearly all of this codebase lives. Blocking is clang-tidy's
+# own exit code, driven by WarningsAsErrors in .clang-tidy. Keeping the
+# substance in CMakeLists.txt means this hook stays a thin delegation.
+TIDY_FAILED=0
+if [ -n "$CPP_FILES" ] || [ -n "$LINT_TRIGGERS" ]; then
+  TIDY_DIR="build-tidy"
+  TIDY_CFG=(-DCMAKE_EXPORT_COMPILE_COMMANDS=ON)
+
+  # Reuse the sources step 1 fetched instead of re-cloning HiGHS/googletest.
+  # Source dirs only: sharing FETCHCONTENT_BASE_DIR would point two CMake
+  # caches at the same _deps *build* dirs.
+  if [ -d "$PWD/build/_deps/highs-src" ]; then
+    TIDY_CFG+=("-DFETCHCONTENT_SOURCE_DIR_HIGHS=$PWD/build/_deps/highs-src")
+  fi
+  if [ -d "$PWD/build/_deps/googletest-src" ]; then
+    TIDY_CFG+=("-DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=$PWD/build/_deps/googletest-src")
+  fi
+
+  # Enable a backend only when its SDK is really present -- CMake fatals
+  # otherwise. Plain `if` rather than `[ x ] && cmd` purely for readability:
+  # bash exempts a failing command inside an && list from set -e, so the
+  # short form would NOT abort the hook (this file already relies on that at
+  # the `[ -z "$CHANGED_FILES" ] && exit 0` line above). The one real trap is
+  # such a list as the LAST statement of a script or function, where its
+  # non-zero status becomes the exit status.
+  if [ -n "${COPT_HOME:-}" ] && [ -d "${COPT_HOME:-}" ]; then
+    TIDY_CFG+=(-DMCFCG_USE_COPT=ON)
+  fi
+  # MOSEK_HOME is deliberately NOT exported from ~/.bashrc (only COPT_HOME is),
+  # so probe the standard SDK layout -- otherwise a plain `git push` would
+  # silently stop linting the MOSEK backend.
+  if [ -z "${MOSEK_HOME:-}" ]; then
+    MOSEK_HOME=$(ls -d /opt/mosek/*/tools/platform/linux64x86 2>/dev/null | tail -1 || true)
+    export MOSEK_HOME
+  fi
+  if [ -n "${MOSEK_HOME:-}" ] && [ -d "${MOSEK_HOME:-}" ]; then
+    TIDY_CFG+=(-DMCFCG_USE_MOSEK=ON)
+  fi
+  # cuOpt needs the fork's delta header at its nested path; stock cuOpt has no
+  # such header and makes CMake fatal, so test for the header, not the dir.
+  if [ -z "${CUOPT_ROOT:-}" ] && [ -d "$HOME/code/refs/cuopt" ]; then
+    export CUOPT_ROOT="$HOME/code/refs/cuopt"
+  fi
+  if [ -f "${CUOPT_ROOT:-}/cpp/include/cuopt/linear_programming/cuopt_c_delta.h" ]; then
+    TIDY_CFG+=(-DMCFCG_USE_CUOPT=ON)
+  fi
+
+  if ! cmake -B "$TIDY_DIR" "${TIDY_CFG[@]}" >/dev/null 2>&1; then
+    echo ""
+    echo "Note: lint configure failed — falling back to the HiGHS-only build,"
+    echo "      so the COPT/MOSEK/cuOpt backends go unlinted this push."
+    TIDY_DIR="build"
+  fi
+
+  # Assert the target exists rather than skipping when it does not. CMake's
+  # find_program guard turns a missing clang-tidy into a silent no-target, so
+  # without this an uninstalled clang-tidy would leave TIDY_FAILED=0 and every
+  # later push would sail through unlinted, reporting "All checks passed".
+  # `grep -qw tidy` is not enough either: -w treats '-' as a word boundary, so
+  # it matches the tidy-fix line too.
+  if [ -d "$TIDY_DIR" ] && cmake --build "$TIDY_DIR" --target help 2>/dev/null \
+       | grep -qxE '\.\.\. tidy'; then
+    echo ""
+    echo "=== Running clang-tidy ==="
+    if cmake --build "$TIDY_DIR" --target tidy -j"$(nproc 2>/dev/null || echo 4)"; then
+      echo "clang-tidy: clean"
+    else
+      TIDY_FAILED=1
+    fi
+  else
+    echo ""
+    echo "Push blocked: the clang-tidy 'tidy' target is unavailable in $TIDY_DIR."
+    echo "  Most likely clang-tidy is not installed, so the gate would silently"
+    echo "  pass. Install it and re-run cmake, or push with --no-verify only if"
+    echo "  you have decided to skip the gate deliberately."
+    TIDY_FAILED=1
+  fi
+fi
+
+# ruff complexity (C901, not auto-fixable)
+if [ -n "$PY_FILES" ] && [ -x "$VENV_BIN/ruff" ]; then
+  for f in $PY_FILES; do
+    [ -f "$f" ] || continue
+    RESULT=$("$VENV_BIN/ruff" check --select C901 --no-fix "$f" 2>&1 || true)
+    if [ -n "$RESULT" ] && ! echo "$RESULT" | grep -q "^All checks passed"; then
+      ISSUES="${ISSUES}${RESULT}"$'\n'
+    fi
+  done
+fi
+
+# shellcheck warnings
+if [ -n "$SH_FILES" ] && command -v shellcheck &>/dev/null; then
+  for f in $SH_FILES; do
+    [ -f "$f" ] || continue
+    RESULT=$(shellcheck "$f" 2>&1 || true)
+    if [ -n "$RESULT" ]; then
+      ISSUES="${ISSUES}${RESULT}"$'\n'
+    fi
+  done
+fi
+
+# mypy type errors
+if [ -n "$PY_FILES" ] && [ -x "$VENV_BIN/mypy" ]; then
+  echo ""
+  echo "=== Running mypy ==="
+  RESULT=$("$VENV_BIN/mypy" --strict $PY_FILES 2>&1 || true)
+  if echo "$RESULT" | grep -qE '(error):'; then
+    ISSUES="${ISSUES}${RESULT}"$'\n'
+  else
+    echo "mypy: clean"
+  fi
+fi
+
+# clang-tidy findings in the WarningsAsErrors set block the push. Everything
+# collected in $ISSUES below stays advisory.
+if [ "$TIDY_FAILED" -ne 0 ]; then
+  echo ""
+  echo "Push blocked: clang-tidy reported errors (WarningsAsErrors in .clang-tidy)."
+  echo "Fix them, or run: cmake --build build --target tidy"
+  exit 1
+fi
+
+# If issues found, warn but allow push
+if [ -n "$ISSUES" ]; then
+  echo ""
+  echo "═══════════════════════════════════════════"
+  echo "  Issues found:"
+  echo "═══════════════════════════════════════════"
+  echo "$ISSUES"
+  echo "═══════════════════════════════════════════"
+  echo ""
+  echo "Warning: pushing with known issues."
+else
+  echo ""
+  echo "All checks passed."
+fi
+
+exit 0

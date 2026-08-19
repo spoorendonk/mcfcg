@@ -219,6 +219,23 @@ cmake --build build -j$(nproc)
 | `-DMCFCG_USE_COPT=ON`    | OFF | Enable the COPT LP backend (requires COPT installed, `COPT_HOME` set) |
 | `-DMCFCG_USE_MOSEK=ON`   | OFF | Enable the MOSEK CPU barrier LP backend (requires MOSEK, `MOSEK_HOME` set) |
 | `-DMCFCG_NATIVE_ARCH=OFF` | ON | Disable `-march=native`. Keep ON for SIMD auto-vectorization of the hot `cost[a] - mu[a]` pricing loop; only turn OFF for portable binaries. |
+| `-DMCFCG_INSTALL_GIT_HOOKS=OFF` | ON | Stop configure from pointing this checkout's `core.hooksPath` at the tracked `.githooks/` (see below). |
+
+### Git hooks
+
+Development hooks are tracked in [`.githooks/`](.githooks): `commit-msg`
+(Conventional Commits), `pre-commit` (formats and re-stages the staged C++, then
+runs the tests) and `pre-push` (clean build, tests, and the `tidy` clang-tidy
+gate). Git only runs hooks from `core.hooksPath`, which is per-checkout config
+and therefore cannot itself be tracked, so `cmake -B build` sets it for you. It
+leaves an existing `.githooks` value alone and warns rather than overwriting a
+hooksPath you set deliberately. To do it by hand, or after configuring with
+`-DMCFCG_INSTALL_GIT_HOOKS=OFF`:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 
 ### cuOpt and the delta-API fork
 

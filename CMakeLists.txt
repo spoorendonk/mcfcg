@@ -13,6 +13,37 @@ option(MCFCG_CUOPT_DELTA_API
 option(MCFCG_USE_COPT "Enable COPT LP solver backend" OFF)
 option(MCFCG_USE_MOSEK "Enable MOSEK LP solver backend" OFF)
 option(MCFCG_NATIVE_ARCH "Build with -march=native (host CPU tuning, non-portable binary)" ON)
+option(MCFCG_INSTALL_GIT_HOOKS "Point this checkout's core.hooksPath at the tracked .githooks/" ON)
+
+# The git hooks live in .githooks/ under version control, so a fresh clone gets
+# them for free -- but git only runs hooks from core.hooksPath, which is
+# per-checkout config and cannot be tracked. Configure sets it, since
+# `cmake -B build` is the first thing anyone runs here. Idempotent, and it never
+# overwrites a value someone else set deliberately: only an unset hooksPath, or
+# one already pointing at .githooks, is touched.
+# EXISTS, not IS_DIRECTORY: in a linked worktree .git is a file.
+if(MCFCG_INSTALL_GIT_HOOKS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    find_package(Git QUIET)
+    if(GIT_FOUND)
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" config --get core.hooksPath
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            OUTPUT_VARIABLE MCFCG_HOOKS_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET)
+        if(NOT MCFCG_HOOKS_PATH)
+            execute_process(
+                COMMAND "${GIT_EXECUTABLE}" config core.hooksPath .githooks
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+            message(STATUS "git hooks: core.hooksPath -> .githooks")
+        elseif(NOT MCFCG_HOOKS_PATH STREQUAL ".githooks")
+            message(WARNING
+                "git hooks: core.hooksPath is '${MCFCG_HOOKS_PATH}', not '.githooks'. "
+                "The tracked hooks under .githooks/ are NOT running. "
+                "Fix with: git config core.hooksPath .githooks")
+        endif()
+    endif()
+endif()
 
 # HiGHS — always available as default fallback
 include(FetchContent)
