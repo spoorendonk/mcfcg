@@ -11,10 +11,26 @@ It is not, by enough to matter. **The flag ships off by default** and this
 directory is the evidence.
 
 Scope: what is archived here is the paired on/off A/B across three families. Two
-supporting measurements referenced in the CLAUDE.md notes are *not* — the
-all-backend cutoff-on pass and the rejected stale-arc experiment (+31% wall
-clock) both live in the gitignored `bench_runs/`. Neither is load-bearing for the
+supporting measurements cited below are *not* — the all-backend cutoff-on pass
+and the rejected stale-arc experiment (+31% wall clock) both live in the
+gitignored `bench_runs/`. Neither is load-bearing for the
 conclusion below; both are flagged where they are cited.
+
+## How it works
+
+`CGParams::pricing_cutoff` (CLI `--pricing-cutoff`) bounds the best reduced cost
+still reachable from the frontier and stops once that bound clears
+`neg_rc_tol`. The bound differs by formulation:
+
+- **path** — `max π` over the unsettled sinks.
+- **tree** — the residual convexity budget over the *sum* of the remaining
+  demands.
+
+Both add an allowance so the cut need only prove `rc ≥ neg_rc_tol` rather than
+`rc ≥ 0`, and **that allowance is what makes it fire at all**: 65–77% of searches
+cut with it, against 0–32% without. The reason is that at a master optimum every
+structural row has a basic column at reduced cost 0, so the frontier reaches the
+sink at almost exactly the dual — an exact-zero test almost never triggers.
 
 ## The result
 
@@ -56,15 +72,18 @@ wall clock spent pricing. The product never exceeds ~2% on any family, and it is
 ~2% only on instances that finish in under a minute: across the committed
 benchmark the pricing share collapses as instances get harder (planar2500 0.1%,
 Philadelphia 1.1%, Birmingham 1.6%, Austin 4.3%), while one extra CG iteration
-there costs 0.4–1.5% of wall clock.
+there costs 0.4–1.5% of wall clock. Scaling intermodal up does not open this
+up: it has one commodity per source *by construction* — each request is its own
+source — so the ~2% per-price saving is structural, not a size effect.
 
 Two caveats that the raw wall-clock column will mislead you about:
 
 - **`t_PR` alone is not a pricing measurement.** The cutoff shifts the CG
-  trajectory (two channels, both documented in CLAUDE.md; neither is a
-  correctness bug), so an arm can price fewer sources and post a lower `t_PR`
+  trajectory (two channels, both under "Trajectory channels" below; neither is
+  a correctness bug), so an arm can price fewer sources and post a lower `t_PR`
   with every individual price costing the same. The `per_price_us` column
-  (`t_PR / priced_sources`) is the trajectory-immune metric, and the
+  (`t_PR / priced_sources`) is the trajectory-immune metric — computable from
+  each run's `[pricing-cutoff] cut=… priced=…` log line — and the
   `traj_moved` / `traj_stable` pair flags the cells where it can be read.
 - **Family totals inside the noise floor are noise.** transportation's −2.4%
   is not a gain: Barcelona shows −2.2% wall clock while its *per-price* cost rose
@@ -97,6 +116,58 @@ HiGHS ranges wider still. The ablation's own sweeps show slightly different
 shares — 85.3% for copt-cpu, 71.5% for copt-gpu — because they cover tree only
 and a different session; the table above is the one an outside reader can
 recompute from the release.)
+
+## Implementation traps
+
+Three traps the implementation must respect, each a live bug caught in review.
+All three are pinned by `FeatureTests.PricingCutoff*` in
+`test/integration_test.cpp`; read them before touching the cutoff code.
+
+- **`MAX_BOUND` is overloaded.** It is both `scale_dual`'s saturation value and
+  `compute_lower_bounds_to_targets`' `UNREACHED` sentinel, so a frontier at or
+  above it means **dead ends**, not a dual proof. Cutting there salvages ~4.6e9
+  into `best_lb` and suppresses the tree's partial column.
+- **Zero-demand commodities.** One drives the tree's remaining demand to 0 with
+  budget left; cutting there suppresses a strictly improving column on every
+  iteration and CG reports the result as optimal. CommaLab keeps zero-demand
+  rows — only TNTP filters them — so this is reachable on real instances.
+- **The tree budget must stay `+inf` through the warm start's `+inf` duals.** It
+  *divides* by remaining demand, so a saturated finite budget becomes a
+  reachable threshold and a source goes unseeded — fatal in `EdgeRows`, which
+  has no demand slack to absorb it.
+
+The column set is pinned bit-for-bit — cost, reduced cost, and the full arc list
+/ arc-flow vector — by
+`FeatureTests.PricingCutoffShadow{Tree,Path,IntermodalTree}`, which run the real
+`solve_cg` with the cutoff **off** while shadowing every dual vector with a
+second cutoff-on pricer (25k fires / 3.2k columns compared on BUS-2632-0 alone).
+
+## Trajectory channels
+
+**The cutoff is column-identical but not trajectory-neutral.** Switching it on
+moves intermodal iteration counts by up to ±10 and changes column counts. That is
+expected and is not a dropped column. Two channels cause it, neither a
+correctness bug — and note the pricing-exhausted `final_round` re-prices every
+source regardless of postponement:
+
+- **Stale arc sets.** A cut search does not refresh `_source_arcs[s]`
+  (`should_record_arcs`: a partial set would understate the routing and postpone
+  a source that a new capacity row does affect), so `filter_for_new_caps` decides
+  postponement from the routing that source had at its last *complete* price.
+  Different sources priced → different columns that iteration → a different LP →
+  a different lazily separated capacity set. Live only when the filter is on
+  (`pricer_heavy || pricing_filter`).
+
+  Do **not** "fix" this by treating a cut source as affected — `_source_cut[s]`
+  is already that flag. Measured **+31% wall clock** on intermodal, because a
+  65–77% fire rate makes nearly every source affected and the filter stops
+  filtering; SBT-56295 alone paid **+68%** at an unchanged iteration count. (This
+  is the stale-arc experiment noted as unarchived above.)
+- **A weaker lower bound.** `salvage_lagr_term` substitutes
+  `d_k·(cutoff_f/SCALE − margin)` for the `sp_k` a truncated search never
+  computed. Valid but weaker, so `best_lb` differs and the gap exit fires on a
+  different iteration. Live in every configuration; moves the iteration count
+  with an identical column set.
 
 ## Files
 
@@ -150,7 +221,8 @@ Reproducing a sweep — the two arms differ only in `--extra-args`:
 - **Do not A/B under copt-gpu.** Re-running the *same* config on grid/planar
   differs on 23/48 instances — the same rate as on-vs-off — because the GPU
   barrier's interior point shifts and lazy separation then picks a different
-  violated-capacity set. `transportation_tree` is on the same backend and is no
+  violated-capacity set. Concretely: grid10 tree diverges at iteration 13 on
+  `#row` 1032 vs 1033, with identical `#col` and `LP_obj`. `transportation_tree` is on the same backend and is no
   better: 4 of its 6 cells fail to reproduce their own iteration and column
   counts across same-config reps, which is why 5 of 6 read `traj_moved=1` and
   none is quotable per-price. Read both sweeps' family totals, not their
@@ -164,7 +236,11 @@ Reproducing a sweep — the two arms differ only in `--extra-args`:
   wall clock still moved by −5.5% to **+15.3%** between sessions across the 39
   such cells. The worst is HiGHS on SBT-43785-0 tree — 6 iterations and 45,733
   columns in both arms, yet `t_LP` up **10.7%** on a byte-identical LP sequence.
-  Both arms must come from one session.
+  Both arms must come from one session. This is also why the cutoff-on pass
+  reading **+18…+32% on HiGHS** against the committed cells is quoted nowhere as
+  a number: the direction is credible — HiGHS is the one backend whose LP share
+  is large enough for the trajectory term to dominate — but the magnitude is
+  cross-session and therefore not citable.
 
 ## Backends
 
