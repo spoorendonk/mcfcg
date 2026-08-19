@@ -29,7 +29,7 @@ import unittest
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 
-import analyze_pricing_cutoff_ablation as abl  # noqa: E402
+import analyze_bounded_pricing_ablation as abl  # noqa: E402
 
 # A minimal but real-shaped run log: the CLI's 2-line result CSV, the summary
 # line, two iteration rows, and the bounded-pricing banner.
@@ -285,17 +285,25 @@ class CommittedAblationTest(unittest.TestCase):
     def setUpClass(cls):
         cls.sweeps = [os.path.join(REPO, s) for s in abl.DEFAULT_SWEEPS]
         if not all(os.path.isdir(s) for s in cls.sweeps):
-            raise unittest.SkipTest("results/ablation logs not present")
+            raise unittest.SkipTest("results/ablation/families logs not present")
         cls.rows = abl.summarize(abl.collect(cls.sweeps))
 
-    def test_every_cell_is_paired_with_at_least_two_reps(self):
+    def test_every_cell_is_paired_at_the_round_s_uniform_three_reps(self):
+        # 3 reps everywhere is the point of round (a): the archived sweep it
+        # replaced was mixed-rep, and its 2-rep cells misread the sign of the
+        # per-price effect (gh #43). An exact count, not a floor, so a cell
+        # silently dropping to 2 fails here rather than being quoted.
+        #
         # Pin the totals too: a whole logs_*/ dir going missing would still leave
-        # >=2 reps on most cells, so a rep-count floor alone would not notice.
-        self.assertEqual(len(abl.collect(self.sweeps)), 424, "log count changed")
+        # a full rep count on the cells that survive.
+        #   288 = 48 grid+planar cells x 6 dirs (3 reps x 2 arms)
+        #    36 =  6 transportation x 6
+        #   120 = 10 intermodal x 6, on each of copt-gpu and copt-cpu
+        self.assertEqual(len(abl.collect(self.sweeps)), 444, "log count changed")
         self.assertEqual(len(self.rows), 74, "cell count changed")
         for r in self.rows:
-            self.assertGreaterEqual(r["reps_off"], 2)
-            self.assertGreaterEqual(r["reps_on"], 2)
+            self.assertEqual(r["reps_off"], 3, f"{r['sweep']}/{r['instance']} off reps")
+            self.assertEqual(r["reps_on"], 3, f"{r['sweep']}/{r['instance']} on reps")
 
     def test_the_two_arms_agree_on_the_optimum(self):
         """The bound is a proof, not a heuristic: switching it on must not move

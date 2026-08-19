@@ -35,6 +35,10 @@ Examples:
   python3 scripts/benchmark_solvers.py --families grid --instances grid1 \
       --time-limit 120
 
+  # an explicit subset of a family (--instances is a comma-separated glob list)
+  python3 scripts/benchmark_solvers.py --families transportation \
+      --instances Barcelona,BerlinCenter,Chicago*
+
   # COPT GPU-on vs GPU-off control on planar
   python3 scripts/benchmark_solvers.py --families planar --solvers copt-cpu,copt-gpu
 
@@ -102,6 +106,16 @@ def load_optimal(path):
             if len(row) >= 2 and row[0]:
                 refs[row[0]] = float(row[1])
     return refs
+
+
+def parse_instance_globs(spec):
+    """Split a --instances spec into fnmatch globs. Empty/None means "no filter"."""
+    return [g.strip() for g in spec.split(",") if g.strip()] if spec else []
+
+
+def instance_matches(key, globs):
+    """True when `key` passes the filter: no globs at all, or any one of them."""
+    return not globs or any(fnmatch.fnmatch(key, g) for g in globs)
 
 
 def enumerate_family(family):
@@ -591,7 +605,12 @@ def main():
                          "Per-family extras apply to both formulations when this "
                          "overrides the default one.")
     ap.add_argument("--instances", default=None,
-                    help="fnmatch glob on the ref key to filter (e.g. 'grid1', 'BUS-*').")
+                    help="comma-separated fnmatch globs on the ref key; an instance runs if "
+                         "ANY of them matches (e.g. 'grid1', 'BUS-*', "
+                         "'Barcelona,Sydney,Winnipeg'). A single name has no comma and so "
+                         "behaves exactly as before. fnmatch has no negation, and the "
+                         "character-class forms that come close ('[!AP]*') match by accident "
+                         "as names change -- name the instances you want.")
     ap.add_argument("--max-planar", type=int, default=None,
                     help="skip planar instances larger than this vertex count.")
     ap.add_argument("--time-limit", type=float, default=7200.0,
@@ -618,6 +637,7 @@ def main():
                          "Default under gitignored bench_runs/, not repo root.")
     args = ap.parse_args()
     extra_args = shlex.split(args.extra_args) if args.extra_args else []
+    inst_globs = parse_instance_globs(args.instances)
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     os.makedirs(args.logdir, exist_ok=True)
@@ -661,7 +681,7 @@ def main():
     for family in families:
         refs = load_optimal(os.path.join(REPO, "data", FAMILY_OPTIMAL[family]))
         for instance, key, default_form, extra in enumerate_family(family):
-            if args.instances and not fnmatch.fnmatch(key, args.instances):
+            if not instance_matches(key, inst_globs):
                 continue
             if family == "planar" and args.max_planar is not None:
                 n = int(re.sub(r"\D", "", key))

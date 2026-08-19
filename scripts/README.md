@@ -230,20 +230,24 @@ python3 scripts/extract_iterations.py                        # same --logdir set
 python3 scripts/consolidate_mps_logs.py
 ```
 
-The bounded-pricing ablation used to be the one exception to "logs are never
-tracked", shipping its 424 raw logs under `results/ablation/`. Those logs ran
-under the old `--pricing-cutoff` flag and were deleted rather than carried past
-the rename (gh #42); gh #43 re-runs the ablation under `--bounded-pricing`. The
-consolidator is still here and still re-parses rather than re-solves, but until
-that re-run lands it has nothing to read and exits with "sweep dir(s) not found":
+The bounded-pricing ablation is the one exception to "logs are never tracked":
+it settles a design question rather than feeding a results table, so its raw logs
+are the primary artifact and ship under `results/ablation/`. It is split into
+rounds, each a directory named for the axis it varies — round (a),
+`families/`, is one backend across four families. Its analyzer re-parses those
+tracked logs and never re-solves:
 
 ```
-# ablation logs -> results/ablation/pricing_cutoff_{runs,summary}.csv
-python3 scripts/analyze_pricing_cutoff_ablation.py
+# ablation logs -> results/ablation/families/{runs,summary}.csv
+python3 scripts/analyze_bounded_pricing_ablation.py
 ```
 
-See `results/ablation/README.md` for what it measured and the two comparisons not
-to repeat.
+Pointed at a fresh sweep dir instead, it prints without writing:
+`... .py bench_runs/mysweep --no-write`.
+
+See `results/ablation/README.md` for what the ablation measured and the two
+comparisons not to repeat, and `results/ablation/families/README.md` for round
+(a)'s own scope, sweep commands and acceptance.
 
 ### Counting columns: three different numbers
 

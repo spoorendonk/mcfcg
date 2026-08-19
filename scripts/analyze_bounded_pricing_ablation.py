@@ -16,9 +16,9 @@ running `benchmark_solvers.py` twice per repetition, identically except for
     for rep in 1 2 3; do
       for arm in off on; do
         [ "$arm" = on ] && extra=--extra-args=--bounded-pricing || extra=
-        python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-cpu \
-            $extra --out   bench_runs/SWEEP/copt-cpu_${arm}_rep${rep}.csv \
-                   --logdir bench_runs/SWEEP/logs_copt-cpu_${arm}_rep${rep}
+        python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-gpu \
+            $extra --out   bench_runs/SWEEP/copt-gpu_${arm}_rep${rep}.csv \
+                   --logdir bench_runs/SWEEP/logs_copt-gpu_${arm}_rep${rep}
       done
     done
 
@@ -50,7 +50,9 @@ cell's wall delta can be read as a pricing effect at all:
 `pred_wall_pct` is the cost model's first term, `pricing_share x per-price
 saving` -- the gain the bound can deliver when the trajectory holds still. On
 the four copt-cpu intermodal cells that qualify it predicted
--2.3/-2.5/-1.6/-2.1% against measured -2.3/-2.4/-1.7/-2.3%, i.e. within 0.13pp.
+-3.3/-2.3/-2.8/-0.7% against measured -3.4/-2.3/-2.9/-1.0%, i.e. within 0.26pp.
+The same four cells under copt-gpu miss by up to 1.59pp, because that executor's
+OFF arm carries an inflated t_PR baseline -- see results/ablation/families/README.md.
 The model's second term, `-LP_share x Delta-iterations`, is what makes the flag
 backend-specific and is not predictable per instance; it is why a single-backend
 measurement of this flag is worthless.
@@ -61,11 +63,11 @@ the CG gap tolerance. (The bit-for-bit column identity claim is a stronger
 statement and is pinned in C++, by FeatureTests.BoundedPricingShadow*.)
 
 Usage:
-  # regenerate the committed ablation CSVs from the three paired sweeps
-  python3 scripts/analyze_pricing_cutoff_ablation.py
+  # regenerate round (a)'s committed CSVs from its three tracked sweeps
+  python3 scripts/analyze_bounded_pricing_ablation.py
 
   # a fresh sweep, print only
-  python3 scripts/analyze_pricing_cutoff_ablation.py bench_runs/mysweep --no-write
+  python3 scripts/analyze_bounded_pricing_ablation.py bench_runs/mysweep --no-write
 """
 
 import argparse
@@ -79,28 +81,33 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from benchmark_solvers import REPO, parse_csv_row, parse_iteration_table  # noqa: E402
 
-# The three paired same-session sweeps behind the manuscript's section 3.3
-# numbers. Order is presentation order -- nothing supersedes anything here,
-# unlike consolidate_cg_logs.py's --logdir list.
+# Round (a) of the ablation -- one backend (copt-gpu) across four families, 3
+# reps everywhere. Order is presentation order -- nothing supersedes anything
+# here, unlike consolidate_cg_logs.py's --logdir list.
 #
-# NONE OF THESE DIRECTORIES EXIST RIGHT NOW. The ablation's logs were the one
-# tracked log set in the repo, but they ran under the old --pricing-cutoff flag
-# and were deleted rather than carried past the rename (gh #42); gh #43 re-runs
-# the whole ablation under --bounded-pricing. Until it does, an argument-less
-# invocation exits with "sweep dir(s) not found", which is the honest state:
-# there is no committed ablation record. Repoint these paths at whatever layout
-# that re-run produces (gh #45 covers the layout decision).
+# The round dir is named for the axis it varies: round (a) varies FAMILY at a
+# fixed backend, so it lives under families/. Round (b) (gh #44) varies backend
+# at a fixed family and gets its own backends/ sibling; keep the two apart, since
+# their cells are not comparable cell-for-cell (different sessions).
+#
+# These paths are the committed record. An argument-less invocation re-derives
+# runs.csv and summary.csv from them and must be byte-identical to what is
+# tracked -- CommittedAblationTest pins exactly that.
 DEFAULT_SWEEPS = [
-    # intermodal, tree + PricerHeavy, copt-cpu (3 reps) and copt-gpu (2 reps)
-    "results/ablation/logs/intermodal_tree",
-    # transportation, tree, copt-gpu, 3 reps
-    "results/ablation/logs/transportation_tree",
-    # grid + planar<=1000, path and tree, copt-gpu, 3 reps
-    "results/ablation/logs/gridplanar_path_tree",
+    # intermodal (10 instances), tree + PricerHeavy, 3 reps, on copt-gpu AND
+    # copt-cpu: this is the only family where a per-price number is quotable, so
+    # it carries a second executor to corroborate the one the round varies on.
+    "results/ablation/families/logs/intermodal_tree",
+    # transportation (6 of 9 instances; 3 excluded on cost), tree, copt-gpu, 3 reps
+    "results/ablation/families/logs/transportation_tree",
+    # grid (15) + planar<=1000 (9), path and tree, copt-gpu, 3 reps
+    "results/ablation/families/logs/gridplanar_path_tree",
 ]
 
-RUNS_CSV = "results/ablation/pricing_cutoff_runs.csv"
-SUMMARY_CSV = "results/ablation/pricing_cutoff_summary.csv"
+# Plain names: the round directory already says which round these describe, so a
+# filename prefix would only repeat it.
+RUNS_CSV = "results/ablation/families/runs.csv"
+SUMMARY_CSV = "results/ablation/families/summary.csv"
 
 SUMMARY_LINE = re.compile(
     r"CG optimal after (\d+) iterations\. UB=(\S+) LB=(\S+) gap=(\S+) tol=(\S+)\s+"
