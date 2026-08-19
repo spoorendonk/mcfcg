@@ -14,7 +14,7 @@ namespace mcfcg {
 class TreePricer : public PricerBase<TreePricer, TreeColumn> {
     friend class PricerBase<TreePricer, TreeColumn>;
 
-    // Dual pricing cutoff for the tree formulation.  The tree's reduced cost
+    // Bounded pricing for the tree formulation.  The tree's reduced cost
     // is −π_s + Σ_k d_k·sp_k, so it stays non-negative once the settled sinks
     // have consumed the convexity dual: with `budget` = π_s·SCALE − Σ_settled
     // d_k·g_k and `rem_demand` = Σ_unsettled d_k, every unsettled sink is at
@@ -22,8 +22,8 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
     // the whole tree prices out.  Dividing by the *sum* of remaining demands
     // (manuscript §3.3) is sharper than the min-demand form the removed
     // Dijkstra-mode code used.
-    class Cutoff {
-        std::vector<CutoffEntry>* _entries;  // sorted by sink ascending
+    class PricingBound {
+        std::vector<BoundEntry>* _entries;  // sorted by sink ascending
         double _budget;
         double _rem_demand;
         int64_t _bound;
@@ -58,7 +58,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         }
 
     public:
-        Cutoff(std::vector<CutoffEntry>& entries, double budget, double rem_demand)
+        PricingBound(std::vector<BoundEntry>& entries, double budget, double rem_demand)
             : _entries(&entries), _budget(budget), _rem_demand(rem_demand) {
             recompute();
         }
@@ -69,7 +69,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             auto& entries = *_entries;
             auto pos = std::lower_bound(
                 entries.begin(), entries.end(), sink,
-                [](const CutoffEntry& entry, uint32_t key) { return entry.sink < key; });
+                [](const BoundEntry& entry, uint32_t key) { return entry.sink < key; });
             // Every commodity sharing this sink is settled by this one pop, so
             // the whole equal-sink run leaves the budget at once.
             for (; pos != entries.end() && pos->sink == sink; ++pos) {
@@ -80,8 +80,8 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         }
     };
 
-    Cutoff make_cutoff(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
-                       std::vector<CutoffEntry>& scratch) const {
+    PricingBound make_bound(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
+                            std::vector<BoundEntry>& scratch) const {
         scratch.clear();
         scratch.reserve(src.commodity_indices.size());
         double rem_demand = 0.0;
@@ -90,7 +90,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             scratch.push_back({_inst->commodities[k].sink, 0, demand});
             rem_demand += demand;
         }
-        std::ranges::sort(scratch, [](const CutoffEntry& lhs, const CutoffEntry& rhs) {
+        std::ranges::sort(scratch, [](const BoundEntry& lhs, const BoundEntry& rhs) {
             return lhs.sink < rhs.sink;
         });
         // Budget = SCALE·π_s, plus an allowance that makes the cut provably no
@@ -102,7 +102,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         // gives true_tree_rc ≥ _neg_rc_tol, where D is the source's total
         // demand.  Without it the demand weighting scales the rounding gap by D
         // — on a source with D ≈ 1e5 that is ~5e-3, five times NEG_RC_TOL, so
-        // the cutoff could suppress a column the pricer would otherwise accept.
+        // the bound could suppress a column the pricer would otherwise accept.
         // The _neg_rc_tol term is negative and usually dominates, making the
         // bound slightly *tighter* than the naive one rather than looser.
         //
@@ -120,7 +120,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi_s,
                         const static_map<uint32_t, double>& mu, auto& dijk,
                         std::vector<TreeColumn>& new_columns, uint32_t /*thread_id*/,
-                        std::optional<int64_t> cutoff_f) {
+                        std::optional<int64_t> bound_f) {
         TreeColumn col;
         col.source_idx = s_idx;
         col.cost = 0.0;
@@ -132,7 +132,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         // collapses).
         double source_lagr_sum = 0.0;
 
-        const bool record_arcs = should_record_arcs(cutoff_f);
+        const bool record_arcs = should_record_arcs(bound_f);
         if (record_arcs) {
             _source_arcs[s_idx].clear();
         }
@@ -161,13 +161,14 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             // anyway.  Preprocess disconnected instances via mcfcg_clean before
             // solving, as the class docs ask.
             //
-            // A dual cutoff also leaves sinks unsettled, but those are merely
-            // proven unattractive, not unreachable — salvage their Lagrangian
-            // term from the frontier the search stopped at.  That only feeds
-            // the lower bound: a cut source emits no column at all (see below),
-            // precisely so the cutoff never manufactures a partial tree.
+            // Bounded pricing also leaves sinks unsettled, but those are
+            // merely proven unattractive, not unreachable — salvage their
+            // Lagrangian term from the frontier the search stopped at.  That
+            // only feeds the lower bound: a cut source emits no column at all
+            // (see below), precisely so the bound never manufactures a partial
+            // tree.
             if (!dijk.visited(sink)) {
-                source_lagr_sum += salvage_lagr_term(cutoff_f, _inst->commodities[k].demand);
+                source_lagr_sum += salvage_lagr_term(bound_f, _inst->commodities[k].demand);
                 continue;
             }
             double d = _inst->commodities[k].demand;
@@ -210,14 +211,14 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
 
         // A cut search settled only part of the source's sinks, so tree_rc
         // above is missing those commodities' (non-negative) contributions and
-        // reads more negative than the true tree reduced cost.  The cutoff
+        // reads more negative than the true tree reduced cost.  The bound
         // already proved the true value is non-negative, so the source is
         // simply postponed.  Emitting the partial tree instead would be a
         // correctness bug, not just a weak column: nothing in the tree master
         // constrains a column to serve every commodity of its source — the
         // convexity row counts trees, not demand — so under-served demand
         // would go unnoticed and drag the objective below the true optimum.
-        if (cutoff_f.has_value()) {
+        if (bound_f.has_value()) {
             _source_postponed[s_idx] = 1;
             return;
         }

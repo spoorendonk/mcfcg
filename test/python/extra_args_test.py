@@ -52,8 +52,8 @@ class ExtraArgsReachChildTest(unittest.TestCase):
         return seen.get("cmd", [])
 
     def test_family_defaults_and_extra_args_both_present(self):
-        cmd = self.build_cmd(["--strategy", "pricer-heavy", "--pricing-cutoff"])
-        self.assertIn("--pricing-cutoff", cmd)
+        cmd = self.build_cmd(["--strategy", "pricer-heavy", "--bounded-pricing"])
+        self.assertIn("--bounded-pricing", cmd)
         # The per-family default must survive alongside it, not be replaced.
         self.assertIn("--strategy", cmd)
         self.assertIn("pricer-heavy", cmd)
@@ -61,16 +61,16 @@ class ExtraArgsReachChildTest(unittest.TestCase):
         self.assertIn("--copt-gpu-mode", cmd)
 
     def test_no_extra_args_leaves_command_unchanged(self):
-        self.assertNotIn("--pricing-cutoff", self.build_cmd([]))
+        self.assertNotIn("--bounded-pricing", self.build_cmd([]))
 
-    def test_no_family_default_enables_the_pricing_cutoff(self):
-        """gh #41 shipped the cutoff off (see results/ablation/), and
+    def test_no_family_default_enables_bounded_pricing(self):
+        """gh #41 shipped bounded pricing off (see results/ablation/), and
         results/cg_benchmark.csv has no extra_args column -- so a family default
         that quietly turned it on would be both unrecorded and unnoticed."""
         checked = 0
         for family in bs.FAMILY_OPTIMAL:
             for _inst, key, _form, extra in bs.enumerate_family(family):
-                self.assertNotIn("--pricing-cutoff", extra, f"{family}/{key}")
+                self.assertNotIn("--bounded-pricing", extra, f"{family}/{key}")
                 checked += 1
         self.assertGreater(checked, 0, "enumerate_family yielded nothing to check")
 
@@ -79,8 +79,8 @@ class ExtraArgsQuotingTest(unittest.TestCase):
     """argparse hands --extra-args over as one string; shlex.split is what splits it."""
 
     def test_multiple_flags_split_into_separate_argv_entries(self):
-        self.assertEqual(bs.shlex.split("--pricing-cutoff --threads 4"),
-                         ["--pricing-cutoff", "--threads", "4"])
+        self.assertEqual(bs.shlex.split("--bounded-pricing --threads 4"),
+                         ["--bounded-pricing", "--threads", "4"])
 
     def test_empty_value_yields_no_flags(self):
         self.assertEqual(bs.shlex.split(""), [])
@@ -98,9 +98,9 @@ class ExtraArgsRecordedInCsvTest(unittest.TestCase):
         buf = io.StringIO()
         writer = csv.DictWriter(buf, fieldnames=fields)
         writer.writeheader()
-        writer.writerow({f: "" for f in fields} | {"extra_args": "--pricing-cutoff"})
+        writer.writerow({f: "" for f in fields} | {"extra_args": "--bounded-pricing"})
         row = next(iter(csv.DictReader(io.StringIO(buf.getvalue()))))
-        self.assertEqual(row["extra_args"], "--pricing-cutoff")
+        self.assertEqual(row["extra_args"], "--bounded-pricing")
 
     def test_source_fields_list_still_contains_extra_args(self):
         with open(os.path.join(REPO, "scripts", "benchmark_solvers.py")) as fh:

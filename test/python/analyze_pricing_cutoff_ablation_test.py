@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""The cutoff ablation's failure modes are all sign errors and silent zeros.
+"""The bounded-pricing ablation's failure modes are all sign errors and silent zeros.
 
 Fourth file in this tier (see test/python/log_headers_test.py for the template).
 This analyzer is the only consumer of the one tracked log set in the repo, and
-the numbers it derives are the sole evidence for shipping the dual pricing cutoff
+the numbers it derives are the sole evidence for shipping bounded pricing
 disabled. Every way it can be wrong is quiet:
 
   * `per_price_us` built from the wrong counter -- `cut` instead of `priced`, say
@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.join(REPO, "scripts"))
 import analyze_pricing_cutoff_ablation as abl  # noqa: E402
 
 # A minimal but real-shaped run log: the CLI's 2-line result CSV, the summary
-# line, two iteration rows, and the cutoff banner.
+# line, two iteration rows, and the bounded-pricing banner.
 LOG_TEMPLATE = """\
 # cmd: build/mcfcg_cli data/intermodal/BUS-2632-0.txt.gz --formulation tree
 Instance: 119865 vertices, 397362 arcs, 5256 commodities, 2628 sources
@@ -41,17 +41,18 @@ Instance: 119865 vertices, 397362 arcs, 5256 commodities, 2628 sources
     2   1.0000e+00   1.0000e+00   1.0000e+00    120     10     0    {last_col}      0      0      0   0.100   0.200   0.000   0.300     0.600
 CG optimal after 2 iterations. UB=71026.500000 LB=71021.870000 gap=1.0e+00 tol=1.0e+00  \
 t_LP=0.200  t_PR={t_pr}  t_SP=0.000  t_Tot={t_tot}
-[pricing-cutoff] enabled={enabled} cut={cut} priced={priced} rate=0.0%
+[{tag}] enabled={enabled} cut={cut} priced={priced} rate=0.0%
 instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
 data/intermodal/BUS-2632-0.txt.gz,tree,2,{columns},71026.500000,71021.870000,1,{t_tot},0.200,{t_pr},0.000
 """
 
 
 def write_log(path, *, t_pr="1.000", t_tot="2.000", enabled=0, cut=0, priced=500,
-              columns=120, last_col="*20"):
+              columns=120, last_col="*20", tag="bounded-pricing"):
     with open(path, "w") as fh:
         fh.write(LOG_TEMPLATE.format(t_pr=t_pr, t_tot=t_tot, enabled=enabled, cut=cut,
-                                     priced=priced, columns=columns, last_col=last_col))
+                                     priced=priced, columns=columns, last_col=last_col,
+                                     tag=tag))
 
 
 class ParseLogTest(unittest.TestCase):
@@ -70,7 +71,7 @@ class ParseLogTest(unittest.TestCase):
 
     def test_per_price_divides_by_priced_not_by_cut(self):
         """The metric is t_PR per source PRICED. Dividing by `cut` would track the
-        fire rate instead and silently reward a cutoff that fires more."""
+        fire rate instead and silently reward a bound that fires more."""
         rec = self.parse(t_pr="1.000", priced=500, cut=250)
         self.assertAlmostEqual(rec["per_price_us"], 1e6 * 1.000 / 500)
         self.assertAlmostEqual(rec["cut_rate_pct"], 50.0)
@@ -79,8 +80,19 @@ class ParseLogTest(unittest.TestCase):
         self.assertEqual(self.parse(enabled=0)["cutoff_enabled"], 0)
         self.assertEqual(self.parse(enabled=1)["cutoff_enabled"], 1)
 
+    def test_legacy_pricing_cutoff_tag_still_parses(self):
+        """The flag was renamed --pricing-cutoff -> --bounded-pricing (gh #42),
+        but every tracked log under results/ablation/ and the 100 cells in
+        bench_runs/issue41_intermodal_cutoff/ carries the old banner. Dropping
+        it from the regex would leave `priced` unset and silently kill
+        per_price_us on the entire committed evidence base."""
+        rec = self.parse(tag="pricing-cutoff", enabled=1, priced=500, cut=250)
+        self.assertEqual(rec["cutoff_enabled"], 1)
+        self.assertEqual(rec["priced"], 500)
+        self.assertAlmostEqual(rec["cut_rate_pct"], 50.0)
+
     def test_banner_without_enabled_field_defaults_to_on(self):
-        """Logs predating the `enabled=` field are all cutoff-on arms."""
+        """Logs predating the `enabled=` field are all bounded-on arms."""
         p = os.path.join(self.dir, "intermodal__BUS-2632-0__tree__copt-cpu.log")
         write_log(p)
         with open(p) as fh:
@@ -132,7 +144,7 @@ class CollectTest(unittest.TestCase):
     """The arm label comes from a directory NAME, which is the weakest link.
 
     Nothing downstream can tell that `logs_copt-cpu_on_rep1` actually held
-    cutoff-off runs; it would just pair an arm against itself and report a 0%
+    bounded-off runs; it would just pair an arm against itself and report a 0%
     effect. These run on a synthetic tree so the coverage survives in a checkout
     without the tracked ablation logs.
     """
@@ -162,7 +174,7 @@ class CollectTest(unittest.TestCase):
         self.assertEqual({r["family"] for r in runs}, {"intermodal"})
 
     def test_a_log_contradicting_its_arm_directory_warns(self):
-        self.add("logs_copt-cpu_off_rep1", enabled=1)  # cutoff-on run in an off dir
+        self.add("logs_copt-cpu_off_rep1", enabled=1)  # bounded-on run in an off dir
         with contextlib.redirect_stderr(io.StringIO()) as err:
             abl.collect([self.sweep])
         self.assertIn("reports enabled=1", err.getvalue())
@@ -287,7 +299,7 @@ class CommittedAblationTest(unittest.TestCase):
             self.assertGreaterEqual(r["reps_on"], 2)
 
     def test_the_two_arms_agree_on_the_optimum(self):
-        """The cutoff is a proof, not a heuristic: switching it on must not move
+        """The bound is a proof, not a heuristic: switching it on must not move
         the LP optimum. This is the exactness check the ablation data can make on
         its own (the bit-for-bit column identity is pinned in C++)."""
         for r in self.rows:
@@ -295,7 +307,7 @@ class CommittedAblationTest(unittest.TestCase):
             self.assertLess(r["d_obj_rel"], 1e-3,
                             f"{r['sweep']}/{r['instance']} objectives diverged")
 
-    def test_off_arms_never_fired_the_cutoff(self):
+    def test_off_arms_never_fired_the_bound(self):
         """The control has to be a control: an off log reporting cuts would mean
         the arms were mislabelled and every delta in the table is meaningless."""
         for rec in abl.collect(self.sweeps):
@@ -305,7 +317,7 @@ class CommittedAblationTest(unittest.TestCase):
             self.assertIn("priced", rec, f"{rec['sweep']}/{rec['instance']} has no banner")
             if rec["arm"] == "off":
                 self.assertEqual(rec["cut"], 0,
-                                 f"{rec['sweep']}/{rec['instance']} off arm fired the cutoff")
+                                 f"{rec['sweep']}/{rec['instance']} off arm fired the bound")
                 self.assertEqual(rec["cutoff_enabled"], 0)
             else:
                 self.assertEqual(rec["cutoff_enabled"], 1)

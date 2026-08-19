@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""Summarize the dual pricing cutoff A/B ablation (gh #41, manuscript section 3.3).
+"""Summarize the bounded-pricing A/B ablation (gh #41, manuscript section 3.3).
 
-The cutoff (`mcfcg_cli --pricing-cutoff`) stops a source's A* once the frontier
-proves no negative-reduced-cost column remains. It is exact — the emitted column
-set is identical bit-for-bit, pinned by `FeatureTests.PricingCutoffShadow*` — so
+Bounded pricing (`mcfcg_cli --bounded-pricing`) stops a source's A* once the
+frontier proves no negative-reduced-cost column remains. It is exact — the
+emitted column set is identical bit-for-bit, pinned by
+`FeatureTests.BoundedPricingShadow*` — so
 the only question is whether it is FASTER, and the answer decided that it ships
 off by default. This tool is the measurement behind that decision, and it stays
 in the tree so the numbers in the manuscript can be regenerated from the logs.
 
 An ablation sweep is a directory of `logs_<solver>_<off|on>_<repN>/` produced by
 running `benchmark_solvers.py` twice per repetition, identically except for
-`--extra-args=--pricing-cutoff`:
+`--extra-args=--bounded-pricing`:
 
     for rep in 1 2 3; do
       for arm in off on; do
-        [ "$arm" = on ] && extra=--extra-args=--pricing-cutoff || extra=
+        [ "$arm" = on ] && extra=--extra-args=--bounded-pricing || extra=
         python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-cpu \
             $extra --out   bench_runs/SWEEP/copt-cpu_${arm}_rep${rep}.csv \
                    --logdir bench_runs/SWEEP/logs_copt-cpu_${arm}_rep${rep}
@@ -22,20 +23,20 @@ running `benchmark_solvers.py` twice per repetition, identically except for
     done
 
 Both arms must run in the SAME session on the SAME build: cross-session wall
-clock is not comparable (drift was observed between sessions on cells the cutoff
+clock is not comparable (drift was observed between sessions on cells the bound
 provably did not touch -- see results/ablation/README.md for the magnitude), so
 an "off" arm taken from an archived sweep or from results/cg_benchmark.csv
 silently confounds the flag with that drift.
 
 ## The metric that matters
 
-`t_PR` alone is NOT a pricing measurement. The cutoff shifts the CG trajectory
-(see the CLAUDE.md cutoff notes for the two channels), so an arm can price fewer
+`t_PR` alone is NOT a pricing measurement. The bound shifts the CG trajectory
+(see the CLAUDE.md bounded-pricing notes for the two channels), so an arm can price fewer
 sources and post a lower `t_PR` while every individual price cost the same. The
 first intermodal result reported this way was wrong for exactly that reason.
 
 `per_price_us` = `t_PR / priced_sources` is the trajectory-immune metric, and
-`priced` comes from the `[pricing-cutoff] cut=... priced=...` line every run
+`priced` comes from the `[bounded-pricing] cut=... priced=...` line every run
 emits (with `enabled=0`, so off-arm logs carry it too). Two flags say whether a
 cell's wall delta can be read as a pricing effect at all:
 
@@ -47,7 +48,7 @@ cell's wall delta can be read as a pricing effect at all:
     numbers over `traj_moved=0 AND traj_stable=1`.
 
 `pred_wall_pct` is the cost model's first term, `pricing_share x per-price
-saving` -- the gain the cutoff can deliver when the trajectory holds still. On
+saving` -- the gain the bound can deliver when the trajectory holds still. On
 the four copt-cpu intermodal cells that qualify it predicted
 -2.3/-2.5/-1.6/-2.1% against measured -2.3/-2.4/-1.7/-2.3%, i.e. within 0.13pp.
 The model's second term, `-LP_share x Delta-iterations`, is what makes the flag
@@ -57,7 +58,7 @@ measurement of this flag is worthless.
 `d_obj_rel` is the exactness check the ablation data can make on its own: the two
 arms must agree on the LP optimum. It stays under 7e-5 on all 74 cells, within
 the CG gap tolerance. (The bit-for-bit column identity claim is a stronger
-statement and is pinned in C++, by FeatureTests.PricingCutoffShadow*.)
+statement and is pinned in C++, by FeatureTests.BoundedPricingShadow*.)
 
 Usage:
   # regenerate the committed ablation CSVs from the three paired sweeps
@@ -100,9 +101,12 @@ SUMMARY_LINE = re.compile(
     r"CG optimal after (\d+) iterations\. UB=(\S+) LB=(\S+) gap=(\S+) tol=(\S+)\s+"
     r"t_LP=(\S+)\s+t_PR=(\S+)\s+t_SP=(\S+)\s+t_Tot=(\S+)")
 # `enabled=` is absent in logs from before the banner carried it; those runs are
-# all cutoff-on arms, so a missing flag is not ambiguous, but prefer the field.
+# all bounded-on arms, so a missing flag is not ambiguous, but prefer the field.
+# Both tag spellings are accepted: the flag was renamed --pricing-cutoff ->
+# --bounded-pricing in gh #42, and every tracked log predating that carries the
+# old tag. Neither spelling may be dropped while both log sets are evidence.
 CUTOFF_LINE = re.compile(
-    r"\[pricing-cutoff\] (?:enabled=(\d+) )?cut=(\d+) priced=(\d+)")
+    r"\[(?:pricing-cutoff|bounded-pricing)\] (?:enabled=(\d+) )?cut=(\d+) priced=(\d+)")
 # The exit type comes from the last iteration row's '+col' count, which carries a
 # '*' when the loop returned via the gap test rather than by exhausting pricing;
 # benchmark_solvers.parse_iteration_table reports that as col_committed=False.
@@ -325,7 +329,7 @@ def fmt(val, spec, dash="-"):
 def print_tables(rows):
     """One table per (sweep, solver, formulation), sorted by commodities/source.
 
-    That sort order is the point: the cutoff prunes the tail of a multi-target
+    That sort order is the point: the bound prunes the tail of a multi-target
     search, so its per-price saving tracks how many sinks a source carries --
     while the pricing share that turns that saving into wall clock does not.
     """
@@ -365,7 +369,7 @@ def print_tables(rows):
                   f"median {med(spreads):.1f}%, worst {max(spreads):.1f}%")
         moved = sum(r["traj_moved"] for r in sel)
         # A cell needs a per-price delta to be quotable at all: a run whose log
-        # carried no [pricing-cutoff] banner has no `priced`, hence no metric.
+        # carried no bounded-pricing banner has no `priced`, hence no metric.
         quotable = [r for r in sel if not r["traj_moved"] and r["traj_stable"]
                     and r["d_per_price_pct"] is not None]
         print(f"  trajectory moved on {moved}/{len(sel)} cells "

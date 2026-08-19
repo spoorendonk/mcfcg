@@ -583,9 +583,9 @@ TEST(FeatureTests, LagrangianBoundTree) {
     EXPECT_LT(rel, mcfcg::RELATIVE_FEAS_TOL) << "obj=" << result.objective << " ref=" << ref;
 }
 
-// --- Dual pricing cutoff (CGParams::pricing_cutoff, gh #41) ---
+// --- Bounded pricing (CGParams::bounded_pricing, gh #41) ---
 
-namespace cutoff_test {
+namespace bounded_pricing_test {
 // 5 vertices.  Sink 3 is isolated (unreachable from the source) and vertex 4 is
 // a *dead end*: reachable from the source but with no path to any sink, so
 // compute_lower_bounds_to_targets gives it h = UNREACHED = MAX_BOUND.  That
@@ -618,7 +618,7 @@ static mcfcg::Instance build_deadend() {
 //
 // The demands are deliberately fractional and deliberately three.  With a single
 // unit demand, Σd minus the settled demands lands on exactly +0.0, the division
-// in TreePricer::Cutoff::recompute yields +inf, and the MAX_BOUND clamp then
+// in TreePricer::PricingBound::recompute yields +inf, and the MAX_BOUND clamp then
 // reproduces precisely what the `_rem_demand > 0` guard does — so the test
 // passes with that guard deleted and pins nothing.  Fractional demands (the norm
 // on TNTP) leave a small NEGATIVE residue instead, the division yields -inf, and
@@ -678,11 +678,11 @@ static mcfcg::Instance build_two_sources_and_spare_arc() {
 inline uint64_t column_key(const mcfcg::Column& col) { return col.commodity; }
 inline uint64_t column_key(const mcfcg::TreeColumn& col) { return col.source_idx; }
 
-// Bit-equality, not EXPECT_NEAR.  A cutoff run settles its sinks in the same
+// Bit-equality, not EXPECT_NEAR.  A bounded run settles its sinks in the same
 // order as a full run — run_until_targets is the same settle_next loop as the
-// cutoff driver, minus the frontier checks — so the two extract the same path
+// bounded driver, minus the frontier checks — so the two extract the same path
 // and accumulate the same floats in the same order.  Anything but bit-equality
-// means the cutoff changed the answer.  Returns "" when the columns agree,
+// means the bound changed the answer.  Returns "" when the columns agree,
 // otherwise a description of the first field that differs.
 inline std::string column_diff(const mcfcg::Column& base, const mcfcg::Column& cut) {
     std::ostringstream os;
@@ -730,30 +730,30 @@ inline std::string column_diff(const mcfcg::TreeColumn& base, const mcfcg::TreeC
     }
     return os.str();
 }
-}  // namespace cutoff_test
+}  // namespace bounded_pricing_test
 
 // A frontier saturated at MAX_BOUND is not a dual proof — it means the search
-// ran out of vertices that can reach any sink.  Treating it as a cutoff made
+// ran out of vertices that can reach any sink.  Treating it as a bound hit made
 // salvage_lagr_term contribute ~MAX_BOUND/SCALE per unsettled sink (≈4.6e9),
 // which latches into the monotone best_lb and is reported as the objective via
 // the #35 fallback; it also made the tree pricer suppress the partial column
-// the non-cutoff path emits for a disconnected source.  Both are silent wrong
+// the unbounded path emits for a disconnected source.  Both are silent wrong
 // answers on an instance class the pricer documents as degraded-but-working.
-TEST(FeatureTests, PricingCutoffIgnoresDeadEndFrontier) {
-    auto inst = cutoff_test::build_deadend();
+TEST(FeatureTests, BoundedPricingIgnoresDeadEndFrontier) {
+    auto inst = bounded_pricing_test::build_deadend();
     mcfcg::TreePricer base_pricer;
     mcfcg::TreePricer cut_pricer;
-    base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/false);
-    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/true);
+    base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/false);
+    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/true);
 
     std::vector<double> pi_s(inst.sources.size(), 50.0);
     auto mu = inst.graph.create_arc_map<double>(0.0);
     auto base_cols = base_pricer.price(pi_s, mu, true);
     auto cut_cols = cut_pricer.price(pi_s, mu, true);
 
-    EXPECT_EQ(cut_pricer.last_cutoff_count(), 0U)
-        << "a dead-end frontier must not be recorded as a cutoff";
-    ASSERT_EQ(base_cols.size(), cut_cols.size()) << "partial tree suppressed by the cutoff";
+    EXPECT_EQ(cut_pricer.last_bounded_count(), 0U)
+        << "a dead-end frontier must not be recorded as a bound hit";
+    ASSERT_EQ(base_cols.size(), cut_cols.size()) << "partial tree suppressed by the bound";
     EXPECT_NEAR(base_pricer.lagrangian_path_sum(), cut_pricer.lagrangian_path_sum(), 1e-9)
         << "unreachable sink salvaged a saturated pseudo-distance into the LB";
 }
@@ -763,12 +763,12 @@ TEST(FeatureTests, PricingCutoffIgnoresDeadEndFrontier) {
 // sinks contribute 0 to the tree reduced cost — and suppressed a strictly
 // improving column on every iteration including the final_round retry, which
 // the CG loop then reports as optimality.
-TEST(FeatureTests, PricingCutoffKeepsColumnWithZeroDemandCommodity) {
-    auto inst = cutoff_test::build_zero_demand();
+TEST(FeatureTests, BoundedPricingKeepsColumnWithZeroDemandCommodity) {
+    auto inst = bounded_pricing_test::build_zero_demand();
     mcfcg::TreePricer base_pricer;
     mcfcg::TreePricer cut_pricer;
-    base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/false);
-    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/true);
+    base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/false);
+    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/true);
 
     std::vector<double> pi_s(inst.sources.size(), 1e6);
     auto mu = inst.graph.create_arc_map<double>(0.0);
@@ -776,18 +776,18 @@ TEST(FeatureTests, PricingCutoffKeepsColumnWithZeroDemandCommodity) {
     auto cut_cols = cut_pricer.price(pi_s, mu, true);
 
     ASSERT_EQ(base_cols.size(), 1U) << "baseline must find this obviously attractive tree";
-    ASSERT_EQ(cut_cols.size(), base_cols.size()) << "cutoff dropped an improving column";
+    ASSERT_EQ(cut_cols.size(), base_cols.size()) << "the bound dropped an improving column";
     EXPECT_NEAR(base_cols[0].reduced_cost, cut_cols[0].reduced_cost, 1e-9);
 }
 
 // A cut source keeps the arc set from its last complete price, so the source
 // pricing filter answers "was any arc I route over just capacitated?" from an
-// older routing.  Pinned rather than fixed: this is why switching the cutoff on
+// older routing.  Pinned rather than fixed: this is why switching the bound on
 // moves the CG trajectory (see the Shadow tests for the invariant that DOES
 // hold), and treating a cut source as affected instead costs +31% wall clock on
 // intermodal — see should_record_arcs.
-TEST(FeatureTests, PricingCutoffFilterUsesStaleArcsForCutSources) {
-    auto inst = cutoff_test::build_two_sources_and_spare_arc();
+TEST(FeatureTests, BoundedPricingFilterUsesStaleArcsForCutSources) {
+    auto inst = bounded_pricing_test::build_two_sources_and_spare_arc();
     ASSERT_EQ(inst.sources.size(), 2U);
     // The spare arc lies on no source's routing; the first arc out of vertex 0
     // toward vertex 1 lies on source 0's.
@@ -804,22 +804,22 @@ TEST(FeatureTests, PricingCutoffFilterUsesStaleArcsForCutSources) {
     ASSERT_NE(routed, UINT32_MAX);
 
     mcfcg::TreePricer pricer;
-    pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/true);
+    pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/true);
     pricer.set_track_arcs(true);
     auto mu = inst.graph.create_arc_map<double>(0.0);
 
-    // Seed: +inf duals leave the cutoff inert, so both sources record a
+    // Seed: +inf duals leave the bound inert, so both sources record a
     // complete arc set — neither of which contains the spare arc.
     std::vector<double> seed(inst.sources.size(), std::numeric_limits<double>::infinity());
     (void)pricer.price(seed, mu, true);
-    ASSERT_EQ(pricer.last_cutoff_count(), 0U);
+    ASSERT_EQ(pricer.last_bounded_count(), 0U);
 
     // Source 0's convexity dual of 0 spends its budget before anything is
     // settled, so it is cut and never refreshes its arcs.  Source 1's budget is
     // large enough to run to completion.
     std::vector<double> pi_s = {0.0, 1e6};
     (void)pricer.price(pi_s, mu, true);
-    ASSERT_EQ(pricer.last_cutoff_count(), 1U) << "test setup did not cut exactly one source";
+    ASSERT_EQ(pricer.last_bounded_count(), 1U) << "test setup did not cut exactly one source";
 
     // Capacitating an arc on nobody's routing postpones everyone, the cut
     // source included: its stale set is consulted exactly like a fresh one.
@@ -834,30 +834,30 @@ TEST(FeatureTests, PricingCutoffFilterUsesStaleArcsForCutSources) {
     EXPECT_EQ(pricer.last_priced_count(), 1U) << "the retained arc set is the complete one";
 }
 
-// The cutoff is a proof that a source has no negative-reduced-cost column, so
+// The bound is a proof that a source has no negative-reduced-cost column, so
 // switching it on must not change which columns the pricer emits.  Drives a
-// manual tree CG loop and prices every iteration twice — once with the cutoff,
+// manual tree CG loop and prices every iteration twice — once bounded,
 // once without — off the same duals, asserting the two column sets agree.  A
-// cutoff bound that is too aggressive (e.g. dividing the tree budget by the
+// pricing bound that is too aggressive (e.g. dividing the tree budget by the
 // wrong demand aggregate) shows up here as a dropped column, which end-to-end
 // objective checks would only catch if it happened to change the optimum.
-TEST(FeatureTests, PricingCutoffEmitsSameColumns) {
+TEST(FeatureTests, BoundedPricingEmitsSameColumns) {
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar30");
 
     mcfcg::TreeMaster master;
     master.init(inst);
     mcfcg::TreePricer base_pricer;
     mcfcg::TreePricer cut_pricer;
-    base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/false);
-    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*dual_cutoff=*/true);
+    base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/false);
+    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/true);
 
     std::vector<double> big_pi(inst.sources.size(), std::numeric_limits<double>::infinity());
     auto empty_mu = inst.graph.create_arc_map<double>(0.0);
     auto init_cols = base_pricer.price(big_pi, empty_mu, true);
-    // The warm start's +inf duals must leave the cutoff inert, otherwise the
+    // The warm start's +inf duals must leave the bound inert, otherwise the
     // seeding pass would explore less than the full reachable graph.
     (void)cut_pricer.price(big_pi, empty_mu, true);
-    EXPECT_EQ(cut_pricer.last_cutoff_count(), 0U) << "+inf duals must disable the cutoff";
+    EXPECT_EQ(cut_pricer.last_bounded_count(), 0U) << "+inf duals must disable the bound";
     ASSERT_FALSE(init_cols.empty());
     master.add_columns(std::move(init_cols));
 
@@ -870,15 +870,15 @@ TEST(FeatureTests, PricingCutoffEmitsSameColumns) {
         (void)master.add_violated_capacity_constraints(primals);
 
         // final_round on both so postponement can never make the two pricers
-        // visit different sources — the comparison is about the cutoff alone.
+        // visit different sources — the comparison is about the bound alone.
         auto base_cols = base_pricer.price(pi_s, mu, true);
         auto cut_cols = cut_pricer.price(pi_s, mu, true);
-        total_cut += cut_pricer.last_cutoff_count();
+        total_cut += cut_pricer.last_bounded_count();
 
         ASSERT_EQ(base_cols.size(), cut_cols.size()) << "column count differs at iter " << iter;
         for (size_t i = 0; i < base_cols.size(); ++i) {
             ASSERT_EQ(base_cols[i].source_idx, cut_cols[i].source_idx) << "at iter " << iter;
-            EXPECT_EQ(cutoff_test::column_diff(base_cols[i], cut_cols[i]), "")
+            EXPECT_EQ(bounded_pricing_test::column_diff(base_cols[i], cut_cols[i]), "")
                 << "at iter " << iter;
         }
 
@@ -888,33 +888,33 @@ TEST(FeatureTests, PricingCutoffEmitsSameColumns) {
         (void)master.bump_active_slacks(primals, mcfcg::SLACK_BUMP_FACTOR);
         master.add_columns(std::move(base_cols));
     }
-    // A pass where the cutoff never fired would satisfy every assertion above
+    // A pass where the bound never fired would satisfy every assertion above
     // vacuously.
-    EXPECT_GT(total_cut, 0U) << "cutoff never fired; the comparison proved nothing";
+    EXPECT_GT(total_cut, 0U) << "the bound never fired; the comparison proved nothing";
 }
 
 // The ablation in results/ablation/ concluded "ship it off", but nothing pinned
-// that: every other PricingCutoff* test sets the flag explicitly, so a flipped
+// that: every other BoundedPricing* test sets the flag explicitly, so a flipped
 // default would leave the whole suite green while silently changing what every
 // committed benchmark cell in results/cg_benchmark.csv means — and that CSV has
 // no extra_args column to record it (PROVENANCE.txt section 5.1).
-TEST(FeatureTests, PricingCutoffIsOffByDefault) {
-    EXPECT_FALSE(mcfcg::CGParams{}.pricing_cutoff);
+TEST(FeatureTests, BoundedPricingIsOffByDefault) {
+    EXPECT_FALSE(mcfcg::CGParams{}.bounded_pricing);
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/grid/grid1");
     auto result = mcfcg::solve_tree_cg(inst, mcfcg::CGParams{});
     EXPECT_TRUE(result.optimal);
-    EXPECT_EQ(result.cutoff_sources, 0U) << "a default run fired the pricing cutoff";
+    EXPECT_EQ(result.bounded_sources, 0U) << "a default run used bounded pricing";
 }
 
-// End-to-end: the cutoff must not move the optimum or cost optimality, on both
+// End-to-end: the bound must not move the optimum or cost optimality, on both
 // formulations and on the family it is actually meant for (intermodal, tree +
 // PricerHeavy — where a cut source must suppress its whole tree column rather
 // than emit a partial one).
-TEST(FeatureTests, PricingCutoffPathMatchesReference) {
+TEST(FeatureTests, BoundedPricingPathMatchesReference) {
     auto opt = load_optimal(data_dir("commalab/planar"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar150");
     mcfcg::CGParams params;
-    params.pricing_cutoff = true;
+    params.bounded_pricing = true;
     auto result = mcfcg::solve_path_cg(inst, params);
     EXPECT_TRUE(result.optimal);
     double ref = opt.at("planar150");
@@ -922,16 +922,16 @@ TEST(FeatureTests, PricingCutoffPathMatchesReference) {
     EXPECT_LT(rel, mcfcg::RELATIVE_FEAS_TOL) << "obj=" << result.objective << " ref=" << ref;
     EXPECT_LE(result.lower_bound, ref * (1.0 + mcfcg::RELATIVE_FEAS_TOL))
         << "salvaged LB exceeds OPT";
-    // Without this the test is vacuous: an inert cutoff trivially reproduces
+    // Without this the test is vacuous: an inert bound trivially reproduces
     // the reference.  Measured fire rate on planar150 path is ~19%.
-    EXPECT_GT(result.cutoff_sources, 0U) << "cutoff never fired";
+    EXPECT_GT(result.bounded_sources, 0U) << "the bound never fired";
 }
 
-TEST(FeatureTests, PricingCutoffTreeMatchesReference) {
+TEST(FeatureTests, BoundedPricingTreeMatchesReference) {
     auto opt = load_optimal(data_dir("commalab/planar"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar150");
     mcfcg::CGParams params;
-    params.pricing_cutoff = true;
+    params.bounded_pricing = true;
     auto result = mcfcg::solve_tree_cg(inst, params);
     EXPECT_TRUE(result.optimal);
     double ref = opt.at("planar150");
@@ -940,10 +940,10 @@ TEST(FeatureTests, PricingCutoffTreeMatchesReference) {
     EXPECT_LE(result.lower_bound, ref * (1.0 + mcfcg::RELATIVE_FEAS_TOL))
         << "salvaged LB exceeds OPT";
     // Vacuity guard, as above.  Measured fire rate on planar150 tree is ~12%.
-    EXPECT_GT(result.cutoff_sources, 0U) << "cutoff never fired";
+    EXPECT_GT(result.bounded_sources, 0U) << "the bound never fired";
 }
 
-TEST(FeatureTests, PricingCutoffIntermodalTree) {
+TEST(FeatureTests, BoundedPricingIntermodalTree) {
     auto path = data_dir("intermodal") + "/BUS-2632-0.txt.gz";
     if (!fs::exists(path)) {
         GTEST_SKIP() << "data/intermodal not found";
@@ -952,23 +952,23 @@ TEST(FeatureTests, PricingCutoffIntermodalTree) {
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
     params.strategy = mcfcg::CGStrategy::PricerHeavy;
-    params.pricing_cutoff = true;
+    params.bounded_pricing = true;
     auto result = mcfcg::solve_tree_cg(inst, params);
     double ref = opt.at("BUS-2632-0");
     double tol = mcfcg::RELATIVE_FEAS_TOL * 2;
     EXPECT_TRUE(result.optimal) << "Did not reach optimality";
     EXPECT_GE(result.objective, ref * (1.0 - tol)) << "Objective below reference";
     EXPECT_LE(result.objective, ref * (1.0 + tol)) << "Objective above reference";
-    EXPECT_GT(result.cutoff_sources, 0U) << "cutoff never fired on intermodal";
+    EXPECT_GT(result.bounded_sources, 0U) << "the bound never fired on intermodal";
 }
 
-// --- Shadow pricing: the cutoff must emit identical columns on the dual
+// --- Shadow pricing: the bound must emit identical columns on the dual
 // trajectory a real solve visits, not just on a hand-rolled one ---
 
-namespace cutoff_test {
+namespace bounded_pricing_test {
 
-// Drives the real CG loop with the cutoff OFF while shadowing every dual vector
-// the loop produces with a second, cutoff-ON pricer, and checks the two emit
+// Drives the real CG loop with bounded pricing OFF while shadowing every dual
+// vector the loop produces with a second, bounded-ON pricer, and checks the two emit
 // the same columns down to the arc lists.  solve_cg is a template on Pricer and
 // touches only the methods forwarded below, so this needs no production change.
 //
@@ -998,14 +998,14 @@ public:
 
     void init(const mcfcg::Instance& inst, mcfcg::thread_pool* pool = nullptr,
               uint32_t batch_size = 0, double neg_rc_tol = mcfcg::NEG_RC_TOL,
-              bool dual_cutoff = false) {
+              bool bounded_pricing = false) {
         // This harness owns BOTH arms, so the caller's flag is deliberately not
         // forwarded — it would otherwise be possible to run the shadow with the
-        // cutoff off on both sides, comparing a pricer against itself and
+        // bounded pricing off on both sides, comparing a pricer against itself and
         // passing vacuously.
-        EXPECT_FALSE(dual_cutoff) << "ShadowPricer drives both arms; leave the flag off";
-        _base.init(inst, pool, batch_size, neg_rc_tol, /*dual_cutoff=*/false);
-        _cut.init(inst, pool, batch_size, neg_rc_tol, /*dual_cutoff=*/true);
+        EXPECT_FALSE(bounded_pricing) << "ShadowPricer drives both arms; leave the flag off";
+        _base.init(inst, pool, batch_size, neg_rc_tol, /*bounded_pricing=*/false);
+        _cut.init(inst, pool, batch_size, neg_rc_tol, /*bounded_pricing=*/true);
     }
 
     void set_track_arcs(bool enabled) {
@@ -1017,19 +1017,19 @@ public:
                bool final_round = false, uint32_t max_cols = 0) {
         auto base_cols = _base.price(duals, mu, final_round, max_cols);
         auto cut_cols = _cut.price(duals, mu, /*final_round=*/true, /*max_cols=*/0);
-        fired += _cut.last_cutoff_count();
+        fired += _cut.last_bounded_count();
         check(base_cols, cut_cols);
         return base_cols;
     }
 
-    // Control flow follows the baseline; the reported cutoff stats follow the
+    // Control flow follows the baseline; the reported bound stats follow the
     // shadow, which is the pricer those numbers describe.
     [[nodiscard]] bool priced_all() const noexcept { return _base.priced_all(); }
     [[nodiscard]] double lagrangian_path_sum() const noexcept {
         return _base.lagrangian_path_sum();
     }
     [[nodiscard]] double lb_error_bound() const noexcept { return _base.lb_error_bound(); }
-    [[nodiscard]] uint64_t last_cutoff_count() const noexcept { return _cut.last_cutoff_count(); }
+    [[nodiscard]] uint64_t last_bounded_count() const noexcept { return _cut.last_bounded_count(); }
     [[nodiscard]] uint64_t last_priced_count() const noexcept { return _cut.last_priced_count(); }
 
     void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
@@ -1062,13 +1062,13 @@ private:
         for (const auto& col : base_cols) {
             auto found = by_key.find(column_key(col));
             if (found == by_key.end()) {
-                failure = "cutoff dropped the column for key " + std::to_string(column_key(col));
+                failure = "the bound dropped the column for key " + std::to_string(column_key(col));
                 return;
             }
             auto diff = column_diff(col, *found->second);
             if (!diff.empty()) {
-                failure = "cutoff altered the column for key " + std::to_string(column_key(col)) +
-                          ":" + diff;
+                failure = "the bound altered the column for key " +
+                          std::to_string(column_key(col)) + ":" + diff;
                 return;
             }
             ++compared;
@@ -1083,51 +1083,51 @@ template <typename Shadow>
 static void expect_shadow_agreed(const mcfcg::CGResult& result) {
     EXPECT_TRUE(result.optimal) << "baseline run did not reach optimality";
     EXPECT_TRUE(Shadow::failure.empty()) << Shadow::failure;
-    // Both guard vacuity: a cutoff that never fires, or a run that never
+    // Both guard vacuity: a bound that never fires, or a run that never
     // compares a column, satisfies the assertion above for free.  The counts go
     // to the XML report (--gtest_output=xml) so the coverage the run achieved is
     // recoverable without making a passing suite noisier.
-    ::testing::Test::RecordProperty("cutoff_fired", std::to_string(Shadow::fired));
+    ::testing::Test::RecordProperty("bound_fired", std::to_string(Shadow::fired));
     ::testing::Test::RecordProperty("columns_compared", std::to_string(Shadow::compared));
-    EXPECT_GT(Shadow::fired, 0U) << "cutoff never fired; the comparison proved nothing";
+    EXPECT_GT(Shadow::fired, 0U) << "the bound never fired; the comparison proved nothing";
     EXPECT_GT(Shadow::compared, 0U) << "no columns were compared";
 }
-}  // namespace cutoff_test
+}  // namespace bounded_pricing_test
 
-TEST(FeatureTests, PricingCutoffShadowTree) {
-    using Shadow = cutoff_test::ShadowPricer<mcfcg::TreePricer>;
+TEST(FeatureTests, BoundedPricingShadowTree) {
+    using Shadow = bounded_pricing_test::ShadowPricer<mcfcg::TreePricer>;
     Shadow::reset();
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar150");
     mcfcg::CGParams params;
     auto result = mcfcg::solve_cg<mcfcg::TreeMaster, Shadow>(
         inst, params, [](const mcfcg::TreeMaster& m) { return m.get_structural_duals(); },
         static_cast<uint32_t>(inst.sources.size()));
-    cutoff_test::expect_shadow_agreed<Shadow>(result);
+    bounded_pricing_test::expect_shadow_agreed<Shadow>(result);
 }
 
 // The path bound (max π over unsettled sinks) is a different formula from the
 // tree's demand-weighted budget and had no equivalent column-identity guard.
-TEST(FeatureTests, PricingCutoffShadowPath) {
-    using Shadow = cutoff_test::ShadowPricer<mcfcg::PathPricer>;
+TEST(FeatureTests, BoundedPricingShadowPath) {
+    using Shadow = bounded_pricing_test::ShadowPricer<mcfcg::PathPricer>;
     Shadow::reset();
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar150");
     mcfcg::CGParams params;
     auto result = mcfcg::solve_cg<mcfcg::PathMaster, Shadow>(
         inst, params, [](const mcfcg::PathMaster& m) { return m.get_structural_duals(); },
         static_cast<uint32_t>(inst.commodities.size()));
-    cutoff_test::expect_shadow_agreed<Shadow>(result);
+    bounded_pricing_test::expect_shadow_agreed<Shadow>(result);
 }
 
-// The family the cutoff is meant for, and the one where switching it on
+// The family the bound is meant for, and the one where switching it on
 // measurably moves the trajectory.  PricerHeavy so the source pricing
 // filter — the mechanism that makes a cut source's stale _source_arcs matter —
 // is live, and long paths so the integer-scaling allowance is under real load.
-TEST(FeatureTests, PricingCutoffShadowIntermodalTree) {
+TEST(FeatureTests, BoundedPricingShadowIntermodalTree) {
     auto path = data_dir("intermodal") + "/BUS-2632-0.txt.gz";
     if (!fs::exists(path)) {
         GTEST_SKIP() << "data/intermodal not found";
     }
-    using Shadow = cutoff_test::ShadowPricer<mcfcg::TreePricer>;
+    using Shadow = bounded_pricing_test::ShadowPricer<mcfcg::TreePricer>;
     Shadow::reset();
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
@@ -1135,7 +1135,7 @@ TEST(FeatureTests, PricingCutoffShadowIntermodalTree) {
     auto result = mcfcg::solve_cg<mcfcg::TreeMaster, Shadow>(
         inst, params, [](const mcfcg::TreeMaster& m) { return m.get_structural_duals(); },
         static_cast<uint32_t>(inst.sources.size()));
-    cutoff_test::expect_shadow_agreed<Shadow>(result);
+    bounded_pricing_test::expect_shadow_agreed<Shadow>(result);
 }
 
 // The π-free Lagrangian LB must be (a) always valid (≤ OPT) and (b) AVAILABLE

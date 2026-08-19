@@ -31,12 +31,12 @@ struct CGResult {
     uint32_t iterations = 0;
     uint32_t total_columns = 0;
     bool optimal = false;
-    // Dual pricing cutoff instrumentation, summed over every pricing sweep of
-    // the run: how many source prices the cutoff stopped short, out of how many
-    // it ran.  Both stay 0 / N when CGParams::pricing_cutoff is off.  A null
+    // Bounded-pricing instrumentation, summed over every pricing sweep of the
+    // run: how many source prices the bound stopped short, out of how many it
+    // ran.  Both stay 0 / N when CGParams::bounded_pricing is off.  A null
     // speed-up is only interpretable next to the fire rate, so the CLI reports
     // it rather than leaving "did it ever trigger?" unanswered.
-    uint64_t cutoff_sources = 0;
+    uint64_t bounded_sources = 0;
     uint64_t priced_sources = 0;
     double time_lp = 0;
     double time_pricing = 0;
@@ -99,9 +99,9 @@ struct CGParams {
     // Strategy preset; see CGStrategy enum above for the bundled behaviors.
     CGStrategy strategy = CGStrategy::PricerLight;
     bool pricing_filter = false;
-    // Dual-based pricing cutoff (manuscript §3.3): stop each source's A* as
-    // soon as the frontier proves no negative-reduced-cost column remains for
-    // it, instead of running until every sink of the source is settled.
+    // Bounded single-source pricing (manuscript §3.3): stop each source's A*
+    // as soon as the frontier proves no negative-reduced-cost column remains
+    // for it, instead of running until every sink of the source is settled.
     //
     // Off by default.  Measured on intermodal (gh #41, the only family where
     // pricing is a large enough share of runtime to matter): a modest but
@@ -138,11 +138,11 @@ struct CGParams {
     // translate into real time.
     //
     // Caveat if you do enable it: on an instance with unreachable sinks the
-    // cutoff can stop a search while an unreachable target is still pending
+    // bound can stop a search while an unreachable target is still pending
     // whenever some *other* sink keeps the A* heuristic finite, which
-    // suppresses the partial tree column the non-cutoff path would emit.
+    // suppresses the partial tree column the unbounded path would emit.
     // Preprocess with mcfcg_clean, as the pricer already asks.
-    bool pricing_cutoff = false;
+    bool bounded_pricing = false;
     uint32_t num_threads = 0;         // 0 = auto-detect via hardware_concurrency
     uint32_t pricing_batch_size = 0;  // 0 = all sources in one batch
     double neg_rc_tol = NEG_RC_TOL;   // see tolerances.h

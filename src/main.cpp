@@ -80,7 +80,7 @@ static void print_usage(std::FILE* out) {
         "  --time-limit S           Wall-clock budget in seconds (0=off); stops the CG\n"
         "                           loop at the next iter and reports best UB/LB.\n"
         "  --strategy S             pricer-light (default) or pricer-heavy\n"
-        "  --pricing-cutoff         Stop each source's A* once the duals prove no\n"
+        "  --bounded-pricing        Stop each source's A* once the duals prove no\n"
         "                           improving column remains (default: off)\n"
         "  -h, --help               Print this help message and exit.\n");
 }
@@ -173,8 +173,8 @@ int run_cli(int argc, char* argv[]) {
         }
         // Value-less flags must be handled before the "requires a value" guard
         // below, which would otherwise reject them in trailing position.
-        if (std::strcmp(argv[i], "--pricing-cutoff") == 0) {
-            params.pricing_cutoff = true;
+        if (std::strcmp(argv[i], "--bounded-pricing") == 0) {
+            params.bounded_pricing = true;
             continue;
         }
         if (i == 1) {
@@ -392,19 +392,19 @@ int run_cli(int argc, char* argv[]) {
     auto end = std::chrono::steady_clock::now();
     double elapsed = std::chrono::duration<double>(end - start).count();
 
-    // Provenance for the pricing-cutoff evaluation (gh #41): a wall-clock
+    // Provenance for the bounded-pricing evaluation (gh #41): a wall-clock
     // difference means nothing without the fire rate behind it.  Printed in
     // both arms — `priced` is the total pricing work the run did, and comparing
-    // it cutoff-on vs cutoff-off is what separates "the cutoff saved search"
-    // from "the cutoff changed how many sources get priced".  stderr, next to
-    // the other one-line banners, so the stdout CSV contract is untouched.
+    // it on vs off is what separates "the bound saved search" from "the bound
+    // changed how many sources get priced".  stderr, next to the other
+    // one-line banners, so the stdout CSV contract is untouched.
     double fire_rate = result.priced_sources > 0
-                           ? 100.0 * static_cast<double>(result.cutoff_sources) /
+                           ? 100.0 * static_cast<double>(result.bounded_sources) /
                                  static_cast<double>(result.priced_sources)
                            : 0.0;
-    std::fprintf(stderr, "[pricing-cutoff] enabled=%d cut=%llu priced=%llu rate=%.1f%%\n",
-                 params.pricing_cutoff ? 1 : 0,
-                 static_cast<unsigned long long>(result.cutoff_sources),
+    std::fprintf(stderr, "[bounded-pricing] enabled=%d cut=%llu priced=%llu rate=%.1f%%\n",
+                 params.bounded_pricing ? 1 : 0,
+                 static_cast<unsigned long long>(result.bounded_sources),
                  static_cast<unsigned long long>(result.priced_sources), fire_rate);
 
     // CSV output.  lower_bound is empty when LB tracking never fired

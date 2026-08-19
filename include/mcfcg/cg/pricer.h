@@ -13,7 +13,7 @@ namespace mcfcg {
 class PathPricer : public PricerBase<PathPricer, Column> {
     friend class PricerBase<PathPricer, Column>;
 
-    // Dual pricing cutoff for the path formulation.  A commodity k is
+    // Bounded pricing for the path formulation.  A commodity k is
     // attractive only if its reduced-cost distance beats its demand dual, so
     // once the A* frontier passes max{π_k : k not yet settled} no unsettled
     // commodity of this source can price out.  The bound tightens as sinks
@@ -24,13 +24,13 @@ class PathPricer : public PricerBase<PathPricer, Column> {
     // separate settled-set.  Duplicate sinks (two commodities of one source
     // sharing a sink) need no merging: the max over unsettled entries is the
     // max over unsettled sinks either way.
-    class Cutoff {
-        std::vector<CutoffEntry>* _entries;
+    class PricingBound {
+        std::vector<BoundEntry>* _entries;
         size_t _head = 0;
         int64_t _bound;
 
     public:
-        explicit Cutoff(std::vector<CutoffEntry>& entries) : _entries(&entries) {
+        explicit PricingBound(std::vector<BoundEntry>& entries) : _entries(&entries) {
             _bound = entries.empty() ? -MAX_BOUND : entries.front().key;
         }
 
@@ -47,8 +47,8 @@ class PathPricer : public PricerBase<PathPricer, Column> {
         }
     };
 
-    Cutoff make_cutoff(uint32_t /*s_idx*/, const Source& src, const std::vector<double>& pi,
-                       std::vector<CutoffEntry>& scratch) const {
+    PricingBound make_bound(uint32_t /*s_idx*/, const Source& src, const std::vector<double>& pi,
+                            std::vector<BoundEntry>& scratch) const {
         scratch.clear();
         scratch.reserve(src.commodity_indices.size());
         // Key = SCALE·π_k plus an allowance that makes the cut provably no more
@@ -64,18 +64,18 @@ class PathPricer : public PricerBase<PathPricer, Column> {
         for (uint32_t k : src.commodity_indices) {
             scratch.push_back({_inst->commodities[k].sink, scale_dual(pi[k] + allowance), 0.0});
         }
-        std::ranges::sort(scratch, [](const CutoffEntry& lhs, const CutoffEntry& rhs) {
+        std::ranges::sort(scratch, [](const BoundEntry& lhs, const BoundEntry& rhs) {
             return lhs.key > rhs.key;
         });
-        return Cutoff(scratch);
+        return PricingBound(scratch);
     }
 
     void process_source(uint32_t s_idx, const Source& src, const std::vector<double>& pi,
                         const static_map<uint32_t, double>& mu, auto& dijk,
                         std::vector<Column>& new_columns, uint32_t /*thread_id*/,
-                        std::optional<int64_t> cutoff_f) {
+                        std::optional<int64_t> bound_f) {
         bool found_any = false;
-        const bool record_arcs = should_record_arcs(cutoff_f);
+        const bool record_arcs = should_record_arcs(bound_f);
         if (record_arcs) {
             _source_arcs[s_idx].clear();
         }
@@ -99,13 +99,13 @@ class PathPricer : public PricerBase<PathPricer, Column> {
             // commodities should preprocess the instance (e.g. via
             // mcfcg_clean) before handing it to the solver.
             //
-            // The dual cutoff leaves sinks unsettled too, and those are not
+            // Bounded pricing leaves sinks unsettled too, and those are not
             // unreachable — the frontier only proved their reduced cost is
             // non-negative.  Salvage the Lagrangian term the truncated search
             // never computed from the frontier value it stopped at, so an
-            // aggressive cutoff does not hollow out the lower bound.
+            // aggressive bound does not hollow out the lower bound.
             if (!dijk.visited(sink)) {
-                source_lagr_sum += salvage_lagr_term(cutoff_f, _inst->commodities[k].demand);
+                source_lagr_sum += salvage_lagr_term(bound_f, _inst->commodities[k].demand);
                 continue;
             }
 

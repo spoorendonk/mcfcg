@@ -43,10 +43,10 @@ Examples:
 
   # A/B ablation of a CLI flag: two sweeps, separate --out and --logdir
   python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-cpu \
-      --out bench_runs/cg/cutoff_off.csv --logdir bench_runs/cg/cutoff_off
+      --out bench_runs/cg/bounded_off.csv --logdir bench_runs/cg/bounded_off
   python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-cpu \
-      --extra-args=--pricing-cutoff \
-      --out bench_runs/cg/cutoff_on.csv --logdir bench_runs/cg/cutoff_on
+      --extra-args=--bounded-pricing \
+      --out bench_runs/cg/bounded_on.csv --logdir bench_runs/cg/bounded_on
 """
 
 import argparse
@@ -132,11 +132,11 @@ def enumerate_family(family):
         for inst in insts:
             key = os.path.basename(inst)[: -len(".txt.gz")]
             # Tree is the default everywhere; intermodal additionally needs PricerHeavy.
-            # Deliberately NOT --pricing-cutoff, even though this is the family
+            # Deliberately NOT --bounded-pricing, even though this is the family
             # with the highest pricing share (71-85%) and so the flag's best case
             # on the suite: gh #41 measured it at -3.6% wall clock here and a wash
             # or a loss everywhere else, which is not worth a per-family flag in
-            # the benchmark default. Pass --extra-args=--pricing-cutoff to measure
+            # the benchmark default. Pass --extra-args=--bounded-pricing to measure
             # it; see results/ablation/README.md for what that already showed.
             yield inst, key, "tree", ["--strategy", "pricer-heavy"]
         return
@@ -609,7 +609,7 @@ def main():
     ap.add_argument("--extra-args", default=None,
                     help="extra CLI flags appended verbatim to every run, on top of the "
                          "per-family defaults (shell-style quoting). A value starting with "
-                         "'-' needs the '=' form: --extra-args=--pricing-cutoff. For A/B "
+                         "'-' needs the '=' form: --extra-args=--bounded-pricing. For A/B "
                          "ablations: run the sweep twice into different --out/--logdir paths.")
     ap.add_argument("--logdir", default="bench_runs/cg/logs",
                     help="directory to save each run's full stdout+stderr (the per-iteration "

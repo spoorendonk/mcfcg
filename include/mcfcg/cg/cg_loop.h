@@ -53,7 +53,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
                 params.warm_start);
 
     Pricer pricer;
-    pricer.init(inst, pool.get(), effective_batch_size, params.neg_rc_tol, params.pricing_cutoff);
+    pricer.init(inst, pool.get(), effective_batch_size, params.neg_rc_tol, params.bounded_pricing);
     pricer.set_track_arcs(effective_pricing_filter);
 
     Timer timer;
@@ -85,11 +85,11 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
     bool certify_next = false;
     bool tried_certify = false;
 
-    // Accumulate the cutoff fire rate across every pricing sweep, including the
-    // warm start and the final_round retries, so the reported rate covers all
-    // the pricing work the run actually did.
+    // Accumulate the bounded-pricing fire rate across every pricing sweep,
+    // including the warm start and the final_round retries, so the reported
+    // rate covers all the pricing work the run actually did.
     auto tally_pricing = [&] {
-        result.cutoff_sources += pricer.last_cutoff_count();
+        result.bounded_sources += pricer.last_bounded_count();
         result.priced_sources += pricer.last_priced_count();
     };
 
@@ -123,7 +123,7 @@ CGResult solve_cg(const Instance& inst, const CGParams& params, GetDuals get_pri
         // seed the master with at least one column per source.  Every column
         // prices out against +inf, so the pass explores the full reachable
         // graph — and PricerBase::scale_dual saturates +inf at MAX_BOUND,
-        // leaving the optional dual pricing cutoff inert here.  Replaces the
+        // leaving optional bounded pricing inert here.  Replaces the
         // legacy Master::BIG_M coupling — the seeding pass has
         // nothing to do with the slack cost.  This pass intentionally
         // bypasses effective_col_limit (the per-iter cap only applies

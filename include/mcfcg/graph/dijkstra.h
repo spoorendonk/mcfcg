@@ -191,7 +191,7 @@ public:
     // Smallest f = g + h on the frontier.  With a consistent heuristic the
     // settled f-sequence is non-decreasing, so this is a lower bound on the
     // final f of every unsettled vertex — and hence on the final g of every
-    // unsettled vertex whose h is 0.  The dual pricing cutoff relies on
+    // unsettled vertex whose h is 0.  Bounded pricing relies on
     // exactly that, applied to target sinks (compute_lower_bounds_to_targets
     // seeds every sink at distance 0, so h(sink) = 0).
     [[nodiscard]] length_type min_f() const noexcept {

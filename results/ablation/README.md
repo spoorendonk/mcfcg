@@ -1,24 +1,28 @@
-# Dual pricing cutoff ablation (gh #41, manuscript section 3.3)
+# Bounded single-source pricing ablation (gh #41, manuscript section 3.3)
 
-The dual pricing cutoff (`mcfcg_cli --pricing-cutoff`) stops a source's A* once
+Bounded pricing (`mcfcg_cli --bounded-pricing`) stops a source's A* once
 the frontier proves no negative-reduced-cost column remains, instead of running
 until every sink is settled. It is **exact**: the column set it emits is
 identical bit-for-bit — cost, reduced cost, full arc list / arc-flow vector —
-pinned by `FeatureTests.PricingCutoffShadow{Tree,Path,IntermodalTree}`. So the
+pinned by `FeatureTests.BoundedPricingShadow{Tree,Path,IntermodalTree}`. So the
 only open question was whether it is *faster*.
+
+The flag was called `--pricing-cutoff` when these sweeps ran and was renamed in
+gh #42 — it is a bound, not a cutoff. Every log in this directory therefore
+carries the old `[pricing-cutoff]` banner, which the analyzer still parses.
 
 It is not, by enough to matter. **The flag ships off by default** and this
 directory is the evidence.
 
 Scope: what is archived here is the paired on/off A/B across three families. Two
-supporting measurements cited below are *not* — the all-backend cutoff-on pass
+supporting measurements cited below are *not* — the all-backend on-arm pass
 and the rejected stale-arc experiment (+31% wall clock) both live in the
 gitignored `bench_runs/`. Neither is load-bearing for the
 conclusion below; both are flagged where they are cited.
 
 ## How it works
 
-`CGParams::pricing_cutoff` (CLI `--pricing-cutoff`) bounds the best reduced cost
+`CGParams::bounded_pricing` (CLI `--bounded-pricing`) bounds the best reduced cost
 still reachable from the frontier and stops once that bound clears
 `neg_rc_tol`. The bound differs by formulation:
 
@@ -63,7 +67,7 @@ The gain is bounded by
     wall gain  ~  pricing_share x per-price saving   -   LP_share x Delta-iterations
 
 and the two factors of the first term are **anticorrelated across families**.
-The cutoff prunes the tail of a multi-target search, so its per-price saving
+The bound prunes the tail of a multi-target search, so its per-price saving
 grows with commodities per source: grid/planar tree, at 1.2–26 commodities per
 source, saves up to 25% on every price. But those families spend **1.0–1.5%** of
 wall clock pricing, so none of it reaches the clock. Intermodal is the mirror
@@ -78,12 +82,13 @@ source — so the ~2% per-price saving is structural, not a size effect.
 
 Two caveats that the raw wall-clock column will mislead you about:
 
-- **`t_PR` alone is not a pricing measurement.** The cutoff shifts the CG
+- **`t_PR` alone is not a pricing measurement.** The bound shifts the CG
   trajectory (two channels, both under "Trajectory channels" below; neither is
   a correctness bug), so an arm can price fewer sources and post a lower `t_PR`
   with every individual price costing the same. The `per_price_us` column
   (`t_PR / priced_sources`) is the trajectory-immune metric — computable from
-  each run's `[pricing-cutoff] cut=… priced=…` log line — and the
+  each run's `[bounded-pricing] cut=… priced=…` log line (`[pricing-cutoff]` in
+  these archived logs) — and the
   `traj_moved` / `traj_stable` pair flags the cells where it can be read.
 - **Family totals inside the noise floor are noise.** transportation's −2.4%
   is not a gain: Barcelona shows −2.2% wall clock while its *per-price* cost rose
@@ -100,7 +105,7 @@ misses SBT-6255-0 badly (+0.1% predicted, −2.2% measured).
 
 The second term is why a single-backend measurement of this flag is worthless.
 Intermodal LP/pricing split by backend, computed from `results/cg_benchmark.csv`
-(path and tree, the committed cutoff-off configuration):
+(path and tree, the committed unbounded configuration):
 
 | backend | LP share | pricing share |
 |---|---|---|
@@ -120,8 +125,8 @@ recompute from the release.)
 ## Implementation traps
 
 Three traps the implementation must respect, each a live bug caught in review.
-All three are pinned by `FeatureTests.PricingCutoff*` in
-`test/integration_test.cpp`; read them before touching the cutoff code.
+All three are pinned by `FeatureTests.BoundedPricing*` in
+`test/integration_test.cpp`; read them before touching the bounded-pricing code.
 
 - **`MAX_BOUND` is overloaded.** It is both `scale_dual`'s saturation value and
   `compute_lower_bounds_to_targets`' `UNREACHED` sentinel, so a frontier at or
@@ -138,13 +143,13 @@ All three are pinned by `FeatureTests.PricingCutoff*` in
 
 The column set is pinned bit-for-bit — cost, reduced cost, and the full arc list
 / arc-flow vector — by
-`FeatureTests.PricingCutoffShadow{Tree,Path,IntermodalTree}`, which run the real
-`solve_cg` with the cutoff **off** while shadowing every dual vector with a
-second cutoff-on pricer (25k fires / 3.2k columns compared on BUS-2632-0 alone).
+`FeatureTests.BoundedPricingShadow{Tree,Path,IntermodalTree}`, which run the real
+`solve_cg` with the bound **off** while shadowing every dual vector with a
+second bounded-on pricer (25k fires / 3.2k columns compared on BUS-2632-0 alone).
 
 ## Trajectory channels
 
-**The cutoff is column-identical but not trajectory-neutral.** Switching it on
+**The bound is column-identical but not trajectory-neutral.** Switching it on
 moves intermodal iteration counts by up to ±10 and changes column counts. That is
 expected and is not a dropped column. Two channels cause it, neither a
 correctness bug — and note the pricing-exhausted `final_round` re-prices every
@@ -164,7 +169,7 @@ source regardless of postponement:
   filtering; SBT-56295 alone paid **+68%** at an unchanged iteration count. (This
   is the stale-arc experiment noted as unarchived above.)
 - **A weaker lower bound.** `salvage_lagr_term` substitutes
-  `d_k·(cutoff_f/SCALE − margin)` for the `sp_k` a truncated search never
+  `d_k·(bound_f/SCALE − margin)` for the `sp_k` a truncated search never
   computed. Valid but weaker, so `best_lb` differs and the gap exit fires on a
   different iteration. Live in every configuration; moves the iteration count
   with an identical column set.
@@ -173,7 +178,7 @@ source regardless of postponement:
 
 | path | what |
 |---|---|
-| `pricing_cutoff_runs.csv` | one row per run log: timings, iterations, columns, cutoff fire counts, `per_price_us` |
+| `pricing_cutoff_runs.csv` | one row per run log: timings, iterations, columns, bound fire counts, `per_price_us` |
 | `pricing_cutoff_summary.csv` | one row per cell, off and on arms paired and reduced to medians, with deltas |
 | `logs/<sweep>/logs_<solver>_<off\|on>_<rep>/` | the raw run logs both CSVs are derived from |
 
@@ -209,7 +214,7 @@ Reproducing a sweep — the two arms differ only in `--extra-args`:
 
     for rep in 1 2 3; do
       for arm in off on; do
-        [ "$arm" = on ] && extra=--extra-args=--pricing-cutoff || extra=
+        [ "$arm" = on ] && extra=--extra-args=--bounded-pricing || extra=
         python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-cpu \
             $extra --out    bench_runs/SWEEP/copt-cpu_${arm}_rep${rep}.csv \
                    --logdir bench_runs/SWEEP/logs_copt-cpu_${arm}_rep${rep}
@@ -230,13 +235,13 @@ Reproducing a sweep — the two arms differ only in `--extra-args`:
   cells repeat the same iteration *and* column counts across the off-arm reps,
   10 of 10 on the on-arm.
 - **Do not compare an arm against `results/cg_benchmark.csv`.** Those cells are a
-  valid cutoff-off configuration — no log behind them carries the flag, and the
+  valid unbounded configuration — no log behind them carries the flag, and the
   feature postdates them entirely — but they are from other sessions. On cells
-  where the cutoff provably changed nothing (identical iterations *and* columns),
+  where the bound provably changed nothing (identical iterations *and* columns),
   wall clock still moved by −5.5% to **+15.3%** between sessions across the 39
   such cells. The worst is HiGHS on SBT-43785-0 tree — 6 iterations and 45,733
   columns in both arms, yet `t_LP` up **10.7%** on a byte-identical LP sequence.
-  Both arms must come from one session. This is also why the cutoff-on pass
+  Both arms must come from one session. This is also why the on-arm pass
   reading **+18…+32% on HiGHS** against the committed cells is quoted nowhere as
   a number: the direction is credible — HiGHS is the one backend whose LP share
   is large enough for the trajectory term to dominate — but the magnitude is

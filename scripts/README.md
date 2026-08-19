@@ -230,7 +230,7 @@ python3 scripts/extract_iterations.py                        # same --logdir set
 python3 scripts/consolidate_mps_logs.py
 ```
 
-The dual pricing cutoff ablation is the one exception to "logs are never
+The bounded-pricing ablation is the one exception to "logs are never
 tracked": it settles a design question instead of feeding a results table, is not
 meant to be re-run, and so ships with its 424 raw logs under `results/ablation/`.
 Same consolidator relationship — re-parses, never re-solves:
