@@ -196,19 +196,23 @@ Unreachable sinks (A* heap exhausts without settling the sink) are skipped: path
 `CGParams::bounded_pricing` / CLI `--bounded-pricing` (manuscript §3.3) stops a
 source's A* once the frontier proves no negative-RC column remains, instead of
 settling every sink. It is **exact** — the column set is identical bit-for-bit —
-but not faster: best case **−2.4%** wall clock on intermodal (85.4% pricing share
-× −2.8% per price), a wash or a loss everywhere else, because pricing share and
-per-price saving are anticorrelated across families. grid/planar tree saves up to
-30% per price and still *loses* 0.9% of wall clock, because pricing is 1.5% of it.
+but not faster. **Pricing share is the ceiling**, and under COPT it is planar
+0.2%, grid 1.4–3.1%, transportation 4.3%, intermodal 78–80%. grid is the decisive
+test: the bound removes **26%** of its tree pricing time and moves the clock by
+**−0.33%**. Only intermodal has room — best case −2.4% (mechanistic: 85.3% share ×
+−2.8% per price), −4.8% measured including a trajectory that also shortened.
 **Off by default everywhere, including the benchmark driver.** Measure it with
 `--extra-args=--bounded-pricing`.
 
 A family's raw wall-clock delta is **not** the effect: where the trajectory moves
-it is ±Δiterations, running −27% to +20% across intermodal cells. Quote
-`per_price_us` on cells with `traj_moved=0 AND traj_stable=1`, and quote them from
-**copt-cpu** — copt-gpu runs identical trajectories and prices identical source
-counts yet reports twice the saving, off an inflated `t_PR` baseline in its OFF
-arm.
+it is ±Δiterations, running −27% to +20% across intermodal cells. Decompose it —
+intermodal/copt-cpu is the only group whose gain is essentially all pricing
+(−6.65 s of −6.79 s, LP flat). Quote `per_price_us` on cells with
+`traj_moved=0 AND traj_stable=1`, and quote them from **copt-cpu**: copt-gpu runs
+identical trajectories and prices identical source counts yet reports twice the
+saving, off an inflated `t_PR` baseline in its OFF arm. **Never quote a family
+aggregate over an instance subset** — transportation's 22.6% pricing share covers
+9% of that family's wall clock; family-wide it is 4.3%.
 
 It is a *bound*, not a cutoff (gh #42): no incumbent is involved, and "cutoff" in
 this codebase already means the reduced-cost acceptance threshold `NEG_RC_TOL`

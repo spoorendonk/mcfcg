@@ -47,13 +47,41 @@ sink at almost exactly the dual — an exact-zero test almost never triggers.
 
 ## The result
 
-| family (formulation, backend) | pricing share | per-price saving | total `t_PR` | wall clock |
-|---|---|---|---|---|
-| intermodal (tree, copt-cpu) | 85.4% | −2.8% (4 cells) | −5.5% | **−4.8%** |
-| intermodal (tree, copt-gpu) | 71.8% | −5.6% (4 cells, *not quotable*) | −7.4% | **−5.9%** |
-| transportation (tree, copt-gpu) | 22.5% | *no qualifying cell* | −6.7% | **−5.2%** |
-| grid + planar (tree, copt-gpu) | 1.5% | −3.6 … −29.9% (6 measurable cells) | −17.7% | **+0.9%** |
-| grid + planar (path, copt-gpu) | 1.0% | −2.9 … +5.6% (3 measurable cells) | −0.5% | **+0.1%** |
+Pricing share is the ceiling on anything the bound can deliver, and it is known
+up front from `results/cg_benchmark.csv`. Under COPT, per family:
+
+| family | pricing share | verdict |
+|---|---|---|
+| planar | **0.2%** | no gain possible; run as the null |
+| grid | **1.4–3.1%** | the decisive test — see below |
+| transportation | **4.3%** | settled by grid; not tested on its own merits |
+| intermodal | **78–80%** | the only family worth investigating |
+
+What round (a) measured against that:
+
+| family (formulation, backend) | pricing share | Δ pricing time | wall clock |
+|---|---|---|---|
+| intermodal (tree, copt-cpu) | 85.3% | −5.5% | **−4.8%** |
+| intermodal (tree, copt-gpu) | 71.4% | −7.5% | **−6.2%** |
+| transportation (tree, copt-gpu) | 22.6% † | −6.5% | **−4.1%** † |
+| grid (tree) | 1.9% | **−26.0%** | **−0.33%** |
+| grid + planar (path) | 1.0% | −0.5% | **+0.1%** |
+| planar (tree) | 1.2% | −6.2% | **+1.1%** |
+
+**grid tree is the argument in one row**: the bound removes a quarter of the
+pricing time and the clock does not move, because pricing is 1.9% of it. A
+mechanism that cannot pay at 3% share cannot pay at 4.3% either, which is why
+transportation is settled by grid rather than by its own cells.
+
+† The transportation row covers 6 of 9 instances — **9% of the family's wall
+clock**. The 3 excluded on cost are the other 91% and price for 2.5%. Family-wide
+the share is **4.3%**; see `families/README.md` before quoting this row.
+
+Intermodal under copt-cpu is the only family where the saving is mechanistically
+attributable: −6.65 s of a −6.79 s wall-clock gain is pricing, with LP flat to
+0.01 s. Its conservative estimate is `85.3% × −2.8% ≈ −2.4%` (the cheaper-per-
+price term alone); the measured −4.8% also includes a trajectory that shortened
+162 → 154 iterations, which is real here but not predictable per instance.
 
 **The wall-clock column is not the effect.** Where the trajectory moves, that
 column is ±Δiterations: intermodal's family total covers cells from −27%

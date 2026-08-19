@@ -25,57 +25,108 @@ everywhere, both arms in one session on one build.**
 444 logs, 74 paired cells, 1 h 46 min on COPT 8.0.1. Every run passed against its
 reference optimum; no cell hit the 1800 s limit.
 
-Three scope decisions, recorded with their reasons so they are not re-litigated:
+## Why these families, in this order
 
-- **Path only on grid/planar.** Transportation path costs ~9.5× tree (Austin and
-  Philadelphia clamp at the 7200 s limit) and prices for 0.1–0.9% of wall clock.
-  Intermodal path ≡ tree — one commodity per source. grid/planar is the only
-  affordable place the **path** bound is observable at all, and §3.3 claims it
-  separately from the tree analogue.
-- **Transportation at 6 of 9 instances.** Austin, Birmingham and Philadelphia
-  excluded on cost (~4 h added). The family has no quotable cell either way, so
-  more instances were unlikely to produce one. Cost, not a finding.
-- **copt-gpu is the axis; copt-cpu corroborates on intermodal only.** copt-gpu is
-  the one executor that already covered all four families, and its LP share on
-  the other three is within 0.2 pp of copt-cpu's, so copt-cpu cannot expose signal
-  there that copt-gpu missed. Extending it to those families costs ~61 h, ~60 of
-  which measures families that price for under 2.3% of wall clock. Intermodal is
-  the only family where a per-price number is quotable at all, so that is where
-  the second executor earns its 14 minutes — and it turned out to be the arm to
-  quote (below).
+The round is a ladder, not a survey. The gain is bounded by `pricing_share x
+per-price saving`, so **pricing share is the ceiling** and it is knowable up
+front from the committed benchmark. Family pricing shares under COPT:
+
+| family | pricing share | cost of one arm-rep | hypothesis |
+|---|---|---|---|
+| planar | **0.2%** | 131 s | no gain possible; run it because it is cheap and pins the null |
+| grid | **1.4–3.1%** | 148 s | the first share worth a look, and also cheap — test it |
+| transportation | **4.3%** | 187 s | only if grid works |
+| intermodal | **78–80%** | 162 s | the one family where the ceiling is high — test it |
+
+Each rung decides the next. planar returns the null it should. **grid is the
+decisive rung**: the bound works there — pricing time drops **26.0%** on tree —
+and the clock does not move (**−0.33%**), because 1.9% of nothing is nothing. A
+mechanism that cannot pay at 3% pricing share cannot pay at 4.3% either, so
+transportation is settled by grid rather than by its own numbers.
+
+Only intermodal has a ceiling high enough to matter, and it is the one family
+where the measured gain is mechanistically attributable rather than incidental.
+
+### The backends
+
+**COPT, because it has the fastest LP.** Over the 81 cells all five backends
+solve to optimality, total LP time is copt-cpu 1.00x, cuopt 1.41x, copt-gpu
+1.92x, mosek 2.22x, highs 11.07x. Smallest LP share is what this study wants
+twice over: it maximises the pricing signal, and it minimises the model's second
+term (`-LP_share x Delta-iterations`), which is the confound that makes the flag
+backend-specific. copt-cpu and copt-gpu are one library exercised two ways
+(GPUMode 0 vs 2), so the second executor is a control rather than a second
+product. Which backends the gain *survives* is round (b)'s question, not this
+one's.
+
+### Scope decisions inside the families
+
+- **Path only on grid/planar.** Transportation path costs ~9.5x tree (Austin and
+  Philadelphia clamp at the 7200 s limit); intermodal path is identical to tree,
+  one commodity per source. grid/planar is the only affordable place the **path**
+  bound is observable at all, and section 3.3 claims it separately.
+- **Transportation at 6 of 9 instances**, Austin/Birmingham/Philadelphia excluded
+  on cost. Read the caveat under the result table before quoting this family:
+  those three are 91% of its wall clock, and dropping them changes what its
+  pricing share means.
 
 ## The result
 
-| family (formulation, executor) | pricing share | per-price, quotable cells | total `t_PR` | wall clock |
+Per family, medians of 3 reps, off arm as the baseline:
+
+| family (formulation, executor) | pricing share | Δ pricing time | **Δ wall clock** |
+|---|---|---|---|
+| intermodal (tree, **copt-cpu**) | 85.3% | −5.5% | **−4.8%** |
+| intermodal (tree, copt-gpu) | 71.4% | −7.5% | **−6.2%** |
+| transportation (tree, copt-gpu) | 22.6% † | −6.5% | **−4.1%** † |
+| grid (tree) | 1.9% | **−26.0%** | **−0.33%** |
+| grid (path) | 1.2% | −4.1% | −1.30% |
+| planar (tree) | 1.2% | −6.2% | +1.06% |
+| planar (path) | 0.8% | +2.8% | −0.03% |
+
+**grid tree is the whole argument in one row.** The bound does exactly what it
+claims — a quarter of the pricing time, gone — and the clock does not notice,
+because pricing is 1.9% of it.
+
+† **Do not read the transportation row as a family figure.** It covers the 6
+instances this round ran, which are **9% of the family's wall clock**. The 3
+excluded on cost (Austin, Birmingham, Philadelphia) are the other **91%**, and
+they price for **2.5%**. Family-wide, transportation prices for **4.3%** — grid's
+range, not intermodal's. The exclusion kept precisely the instances where the
+bound looks best, which is why grid, not this row, settles the family.
+
+### Where the wall-clock gain actually comes from
+
+Absolute seconds, so the terms add up:
+
+| group | Δ wall | from pricing | from LP | iters off→on |
 |---|---|---|---|---|
-| intermodal (tree, **copt-cpu**) | 85.4% | **−2.8%** median, 4 cells | −5.5% | −4.8% |
-| intermodal (tree, copt-gpu) | 71.8% | −5.6% median, 4 cells — *not quotable, see below* | −7.4% | −5.9% |
-| transportation (tree, copt-gpu) | 22.5% | *no qualifying cell* | −6.7% | −5.2% |
-| grid + planar (tree, copt-gpu) | 1.5% | −1.8% median, 8 cells (−20.0 … +50.0%) | −17.7% | +0.9% |
-| grid + planar (path, copt-gpu) | 1.0% | +0.0% median, 13 cells (−33.3 … +7.1%) | −0.5% | +0.1% |
+| intermodal copt-cpu | −6.79 s | **−6.65 s** | +0.01 s | 162 → 154 |
+| intermodal copt-gpu | −10.66 s | −9.32 s | −1.24 s | 162 → 154 |
+| transportation copt-gpu | −7.93 s | −2.80 s | **−3.35 s** | 190.7 → 190.3 |
+| grid + planar tree | +0.80 s | −0.45 s | +1.44 s | 521.7 → 525.0 |
+| grid + planar path | −0.05 s | −0.02 s | +0.03 s | 276.3 → 274.3 |
 
-Those grid/planar ranges are mostly quantization: 39 of the 48 cells price for
-under 0.1 s in total, against a 3-digit timing field. Restricted to the 9 cells
-whose pricing time is large enough to measure, the mechanism is clean and
-one-directional — **tree** −3.6 … −29.9% per price (median −22.3%), because its
-bound tightens on every settle; **path** −2.9 … +5.6%, because its `max π` bound
-waits on the most expensive remaining commodity, which settles last.
+Intermodal under copt-cpu is the only clean row: **essentially the entire saving
+is pricing**, with LP flat to 0.01 s. Transportation's gain is majority-LP at an
+unchanged iteration count — a different separated capacity set, not a pricing
+effect, and copt-gpu-only (the same trajectories move LP by −3.86% on copt-gpu
+and +0.34% on copt-cpu, so that executor's LP timings drift between arms).
+grid/planar's real pricing saving is 0.45 s against 1.44 s of LP noise.
 
-**The conclusion is unchanged: the flag stays off.** Where the trajectory holds
-still — the only place a wall-clock number means "the pricer got faster" — the
-gain is 85.4% × −2.8% ≈ **−2.4%**, on a family whose instances finish in under a
-minute. Everywhere else the pricing share is too small to carry any per-price
-saving to the clock: grid/planar tree saves 17.7% of its total pricing time and
-*loses* 0.9% of wall clock, because pricing is 1.5% of it.
+The family wall-clock deltas are robust in sign — across all nine off×on rep
+pairings, intermodal spans [−3.9%, −8.8%] and never touches zero, while
+grid/planar spans [−1.1%, +2.7%] and straddles it.
 
-The family wall-clock column is **not** the effect. On intermodal, 6 of 10 cells
-have `traj_moved=1`, and their deltas run from −27% (SBT-18765-0, 9 → 7
-iterations) to +20% (BUS-23688-0, 13 → 20). The family total is which way that
-coin landed, not what the pricer did. Likewise transportation's −5.2%: 5 of its 6
-cells moved, ChicagoRegional's −8.1% comes with 50 → 48 iterations, and its only
-`traj_moved=0` cell (ChicagoSketch) has reps that disagree within an arm. **No
-transportation cell is quotable per-price**, which is the same verdict the
-deleted round reached.
+**Verdict: intermodal is the only family worth investigating further**, and that
+is what round (b) (gh #44) takes up. The conservative, mechanistic estimate of
+its gain is `85.3% × −2.8% ≈ −2.4%` — the cheaper-per-price term alone. The
+measured −4.8% includes a trajectory that also shortened, 162 → 154 iterations,
+which is real here but not predictable per instance.
+
+**The flag still ships off.** −2.4% to −4.8% on one family, on instances that
+finish in under a minute, is not worth a per-family default — and whether it
+survives on a backend with a larger LP share is exactly what round (b) asks.
 
 The two arms agree on the LP optimum everywhere: worst `d_obj_rel` is 6.95e-05
 (grid3 path), inside the CG gap tolerance. That is the exactness check this data
