@@ -1,0 +1,43 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem__1hsbmcj.txt -f %M build/mcfcg_cli data/commalab/grid/grid12 --solver copt --copt-gpu-mode 2 --formulation tree --max-iters 10000 --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 561000
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 900 vertices, 3480 arcs, 6000 commodities, 899 sources
+Solver: copt (gpu-mode 2), formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=899, capped_arcs=3480)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   5.7494e+08   8.9900e+04   1798    899   899      0      0      0      0   0.350   0.011   0.000   0.361     0.361
+    2          inf   5.7494e+08   8.9900e+05   1798    899   899      0      0      0      0   0.162   0.010   0.000   0.173     0.534
+    3          inf   5.7494e+08   8.9900e+06   1798    899   899      0      0      0      0   0.154   0.011   0.000   0.165     0.700
+    4          inf   5.7494e+08   8.9531e+07   1798    899   884      0      0      0      0   0.151   0.013   0.000   0.165     0.864
+    5          inf   5.7494e+08   5.4926e+08   1798   1027   122      0      0    128      0   0.161   0.009   0.001   0.171     1.035
+    6          inf   5.7494e+08   8.0124e+08   2630   1027   486    838      6      0      0   0.199   0.006   0.000   0.207     1.242
+    7          inf   5.7494e+08   1.5191e+09   3495   1039   343    865      0     12      0   0.201   0.006   0.000   0.210     1.452
+    8          inf   5.7494e+08   1.2550e+09   4369   1099   110    874      0     60      0   0.226   0.005   0.001   0.234     1.686
+    9          inf   5.7494e+08   1.0960e+09   5256   1129    81    887      0     30      0   0.274   0.007   0.001   0.284     1.970
+   10          inf   5.7494e+08   5.7840e+08   6142   1159     0    886      0     30      0   0.332   0.006   0.001   0.341     2.311
+   11          inf   5.7572e+08   5.7807e+08   6877   1143     0    882    147     14     30   0.327   0.006   0.002   0.340     2.652
+   12          inf   5.7647e+08   5.7775e+08   7436   1156     0    868    309     14      1   0.315   0.004   0.001   0.325     2.977
+   13          inf   5.7676e+08   5.7753e+08   7853   1169     0    844    427     15      2   0.315   0.006   0.002   0.328     3.305
+   14          inf   5.7691e+08   5.7740e+08   8030   1160     0    834    657      2     11   0.329   0.005   0.001   0.342     3.647
+   15          inf   5.7700e+08   5.7731e+08   7836   1152     0    803    997      2     10   0.314   0.005   0.001   0.327     3.974
+   16          inf   5.7707e+08   5.7725e+08   7491   1139     0    764   1109      3     16   0.316   0.006   0.001   0.329     4.303
+   17          inf   5.7713e+08   5.7722e+08   7275   1133     0    715    931      1      7   0.307   0.005   0.001   0.319     4.623
+   18          inf   5.7716e+08   5.7720e+08   7072   1129     0    674    877      2      6   0.315   0.005   0.001   0.327     4.950
+   19          inf   5.7718e+08   5.7719e+08   6864   1125     0    574    782      5      9   0.306   0.006   0.001   0.319     5.269
+   20          inf   5.7718e+08   5.7719e+08   6431   1122     0    365    798      2      5   0.303   0.005   0.001   0.315     5.584
+   21   5.7719e+08   5.7719e+08   5.7719e+08   6431   1122     0    *13      0      0      0   0.274   0.005   0.001   0.281     5.864
+CG optimal after 21 iterations. UB=577186496.896183 LB=577185772.957031 gap=7.239e+02 tol=5.772e+04  t_LP=5.633  t_PR=0.154  t_SP=0.017  t_Tot=5.877
+[bounded-pricing] enabled=0 cut=0 priced=24273 rate=0.0%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/commalab/grid/grid12,tree,21,5532,577186496.896183,577185772.957031,1,5.904,5.633,0.154,0.017

@@ -1,0 +1,55 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_fctllhp1.txt -f %M build/mcfcg_cli data/transportation/BerlinCenter_net.tntp.gz --solver copt --copt-gpu-mode 2 --formulation tree --max-iters 10000 --bounded-pricing --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 741652
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+TNTP: net=data/transportation/BerlinCenter_net.tntp.gz trips=data/transportation/BerlinCenter_trips.tntp.gz coef=0.5
+Instance: 12981 vertices, 28376 arcs, 49688 commodities, 865 sources
+Solver: copt (gpu-mode 2), formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=865, capped_arcs=28376)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   2.7321e+06   2.6017e+05   1730    865   853      0      0      0      0   0.357   0.004   0.003   0.363     0.363
+    2          inf   4.3185e+06   2.4448e+06   1730    865   754      0      0      0      0   0.169   0.007   0.003   0.178     0.541
+    3          inf   1.5994e+07   1.5789e+07   1730    891   303      0      0     26      0   0.160   0.043   0.004   0.206     0.748
+    4          inf   1.5994e+07   4.0348e+07   2184   1138   237    454      0    247      0   0.174   0.045   0.003   0.226     0.974
+    5          inf   1.5994e+07   1.0208e+08   2896   1185   376    712      0     47      0   0.242   0.042   0.003   0.294     1.268
+    6          inf   1.5994e+07   3.1195e+08   3608   1251   303    746     34     66      0   0.257   0.046   0.003   0.316     1.584
+    7          inf   1.5994e+07   7.6867e+08   4349   1299   254    741      0     48      0   0.286   0.046   0.003   0.342     1.927
+    8          inf   1.5994e+07   1.4776e+09   5090   1365   193    741      0     66      0   0.322   0.044   0.004   0.378     2.305
+    9          inf   1.5994e+07   2.1270e+09   5778   1402   158    745     57     37      0   0.418   0.047   0.004   0.482     2.787
+   10          inf   1.5994e+07   1.7070e+09   6246   1384    94    743    275     26     44   0.457   0.050   0.004   0.527     3.314
+   11          inf   1.5994e+07   1.4185e+09   6588   1418    47    719    377     38      4   0.447   0.053   0.005   0.521     3.835
+   12          inf   1.5994e+07   5.3496e+08   6828   1448     7    717    477     46     16   0.481   0.055   0.004   0.557     4.392
+   13          inf   1.5994e+07   1.1042e+09   7030   1476    15    710    508     41     13   0.514   0.050   0.005   0.587     4.979
+   14          inf   1.5994e+07   3.6942e+08   7101   1483     1    683    612     29     22   0.597   0.045   0.005   0.665     5.644
+   15          inf   2.6379e+07   2.8297e+07   7123   1485     0    680    658     19     17   0.510   0.045   0.005   0.578     6.222
+   16          inf   2.6574e+07   2.8001e+07   7108   1490     0    678    693     13      8   0.540   0.041   0.005   0.605     6.827
+   17          inf   2.7141e+07   2.7873e+07   7201   1481     0    660    567      8     17   0.512   0.046   0.005   0.581     7.407
+   18          inf   2.7141e+07   2.7754e+07   7128   1462     0    659    732      2     21   0.542   0.050   0.005   0.616     8.023
+   19          inf   2.7278e+07   2.7678e+07   6879   1430     0    618    867      8     40   0.533   0.051   0.006   0.608     8.631
+   20          inf   2.7314e+07   2.7628e+07   6587   1385     0    620    912      4     49   0.528   0.047   0.005   0.597     9.228
+   21          inf   2.7406e+07   2.7594e+07   6396   1362     0    475    666      2     25   0.429   0.051   0.005   0.501     9.729
+   22          inf   2.7406e+07   2.7573e+07   6265   1353     0    467    598      5     14   0.433   0.047   0.005   0.500    10.228
+   23          inf   2.7467e+07   2.7555e+07   6211   1342     0    493    547      3     14   0.432   0.050   0.005   0.501    10.730
+   24          inf   2.7481e+07   2.7546e+07   6167   1337     0    498    542      1      6   0.416   0.049   0.007   0.487    11.217
+   25          inf   2.7504e+07   2.7541e+07   6150   1329     0    439    456      1      9   0.423   0.048   0.005   0.494    11.710
+   26          inf   2.7504e+07   2.7536e+07   6117   1328     0    424    457      1      2   0.391   0.049   0.005   0.460    12.171
+   27          inf   2.7515e+07   2.7533e+07   6142   1324     0    398    373      1      5   0.418   0.052   0.005   0.489    12.659
+   28   2.7532e+07   2.7518e+07   2.7532e+07   6122   1322     0    380    400      0      2   0.415   0.048   0.005   0.482    13.141
+   29   2.7532e+07   2.7522e+07   2.7531e+07   6136   1325     0    414    400      4      1   0.413   0.052   0.005   0.485    13.626
+   30   2.7530e+07   2.7522e+07   2.7530e+07   6164   1323     0    400    372      0      2   0.443   0.049   0.005   0.511    14.137
+   31   2.7530e+07   2.7526e+07   2.7530e+07   6187   1324     0    345    322      1      0   0.447   0.052   0.005   0.517    14.654
+   32   2.7529e+07   2.7527e+07   2.7529e+07   6187   1324     0   *314      0      0      0   0.434   0.049   0.005   0.488    15.142
+CG optimal after 32 iterations. UB=27529425.244096 LB=27526956.501589 gap=2.469e+03 tol=2.753e+03  t_LP=13.138  t_PR=1.501  t_SP=0.147  t_Tot=15.191
+[bounded-pricing] enabled=1 cut=9320 priced=31140 rate=29.9%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/transportation/BerlinCenter_net.tntp.gz,tree,32,5322,27529425.244096,27526956.501589,1,15.243,13.138,1.501,0.147

@@ -1,0 +1,48 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_xdkuqy7p.txt -f %M build/mcfcg_cli data/commalab/grid/grid11 --solver copt --copt-gpu-mode 2 --formulation tree --max-iters 10000 --bounded-pricing --time-limit 1800.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 540700
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 625 vertices, 2400 arcs, 4000 commodities, 625 sources
+Solver: copt (gpu-mode 2), formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=625, capped_arcs=2400)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf   1.8834e+07   6.2500e+04   1250    625   625      0      0      0      0   0.352   0.001   0.000   0.353     0.353
+    2          inf   1.8834e+07   6.2500e+05   1250    625   625      0      0      0      0   0.162   0.000   0.000   0.163     0.516
+    3          inf   1.8965e+07   6.2500e+06   1250    625   625      0      0      0      0   0.154   0.000   0.000   0.155     0.671
+    4          inf   6.6412e+07   6.2161e+07   1250    625   613      0      0      0      0   0.155   0.001   0.000   0.156     0.827
+    5          inf   3.2197e+08   3.2192e+08   1250    817    31      0      0    192      0   0.158   0.006   0.001   0.164     0.991
+    6          inf   3.2197e+08   4.3436e+08   1849    817   305    599      0      0      0   0.208   0.003   0.000   0.213     1.204
+    7          inf   3.2197e+08   1.1206e+09   2453    819   310    604      0      2      0   0.207   0.003   0.000   0.212     1.416
+    8          inf   3.2197e+08   1.3957e+09   3069    841   167    616      0     22      0   0.224   0.003   0.000   0.229     1.645
+    9          inf   3.2197e+08   1.0416e+09   3689    863   103    620      0     22      0   0.240   0.003   0.000   0.244     1.890
+   10          inf   3.2197e+08   4.0967e+08   4309    921    12    620      0     58      0   0.278   0.003   0.001   0.283     2.173
+   11          inf   3.2197e+08   3.3056e+08   4840    889     0    620     89     11     43   0.345   0.003   0.001   0.352     2.525
+   12          inf   3.2802e+08   3.3010e+08   5088    907     0    610    362     19      1   0.276   0.003   0.001   0.284     2.808
+   13          inf   3.2844e+08   3.2985e+08   5426    915     0    604    266      9      1   0.288   0.003   0.001   0.296     3.104
+   14          inf   3.2868e+08   3.2967e+08   5661    923     0    600    365     11      3   0.296   0.003   0.001   0.303     3.407
+   15          inf   3.2875e+08   3.2953e+08   5791    927     0    599    469      8      4   0.324   0.003   0.001   0.332     3.739
+   16          inf   3.2889e+08   3.2944e+08   5627    916     0    585    749     10     21   0.298   0.003   0.001   0.306     4.045
+   17          inf   3.2905e+08   3.2937e+08   5418    911     0    577    786      7     12   0.327   0.003   0.001   0.335     4.380
+   18          inf   3.2910e+08   3.2933e+08   5403    912     0    574    589      8      7   0.300   0.003   0.001   0.308     4.688
+   19          inf   3.2915e+08   3.2930e+08   5347    908     0    550    606      2      6   0.301   0.003   0.001   0.310     4.997
+   20          inf   3.2920e+08   3.2928e+08   5327    910     0    527    547      6      4   0.301   0.003   0.001   0.309     5.306
+   21          inf   3.2922e+08   3.2927e+08   5268    909     0    508    567      5      6   0.327   0.003   0.001   0.334     5.641
+   22          inf   3.2924e+08   3.2926e+08   5182    905     0    493    579      1      5   0.330   0.003   0.001   0.337     5.978
+   23          inf   3.2925e+08   3.2926e+08   5100    900     0    452    534      1      6   0.318   0.003   0.001   0.326     6.304
+   24          inf   3.2926e+08   3.2926e+08   5050    902     0    425    475      3      1   0.327   0.003   0.001   0.334     6.638
+   25          inf   3.2926e+08   3.2926e+08   4891    901     0    287    446      2      3   0.324   0.003   0.001   0.332     6.970
+   26   3.2926e+08   3.2926e+08   3.2926e+08   4891    901     0    *66      0      0      0   0.313   0.003   0.001   0.317     7.287
+CG optimal after 26 iterations. UB=329258351.450556 LB=329257847.073160 gap=5.044e+02 tol=3.293e+04  t_LP=7.133  t_PR=0.080  t_SP=0.015  t_Tot=7.296
+[bounded-pricing] enabled=1 cut=8228 priced=20000 rate=41.1%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 2
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/commalab/grid/grid11,tree,26,4266,329258351.450556,329257847.073160,1,7.321,7.133,0.080,0.015

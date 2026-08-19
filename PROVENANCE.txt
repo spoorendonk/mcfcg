@@ -353,32 +353,53 @@ produced each row, not a file you can open from the archive. Reproducing a row
 means re-running it, not re-parsing a log.
 
 
-5.1 Bounded-pricing ablation — no committed log set
+5.1 Bounded-pricing ablation — the one tracked log set
 -----------------------------------------------------------
 
-`results/ablation/` held the A/B measurement behind the decision to ship bounded
-single-source pricing (manuscript section 3.3, gh #41) DISABLED. It was the one
-tracked log set in this repo: 424 run logs across three paired sweeps, committed
-because the ablation settles a design question rather than feeding a tabulated
-result.
+`results/ablation/` holds the A/B measurement behind the decision to ship bounded
+single-source pricing (manuscript section 3.3, gh #41) DISABLED. It is the one
+tracked log set in this repo, committed because the ablation settles a design
+question rather than feeding a tabulated result: the logs are the primary
+artifact and the CSVs are derived from them.
 
-Those logs, and the two CSVs derived from them, were REMOVED in gh #42. They ran
-under the flag's original name, `--pricing-cutoff`, and carried a
-`[pricing-cutoff]` banner line; rather than keep a parser that understands two
-spellings of the same field, the evidence was deleted and gh #43 re-runs the
-whole ablation under `--bounded-pricing`. The logs remain recoverable from git
-history at the commit before that removal.
+It is organised into rounds, each a directory named for the axis it varies.
 
-Consequence for anyone reading `results/ablation/README.md`: its numbers are
-currently UNSOURCED in the working tree. They were derived from the deleted logs
-and have not been re-measured. Do not cite them in the manuscript until gh #43
-regenerates the sweeps and this section is rewritten to describe what it produced
-— host, date, commit, backend, rep count, and the arm-differing flag.
+    round (a)  results/ablation/families/   gh #43   four families, one backend
 
-`scripts/analyze_pricing_cutoff_ablation.py` still re-derives both CSVs from a
-sweep directory and never re-solves, the same relationship `consolidate_cg_logs.py`
-has to the main table. With no sweep present it exits with "sweep dir(s) not
-found" rather than writing an empty table.
+    Collected  2026-08-19, in a single 1 h 46 min session on the section 3 host
+    Build      the commit that adds this section, cmake -DMCFCG_USE_COPT=ON,
+               otherwise the documented recipe (Release, -march=native)
+    Backend    COPT 8.0.1, GPUMode 2 (copt-gpu) on all four families; GPUMode 0
+               (copt-cpu) additionally on intermodal, as a second executor on the
+               one family where a per-price number is quotable
+    Regime     the pinned barrier config — presolve off, crossover off, tol 1e-4;
+               every log carries its own [lp-config] banner
+    Reps       3 per arm on every one of the 74 cells, 444 logs total
+    Arms       identical invocations except --extra-args=--bounded-pricing on the
+               ON arm; every log records which via its [bounded-pricing]
+               enabled=N banner, and CommittedAblationTest asserts the OFF arm
+               never fired the bound
+    Limits     --time-limit 1800; no cell reached it, every cell matched its
+               reference optimum
+
+    round (b)  results/ablation/backends/   gh #44   one family, five backends
+               — not yet collected.
+
+Round (a) supersedes an earlier archive of 424 logs that was REMOVED in gh #42:
+those ran under the flag's original name, `--pricing-cutoff`, and carried a
+`[pricing-cutoff]` banner, and rather than keep a parser that understands two
+spellings of the same field the evidence was deleted and re-measured. The
+deleted logs remain recoverable from git history at the commit before their
+removal. Two numbers moved in the re-run beyond session drift: intermodal's
+family wall-clock total (−3.6% → −4.8% on copt-cpu), which is trajectory luck
+rather than a pricing effect, and copt-gpu's per-price saving, which round (a)
+identifies as a measurement artifact and declares not quotable. The conclusion —
+the flag stays off — did not move, and the copt-cpu per-price figure reproduced
+the deleted round's within its error bar (−2.53% ± 1.08 pp vs −2.45% ± 0.56 pp).
+
+`scripts/analyze_bounded_pricing_ablation.py` re-derives both CSVs from the
+tracked logs and never re-solves, the same relationship `consolidate_cg_logs.py`
+has to the main table; rerunning it is byte-identical to what is committed.
 
 This ablation does NOT feed `results/cg_benchmark.csv`. No log behind that table
 carries the flag under either name — the feature postdates all 440 cells — so the

@@ -7,27 +7,27 @@ identical bit-for-bit — cost, reduced cost, full arc list / arc-flow vector �
 pinned by `FeatureTests.BoundedPricingShadow{Tree,Path,IntermodalTree}`. So the
 only open question was whether it is *faster*.
 
-> **The evidence behind every number below has been deleted.** These sweeps ran
-> under the flag's original name, `--pricing-cutoff`, and their 424 logs and two
-> derived CSVs were removed in gh #42 rather than kept alongside a parser that
-> understands two spellings. **gh #43 re-runs the whole ablation** under
-> `--bounded-pricing`, at 3 reps, on one backend.
->
-> Until it does, treat this file as a **record of the argument, not of the
-> measurement**: the reasoning, the gain model and the implementation traps are
-> all still correct and still worth reading before touching the code, but the
-> percentages are not currently reproducible from anything in the tree and must
-> not be cited. The deleted logs are recoverable from git history at the commit
-> before their removal.
-
 It is not, by enough to matter. **The flag ships off by default**, and this file
-is the argument for that — see the caveat above on where the numbers now stand.
+is the argument for that.
 
-Scope: what is archived here is the paired on/off A/B across three families. Two
-supporting measurements cited below are *not* — the all-backend on-arm pass
-and the rejected stale-arc experiment (+31% wall clock) both live in the
-gitignored `bench_runs/`. Neither is load-bearing for the
-conclusion below; both are flagged where they are cited.
+The measurement is split into rounds, each a directory named for the axis it
+varies. This file carries the argument — mechanism, gain model, traps — and each
+round's own README carries what that round measured and which of its numbers are
+quotable:
+
+| round | dir | varies | status |
+|---|---|---|---|
+| (a) | [`families/`](families/README.md) | four families at one backend, 3 reps | landed (gh #43) |
+| (b) | `backends/` | five backends on one family | gh #44 |
+
+Every number below comes from round (a) unless it says otherwise, and every one
+of them is re-derivable from that round's tracked logs.
+
+Scope: two supporting measurements cited below are *not* archived — the
+all-backend on-arm pass (round (b) pairs it) and the rejected stale-arc
+experiment (+31% wall clock, `bench_runs/issue41_stalearcs/ANALYSIS.md`), both in
+the gitignored `bench_runs/`. Neither is load-bearing for the conclusion below;
+both are flagged where they are cited.
 
 ## How it works
 
@@ -49,27 +49,36 @@ sink at almost exactly the dual — an exact-zero test almost never triggers.
 
 | family (formulation, backend) | pricing share | per-price saving | total `t_PR` | wall clock |
 |---|---|---|---|---|
-| intermodal (tree, copt-cpu) | 85.3% | −2.5% (4 cells) | −4.3% | **−3.6%** |
-| intermodal (tree, copt-gpu) | 71.5% | −1.7% (4 cells) | −4.7% | **−3.7%** |
-| transportation (tree, copt-gpu) | 22.8% | *no qualifying cell* | −2.8% | **−2.4%** |
-| grid + planar (tree, copt-gpu) | 1.5% | −2.7 … −25.6% | −16.3% | **−1.3%** |
-| grid + planar (path, copt-gpu) | 1.0% | +6.0 … −10.4% | −0.9% | **+0.3%** |
+| intermodal (tree, copt-cpu) | 85.4% | −2.8% (4 cells) | −5.5% | **−4.8%** |
+| intermodal (tree, copt-gpu) | 71.8% | −5.6% (4 cells, *not quotable*) | −7.4% | **−5.9%** |
+| transportation (tree, copt-gpu) | 22.5% | *no qualifying cell* | −6.7% | **−5.2%** |
+| grid + planar (tree, copt-gpu) | 1.5% | −3.6 … −29.9% (6 measurable cells) | −17.7% | **+0.9%** |
+| grid + planar (path, copt-gpu) | 1.0% | −2.9 … +5.6% (3 measurable cells) | −0.5% | **+0.1%** |
+
+**The wall-clock column is not the effect.** Where the trajectory moves, that
+column is ±Δiterations: intermodal's family total covers cells from −27%
+(SBT-18765-0, 9 → 7 iterations) to +20% (BUS-23688-0, 13 → 20). The effect is
+`pricing_share × per-price`, which on the one family where both are measurable is
+85.4% × −2.8% ≈ **−2.4%**. The copt-gpu per-price column is excluded because that
+executor's off arm carries an inflated `t_PR` baseline — round (a)'s README works
+through the evidence.
 
 A per-price saving is only quotable on a cell where the trajectory held still in
 both senses — `traj_moved=0` (the arms' median iteration and column counts agree)
 **and** `traj_stable=1` (the repetitions *within* each arm agreed too). Intermodal
 has 4 such cells per backend. Transportation has **none**: its only `traj_moved=0`
-cell is Sydney, whose three on-arm reps are not unanimous (one ran 24 iterations /
-13,210 columns against 25 / 12,647 for the other two), so the medians agree by
-coincidence rather than because nothing moved.
+cell is ChicagoSketch (14 iterations and 2,722 columns in both arms), and its reps
+disagree *within* an arm, so the medians agree by coincidence rather than because
+nothing moved.
 
-For grid/planar the entry is a range rather than a median because 38 of those 48
+For grid/planar the entry is a range rather than a median because 39 of those 48
 cells price for under 0.1 s in total, where the log's 3-digit timing is pure
-quantization — their median delta is exactly +0.0%. The range covers the 10 cells
-whose pricing time is large enough to measure, and those 10 are where the
-mechanism shows: **tree** saves 2.7–25.6% per price because its bound tightens on
-every settle, while **path** ranges +6.0 to −10.4% because its `max pi` bound
-waits on the most expensive remaining commodity, which settles last.
+quantization — the all-cell path median is exactly +0.0%. The range covers the 9
+cells whose pricing time is large enough to measure, and those 9 are where the
+mechanism shows: **tree** saves 3.6–29.9% per price (median −22.3%) because its
+bound tightens on every settle, while **path** ranges −2.9 to +5.6% because its
+`max pi` bound waits on the most expensive remaining commodity, which settles
+last.
 
 The gain is bounded by
 
@@ -78,16 +87,16 @@ The gain is bounded by
 and the two factors of the first term are **anticorrelated across families**.
 The bound prunes the tail of a multi-target search, so its per-price saving
 grows with commodities per source: grid/planar tree, at 1.2–26 commodities per
-source, saves up to 25% on every price. But those families spend **1.0–1.5%** of
+source, saves up to 30% on every price. But those families spend **1.0–1.5%** of
 wall clock pricing, so none of it reaches the clock. Intermodal is the mirror
-image — exactly **one commodity per source**, so ~2% per price, but **71–85%** of
-wall clock spent pricing. The product never exceeds ~2% on any family, and it is
-~2% only on instances that finish in under a minute: across the committed
+image — exactly **one commodity per source**, so −2.8% per price, but **71–85%** of
+wall clock spent pricing. The product never exceeds ~2.4% on any family, and it is
+that only on instances that finish in under a minute: across the committed
 benchmark the pricing share collapses as instances get harder (planar2500 0.1%,
 Philadelphia 1.1%, Birmingham 1.6%, Austin 4.3%), while one extra CG iteration
 there costs 0.4–1.5% of wall clock. Scaling intermodal up does not open this
 up: it has one commodity per source *by construction* — each request is its own
-source — so the ~2% per-price saving is structural, not a size effect.
+source — so the small per-price saving is structural, not a size effect.
 
 Two caveats that the raw wall-clock column will mislead you about:
 
@@ -96,21 +105,23 @@ Two caveats that the raw wall-clock column will mislead you about:
   a correctness bug), so an arm can price fewer sources and post a lower `t_PR`
   with every individual price costing the same. The `per_price_us` column
   (`t_PR / priced_sources`) is the trajectory-immune metric — computable from
-  each run's `[bounded-pricing] cut=… priced=…` log line (`[pricing-cutoff]` in
-  these archived logs) — and the
+  each run's `[bounded-pricing] cut=… priced=…` log line — and the
   `traj_moved` / `traj_stable` pair flags the cells where it can be read.
-- **Family totals inside the noise floor are noise.** transportation's −2.4%
-  is not a gain: Barcelona shows −2.2% wall clock while its *per-price* cost rose
-  4.7%, and pricing is 0.7% of Barcelona's wall clock — the change cannot have
-  come from the pricer. The `spread_off_pct` column carries the rep-to-rep noise
-  floor per cell.
+- **Family totals inside the noise floor are noise.** transportation's −5.2% is
+  not a gain: 5 of its 6 cells moved the trajectory, ChicagoRegional's −8.1%
+  arrives with 50 → 48 iterations, and Barcelona posts +2.3% wall clock on 0.7%
+  pricing share — a number the pricer cannot have caused in either direction. The
+  `spread_off_pct` column carries the rep-to-rep noise floor per cell.
 
 Where the model holds still it is accurate. On the four qualifying copt-cpu
 intermodal cells (SBT-31275-0, SBT-43785-0, SBT-56295-0, SBT-6255-0), predicted
-−2.3/−2.5/−1.6/−2.1% vs measured −2.3/−2.4/−1.7/−2.3% — within 0.13pp everywhere
-(compare the `pred_wall_pct` and `d_t_tot_pct` columns). Quote the copt-cpu arm:
-the same four cells under copt-gpu have only 2 reps each, and there the model
-misses SBT-6255-0 badly (+0.1% predicted, −2.2% measured).
+−3.3/−2.3/−2.8/−0.7% vs measured −3.4/−2.3/−2.9/−1.0% — within 0.26pp everywhere
+(compare the `pred_wall_pct` and `d_t_tot_pct` columns). **Quote the copt-cpu
+arm.** The same four cells under copt-gpu run identical trajectories and price
+identical source counts, yet report more than twice the per-price saving
+(−5.59% ± 1.99 pp vs −2.53% ± 1.08 pp) and miss the model by up to 1.59pp: that
+executor's *off* arm carries an inflated, poorly repeatable `t_PR` baseline.
+[`families/README.md`](families/README.md) works through the evidence.
 
 The second term is why a single-backend measurement of this flag is worthless.
 Intermodal LP/pricing split by backend, computed from `results/cg_benchmark.csv`
@@ -126,8 +137,8 @@ Intermodal LP/pricing split by backend, computed from `results/cg_benchmark.csv`
 
 Where the LP is 3% of runtime the trajectory shift is nearly free; where it is
 half the clock it dominates. (These shares are of the whole family; per instance
-HiGHS ranges wider still. The ablation's own sweeps show slightly different
-shares — 85.3% for copt-cpu, 71.5% for copt-gpu — because they cover tree only
+HiGHS ranges wider still. Round (a)'s own sweeps show slightly different
+shares — 85.4% for copt-cpu, 71.8% for copt-gpu — because they cover tree only
 and a different session; the table above is the one an outside reader can
 recompute from the release.)
 
@@ -185,68 +196,47 @@ source regardless of postponement:
 
 ## Files
 
-None of these exist right now; gh #43 recreates them.
+Each round owns its artifacts; nothing sits at this level but this file.
 
 | path | what |
 |---|---|
-| `pricing_cutoff_runs.csv` | one row per run log: timings, iterations, columns, bound fire counts, `per_price_us` |
-| `pricing_cutoff_summary.csv` | one row per cell, off and on arms paired and reduced to medians, with deltas |
-| `logs/<sweep>/logs_<solver>_<off\|on>_<rep>/` | the raw run logs both CSVs are derived from |
+| `families/README.md` | round (a): scope, sweep commands, what it measured, what is quotable |
+| `families/runs.csv` | one row per run log: timings, iterations, columns, bound fire counts, `per_price_us` |
+| `families/summary.csv` | one row per cell, off and on arms paired and reduced to medians, with deltas |
+| `families/logs/<sweep>/logs_<executor>_<off\|on>_<rep>/` | the raw run logs both CSVs are derived from |
 
-Once a sweep is present, derive both CSVs from it (never re-solves):
+Derive both CSVs from the tracked logs — this re-parses and never re-solves:
 
-    python3 scripts/analyze_pricing_cutoff_ablation.py
-
-With no sweep present it exits with "sweep dir(s) not found".
+    python3 scripts/analyze_bounded_pricing_ablation.py
 
 Unlike the main benchmark — whose logs live in the gitignored `bench_runs/` and
 are regenerable by re-running `benchmark_solvers.py` — these logs are **tracked**.
-The ablation is a one-off measurement settling a design question, not a number we
-intend to refresh, so the logs are the primary artifact.
+The ablation settles a design question rather than feeding a results table, so
+the logs are the primary artifact and the CSVs are derived from them.
 
-## Sweeps
+Sanitisation is exactly one substitution: the absolute repo prefix, wherever it
+appears — the `# cmd:` header, the instance field of the embedded result-CSV row,
+and transportation's `TNTP: net=/trips=` line. Nothing else is altered, so each
+tracked log is byte-identical to its original once that one string is removed.
 
-Each sweep ran both arms in the same session on the same build, alternating
-`off` and `on` per repetition. When the logs were tracked, the absolute repo
-prefix was stripped everywhere it appeared — the `# cmd:` header, the instance
-field of the embedded result-CSV row, and transportation's `TNTP: net=/trips=`
-line. Nothing else was altered: each tracked log is byte-identical to its
-original once that one prefix string is removed.
-
-The "originally" column below names local, gitignored working directories. Like
-the `source` column of `results/cg_benchmark.csv` it is a breadcrumb, not a path
-you can open from the release.
-
-| sweep | originally | family | formulations | backends | reps |
-|---|---|---|---|---|---|
-| `intermodal_tree` | `bench_runs/issue41_cutoff_v3` | intermodal (10 instances), `--strategy pricer-heavy` | tree | copt-cpu, copt-gpu | 3, 2 |
-| `transportation_tree` | `bench_runs/issue41_transportation` | transportation (6 instances) | tree | copt-gpu | 3 |
-| `gridplanar_path_tree` | `bench_runs/issue41_multitarget` | grid (15), planar ≤1000 (9) | path, tree | copt-gpu | 3 |
-
-Reproducing a sweep — the two arms differ only in `--extra-args`:
-
-    for rep in 1 2 3; do
-      for arm in off on; do
-        [ "$arm" = on ] && extra=--extra-args=--bounded-pricing || extra=
-        python3 scripts/benchmark_solvers.py --families intermodal --solvers copt-cpu \
-            $extra --out    bench_runs/SWEEP/copt-cpu_${arm}_rep${rep}.csv \
-                   --logdir bench_runs/SWEEP/logs_copt-cpu_${arm}_rep${rep}
-      done
-    done
+See each round's README for its sweep commands. Both arms of a comparison must
+run in the same session on the same build, alternating `off` and `on` per
+repetition.
 
 ## Two things not to redo
 
-- **Do not A/B under copt-gpu.** Re-running the *same* config on grid/planar
-  differs on 23/48 instances — the same rate as on-vs-off — because the GPU
+- **Do not read per-instance cells off a copt-gpu grid/planar or transportation
+  sweep.** Re-running the *same* config differs on **26 of 48** grid/planar cells
+  and on **all 6** transportation cells (`traj_stable=0`), because the GPU
   barrier's interior point shifts and lazy separation then picks a different
   violated-capacity set. Concretely: grid10 tree diverges at iteration 13 on
-  `#row` 1032 vs 1033, with identical `#col` and `LP_obj`. `transportation_tree` is on the same backend and is no
-  better: 4 of its 6 cells fail to reproduce their own iteration and column
-  counts across same-config reps, which is why 5 of 6 read `traj_moved=1` and
-  none is quotable per-price. Read both sweeps' family totals, not their
-  per-instance cells. Intermodal under copt-cpu is near-deterministic: 9 of 10
-  cells repeat the same iteration *and* column counts across the off-arm reps,
-  10 of 10 on the on-arm.
+  `#row` 1032 vs 1033, with identical `#col` and `LP_obj`. That is why 5 of 6
+  transportation cells read `traj_moved=1` and none is quotable per-price. Read
+  those sweeps' family totals, not their per-instance cells. Intermodal is
+  near-deterministic on *both* executors — 7 of 10 cells repeat their iteration
+  and column counts across reps in both arms, and the same three fail on each —
+  so the instability there is the instance, not the backend. But see round (a)'s
+  README before quoting a copt-gpu per-price number even on those cells.
 - **Do not compare an arm against `results/cg_benchmark.csv`.** Those cells are a
   valid unbounded configuration — no log behind them carries the flag, and the
   feature postdates them entirely — but they are from other sessions. On cells

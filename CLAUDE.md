@@ -196,27 +196,38 @@ Unreachable sinks (A* heap exhausts without settling the sink) are skipped: path
 `CGParams::bounded_pricing` / CLI `--bounded-pricing` (manuscript §3.3) stops a
 source's A* once the frontier proves no negative-RC column remains, instead of
 settling every sink. It is **exact** — the column set is identical bit-for-bit —
-but not faster: best case −3.6% wall clock on intermodal, a wash everywhere else,
-because pricing share and per-price saving are anticorrelated across families.
+but not faster: best case **−2.4%** wall clock on intermodal (85.4% pricing share
+× −2.8% per price), a wash or a loss everywhere else, because pricing share and
+per-price saving are anticorrelated across families. grid/planar tree saves up to
+30% per price and still *loses* 0.9% of wall clock, because pricing is 1.5% of it.
 **Off by default everywhere, including the benchmark driver.** Measure it with
 `--extra-args=--bounded-pricing`.
+
+A family's raw wall-clock delta is **not** the effect: where the trajectory moves
+it is ±Δiterations, running −27% to +20% across intermodal cells. Quote
+`per_price_us` on cells with `traj_moved=0 AND traj_stable=1`, and quote them from
+**copt-cpu** — copt-gpu runs identical trajectories and prices identical source
+counts yet reports twice the saving, off an inflated `t_PR` baseline in its OFF
+arm.
 
 It is a *bound*, not a cutoff (gh #42): no incumbent is involved, and "cutoff" in
 this codebase already means the reduced-cost acceptance threshold `NEG_RC_TOL`
 and the LP backends' objective-cutoff parameters. The rename is **forward-only** —
-nothing parses the old `[pricing-cutoff]` banner. The 424 tracked ablation logs
-that carried it were deleted rather than kept, so `results/ablation/` currently
-has no committed evidence and its README's percentages must not be cited until
-gh #43 re-runs the sweeps. `CommittedAblationTest` self-skips meanwhile and
-relights when the logs come back.
+nothing parses the old `[pricing-cutoff]` banner.
+
+The evidence lives in `results/ablation/`, split into rounds named for the axis
+each varies; round (a) (`families/`, gh #43) is 444 tracked logs and 74 paired
+cells, re-derivable with `scripts/analyze_bounded_pricing_ablation.py` and pinned
+by `CommittedAblationTest`.
 
 **Read `results/ablation/README.md` before re-opening the question or touching
-the bounded-pricing code.** It carries the gain model and why it loses, the
+the bounded-pricing code**, and `results/ablation/families/README.md` before
+citing a number. Together they carry the gain model and why it loses, the
 three correctness traps the implementation must respect
 (`FeatureTests.BoundedPricing*`), the two channels by which the flag shifts the
 CG trajectory without changing columns, and which backends the measurement is
-valid on — a single-backend result is worthless, and copt-gpu
-cannot reproduce itself.
+valid on — a single-backend result is worthless, copt-gpu cannot reproduce itself
+on grid/planar or transportation, and its per-price numbers are not quotable.
 
 ### 3. LP backend
 
