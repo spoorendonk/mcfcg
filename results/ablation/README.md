@@ -7,12 +7,21 @@ identical bit-for-bit — cost, reduced cost, full arc list / arc-flow vector �
 pinned by `FeatureTests.BoundedPricingShadow{Tree,Path,IntermodalTree}`. So the
 only open question was whether it is *faster*.
 
-The flag was called `--pricing-cutoff` when these sweeps ran and was renamed in
-gh #42 — it is a bound, not a cutoff. Every log in this directory therefore
-carries the old `[pricing-cutoff]` banner, which the analyzer still parses.
+> **The evidence behind every number below has been deleted.** These sweeps ran
+> under the flag's original name, `--pricing-cutoff`, and their 424 logs and two
+> derived CSVs were removed in gh #42 rather than kept alongside a parser that
+> understands two spellings. **gh #43 re-runs the whole ablation** under
+> `--bounded-pricing`, at 3 reps, on one backend.
+>
+> Until it does, treat this file as a **record of the argument, not of the
+> measurement**: the reasoning, the gain model and the implementation traps are
+> all still correct and still worth reading before touching the code, but the
+> percentages are not currently reproducible from anything in the tree and must
+> not be cited. The deleted logs are recoverable from git history at the commit
+> before their removal.
 
-It is not, by enough to matter. **The flag ships off by default** and this
-directory is the evidence.
+It is not, by enough to matter. **The flag ships off by default**, and this file
+is the argument for that — see the caveat above on where the numbers now stand.
 
 Scope: what is archived here is the paired on/off A/B across three families. Two
 supporting measurements cited below are *not* — the all-backend on-arm pass
@@ -176,15 +185,19 @@ source regardless of postponement:
 
 ## Files
 
+None of these exist right now; gh #43 recreates them.
+
 | path | what |
 |---|---|
 | `pricing_cutoff_runs.csv` | one row per run log: timings, iterations, columns, bound fire counts, `per_price_us` |
 | `pricing_cutoff_summary.csv` | one row per cell, off and on arms paired and reduced to medians, with deltas |
 | `logs/<sweep>/logs_<solver>_<off\|on>_<rep>/` | the raw run logs both CSVs are derived from |
 
-Regenerate both CSVs from the tracked logs:
+Once a sweep is present, derive both CSVs from it (never re-solves):
 
     python3 scripts/analyze_pricing_cutoff_ablation.py
+
+With no sweep present it exits with "sweep dir(s) not found".
 
 Unlike the main benchmark — whose logs live in the gitignored `bench_runs/` and
 are regenerable by re-running `benchmark_solvers.py` — these logs are **tracked**.

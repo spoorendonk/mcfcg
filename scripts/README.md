@@ -230,10 +230,12 @@ python3 scripts/extract_iterations.py                        # same --logdir set
 python3 scripts/consolidate_mps_logs.py
 ```
 
-The bounded-pricing ablation is the one exception to "logs are never
-tracked": it settles a design question instead of feeding a results table, is not
-meant to be re-run, and so ships with its 424 raw logs under `results/ablation/`.
-Same consolidator relationship — re-parses, never re-solves:
+The bounded-pricing ablation used to be the one exception to "logs are never
+tracked", shipping its 424 raw logs under `results/ablation/`. Those logs ran
+under the old `--pricing-cutoff` flag and were deleted rather than carried past
+the rename (gh #42); gh #43 re-runs the ablation under `--bounded-pricing`. The
+consolidator is still here and still re-parses rather than re-solves, but until
+that re-run lands it has nothing to read and exits with "sweep dir(s) not found":
 
 ```
 # ablation logs -> results/ablation/pricing_cutoff_{runs,summary}.csv

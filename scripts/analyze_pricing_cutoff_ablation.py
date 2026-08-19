@@ -80,11 +80,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from benchmark_solvers import REPO, parse_csv_row, parse_iteration_table  # noqa: E402
 
 # The three paired same-session sweeps behind the manuscript's section 3.3
-# numbers. Unlike the main benchmark, whose logs live in bench_runs/ (gitignored,
-# regenerable by re-running benchmark_solvers.py), these are TRACKED: the ablation is
-# a one-off measurement we do not intend to repeat, so its logs are the primary
-# evidence and ship with the repo. Order is presentation order -- nothing
-# supersedes anything here, unlike consolidate_cg_logs.py's --logdir list.
+# numbers. Order is presentation order -- nothing supersedes anything here,
+# unlike consolidate_cg_logs.py's --logdir list.
+#
+# NONE OF THESE DIRECTORIES EXIST RIGHT NOW. The ablation's logs were the one
+# tracked log set in the repo, but they ran under the old --pricing-cutoff flag
+# and were deleted rather than carried past the rename (gh #42); gh #43 re-runs
+# the whole ablation under --bounded-pricing. Until it does, an argument-less
+# invocation exits with "sweep dir(s) not found", which is the honest state:
+# there is no committed ablation record. Repoint these paths at whatever layout
+# that re-run produces (gh #45 covers the layout decision).
 DEFAULT_SWEEPS = [
     # intermodal, tree + PricerHeavy, copt-cpu (3 reps) and copt-gpu (2 reps)
     "results/ablation/logs/intermodal_tree",
@@ -100,13 +105,14 @@ SUMMARY_CSV = "results/ablation/pricing_cutoff_summary.csv"
 SUMMARY_LINE = re.compile(
     r"CG optimal after (\d+) iterations\. UB=(\S+) LB=(\S+) gap=(\S+) tol=(\S+)\s+"
     r"t_LP=(\S+)\s+t_PR=(\S+)\s+t_SP=(\S+)\s+t_Tot=(\S+)")
-# `enabled=` is absent in logs from before the banner carried it; those runs are
-# all bounded-on arms, so a missing flag is not ambiguous, but prefer the field.
-# Both tag spellings are accepted: the flag was renamed --pricing-cutoff ->
-# --bounded-pricing in gh #42, and every tracked log predating that carries the
-# old tag. Neither spelling may be dropped while both log sets are evidence.
-CUTOFF_LINE = re.compile(
-    r"\[(?:pricing-cutoff|bounded-pricing)\] (?:enabled=(\d+) )?cut=(\d+) priced=(\d+)")
+# Only the current banner is accepted, in full. Logs written under the old
+# `--pricing-cutoff` name, or by a build predating the `enabled=` field, do not
+# parse and are not kept: the archived sweeps were deleted rather than carried
+# forward (gh #42), and gh #43 re-runs the whole ablation under the current flag.
+# A log that fails to match here has no `priced`, so per_price_us -- the metric
+# the argument rests on -- is absent rather than wrong.
+BANNER_LINE = re.compile(
+    r"\[bounded-pricing\] enabled=(\d+) cut=(\d+) priced=(\d+)")
 # The exit type comes from the last iteration row's '+col' count, which carries a
 # '*' when the loop returned via the gap test rather than by exhausting pricing;
 # benchmark_solvers.parse_iteration_table reports that as col_committed=False.
@@ -121,7 +127,7 @@ RUN_FIELDS = [
     "commodities", "sources", "per_source",
     "iterations", "columns", "objective", "lower_bound", "optimal", "exit",
     "t_tot", "t_lp", "t_pr", "t_sp",
-    "cutoff_enabled", "cut", "priced", "cut_rate_pct", "per_price_us",
+    "bounded_enabled", "cut", "priced", "cut_rate_pct", "per_price_us",
 ]
 
 SUMMARY_FIELDS = [
@@ -179,9 +185,9 @@ def parse_log(path):
     iters = parse_iteration_table(text)
     rec["exit"] = "gap" if iters and not iters[-1]["col_committed"] else "priced-out"
 
-    c = CUTOFF_LINE.search(text)
+    c = BANNER_LINE.search(text)
     if c:
-        rec["cutoff_enabled"] = int(c.group(1)) if c.group(1) is not None else 1
+        rec["bounded_enabled"] = int(c.group(1))
         rec["cut"], rec["priced"] = int(c.group(2)), int(c.group(3))
         # Leave both rates absent rather than 0.0 when nothing was priced: a fake
         # zero is exactly the silent failure this whole tier guards against.
@@ -229,9 +235,9 @@ def collect(sweeps):
                 # against itself and reports a 0% effect, which looks like a
                 # result rather than like a mistake.
                 want = 1 if arm == "on" else 0
-                if rec.get("cutoff_enabled") not in (None, want):
+                if rec.get("bounded_enabled") not in (None, want):
                     print(f"warning: {log} sits in an '{arm}' dir but reports "
-                          f"enabled={rec['cutoff_enabled']}", file=sys.stderr)
+                          f"enabled={rec['bounded_enabled']}", file=sys.stderr)
                 rec.update(sweep=name, family=family,
                            instance=instance, formulation=formulation,
                            solver=log_solver, arm=arm, rep=rep)
@@ -417,7 +423,7 @@ def main():
 
     # The default output paths ARE the committed ablation record, so they are
     # only valid for the default sweeps. A custom sweep must name its own outputs
-    # (or pass --no-write) rather than silently clobber the tracked evidence.
+    # (or pass --no-write) rather than silently clobber it.
     if args.sweeps and not args.no_write and (args.runs_out, args.summary_out) == (
             RUNS_CSV, SUMMARY_CSV):
         sys.exit("error: custom sweep dirs with the default --runs-out/--summary-out "

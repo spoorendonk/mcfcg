@@ -41,18 +41,17 @@ Instance: 119865 vertices, 397362 arcs, 5256 commodities, 2628 sources
     2   1.0000e+00   1.0000e+00   1.0000e+00    120     10     0    {last_col}      0      0      0   0.100   0.200   0.000   0.300     0.600
 CG optimal after 2 iterations. UB=71026.500000 LB=71021.870000 gap=1.0e+00 tol=1.0e+00  \
 t_LP=0.200  t_PR={t_pr}  t_SP=0.000  t_Tot={t_tot}
-[{tag}] enabled={enabled} cut={cut} priced={priced} rate=0.0%
+[bounded-pricing] enabled={enabled} cut={cut} priced={priced} rate=0.0%
 instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
 data/intermodal/BUS-2632-0.txt.gz,tree,2,{columns},71026.500000,71021.870000,1,{t_tot},0.200,{t_pr},0.000
 """
 
 
 def write_log(path, *, t_pr="1.000", t_tot="2.000", enabled=0, cut=0, priced=500,
-              columns=120, last_col="*20", tag="bounded-pricing"):
+              columns=120, last_col="*20"):
     with open(path, "w") as fh:
         fh.write(LOG_TEMPLATE.format(t_pr=t_pr, t_tot=t_tot, enabled=enabled, cut=cut,
-                                     priced=priced, columns=columns, last_col=last_col,
-                                     tag=tag))
+                                     priced=priced, columns=columns, last_col=last_col))
 
 
 class ParseLogTest(unittest.TestCase):
@@ -77,29 +76,29 @@ class ParseLogTest(unittest.TestCase):
         self.assertAlmostEqual(rec["cut_rate_pct"], 50.0)
 
     def test_enabled_field_is_read(self):
-        self.assertEqual(self.parse(enabled=0)["cutoff_enabled"], 0)
-        self.assertEqual(self.parse(enabled=1)["cutoff_enabled"], 1)
+        self.assertEqual(self.parse(enabled=0)["bounded_enabled"], 0)
+        self.assertEqual(self.parse(enabled=1)["bounded_enabled"], 1)
 
-    def test_legacy_pricing_cutoff_tag_still_parses(self):
-        """The flag was renamed --pricing-cutoff -> --bounded-pricing (gh #42),
-        but every tracked log under results/ablation/ and the 100 cells in
-        bench_runs/issue41_intermodal_cutoff/ carries the old banner. Dropping
-        it from the regex would leave `priced` unset and silently kill
-        per_price_us on the entire committed evidence base."""
-        rec = self.parse(tag="pricing-cutoff", enabled=1, priced=500, cut=250)
-        self.assertEqual(rec["cutoff_enabled"], 1)
-        self.assertEqual(rec["priced"], 500)
-        self.assertAlmostEqual(rec["cut_rate_pct"], 50.0)
-
-    def test_banner_without_enabled_field_defaults_to_on(self):
-        """Logs predating the `enabled=` field are all bounded-on arms."""
-        p = os.path.join(self.dir, "intermodal__BUS-2632-0__tree__copt-cpu.log")
-        write_log(p)
-        with open(p) as fh:
-            text = fh.read().replace("enabled=0 ", "")
-        with open(p, "w") as fh:
-            fh.write(text)
-        self.assertEqual(abl.parse_log(p)["cutoff_enabled"], 1)
+    def test_a_stale_banner_yields_no_priced_rather_than_a_wrong_one(self):
+        """Forward-only (gh #42): the old `[pricing-cutoff]` tag and the
+        pre-`enabled=` banner format are both rejected outright. The failure has
+        to be absence, not a plausible default -- a record silently carrying
+        `priced` from an unrecognised line would feed per_price_us, the metric
+        the whole argument rests on."""
+        current = "[bounded-pricing] enabled=1 cut=250 priced=500 rate=0.0%"
+        for stale in ("[pricing-cutoff] enabled=1 cut=250 priced=500 rate=0.0%",
+                      "[bounded-pricing] cut=250 priced=500 rate=0.0%"):
+            with self.subTest(stale=stale):
+                path = os.path.join(self.dir, "intermodal__BUS-2632-0__tree__copt-cpu.log")
+                write_log(path, enabled=1, cut=250, priced=500)
+                with open(path) as fh:
+                    text = fh.read()
+                self.assertIn(current, text, "fixture banner drifted from the parser")
+                with open(path, "w") as fh:
+                    fh.write(text.replace(current, stale))
+                rec = abl.parse_log(path)
+                self.assertNotIn("priced", rec)
+                self.assertNotIn("bounded_enabled", rec)
 
     def test_exit_type_from_the_iteration_table(self):
         # '*' on the last row's +col marks the gap exit; a bare count means the
@@ -318,9 +317,9 @@ class CommittedAblationTest(unittest.TestCase):
             if rec["arm"] == "off":
                 self.assertEqual(rec["cut"], 0,
                                  f"{rec['sweep']}/{rec['instance']} off arm fired the bound")
-                self.assertEqual(rec["cutoff_enabled"], 0)
+                self.assertEqual(rec["bounded_enabled"], 0)
             else:
-                self.assertEqual(rec["cutoff_enabled"], 1)
+                self.assertEqual(rec["bounded_enabled"], 1)
 
     def test_runs_csv_matches_the_logs(self):
         """The per-run CSV carries the fields the summary is built from, so a

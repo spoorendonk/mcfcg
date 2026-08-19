@@ -12,10 +12,11 @@ data/intermodal/raw/
 *.mps.gz
 *.mps
 # Benchmark outputs (scripts/benchmark_solvers.py).
-# Per-run CG logs are bulky and regenerable — never tracked. One exception:
-# results/ablation/logs/ (the gh#41 bounded-pricing A/B) IS committed, because it
-# settles a design question rather than feeding a results table and is not meant
-# to be re-run. See results/ablation/README.md and PROVENANCE.txt section 5.1.
+# Per-run CG logs are bulky and regenerable — never tracked. The gh#41
+# bounded-pricing A/B used to be an exception (its logs were committed under
+# results/ablation/logs/); they were deleted in gh#42 rather than carried past
+# the flag rename, and gh#43 re-runs the ablation. If that re-run is tracked
+# again, re-add the exception here. See results/ablation/README.md.
 bench-logs/
 bench_runs/
 bench-*.log

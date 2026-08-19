@@ -15,11 +15,14 @@ before quoting anything here.
 | `cg_iterations.csv` | 9601 | Per-iteration CG trace for 439 of those 440 cells (the one `killed SIGKILL` row has no trace). | `PROVENANCE.txt` §1 | `scripts/extract_iterations.py` |
 | `mps_compact_baseline.csv` | 175 | Direct barrier solves of the compact arc-flow LP, for comparison against CG. | `PROVENANCE.txt` §2, §2.2, §2.3 | `scripts/consolidate_mps_logs.py` |
 | `mps_compact_memory.csv` | 165 | Iteration-capped memory probe feeding the baseline table's `mem_gb`. | `PROVENANCE.txt` §2.1 | `scripts/consolidate_mps_logs.py` |
-| `ablation/` | 424 logs + 2 CSVs | The gh#41 dual-pricing-cutoff A/B. Settled: the flag stays **off** by default. | `ablation/README.md`, `PROVENANCE.txt` §5.1 | `scripts/analyze_pricing_cutoff_ablation.py` |
+| `ablation/` | README only | The gh#41 bounded-pricing A/B. Settled: the flag stays **off** by default. Its 424 logs + 2 CSVs were deleted in gh#42; gh#43 re-runs them. | `ablation/README.md`, `PROVENANCE.txt` §5.1 | `scripts/analyze_pricing_cutoff_ablation.py` |
 
-`ablation/` is the one place raw logs are tracked. It settles a design question
-rather than feeding a results table and is not meant to be re-run; everywhere
-else, per-run logs are bulky, regenerable, and gitignored.
+`ablation/` was the one place raw logs were tracked — it settles a design
+question rather than feeding a results table. Those logs ran under the flag's old
+name and were deleted rather than carried past the rename (gh#42), so right now
+it holds only its README, whose numbers are not reproducible from the tree until
+gh#43 re-runs the sweeps. Everywhere else, per-run logs are bulky, regenerable,
+and gitignored.
 
 `scripts/README.md` documents each consolidator's `--logdir` conventions and the
 full-sweep drivers (`benchmark_solvers.py`, `benchmark_mps.py`) that produce the

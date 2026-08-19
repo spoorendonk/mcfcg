@@ -350,45 +350,35 @@ logs plus 165 baseline-solve logs) and fully regenerable — so the logs named i
 `source` are not part of this release or of the Zenodo archive. The consolidated
 CSVs under `results/` are the committed record; `source` documents which run
 produced each row, not a file you can open from the archive. Reproducing a row
-means re-running it, not re-parsing a log. Section 5.1 is the one exception.
+means re-running it, not re-parsing a log.
 
 
-5.1 Bounded-pricing ablation — the one tracked log set
+5.1 Bounded-pricing ablation — no committed log set
 -----------------------------------------------------------
 
-`results/ablation/` holds the A/B measurement behind the decision to ship bounded
-single-source pricing (manuscript section 3.3, gh #41) DISABLED. Unlike every other log
-set it is tracked, logs and all: it settles a design question rather than
-producing a tabulated result, so it is not something we intend to re-run, and the
-logs are the primary evidence rather than a regenerable intermediate. 424 run
-logs, three sweeps, both arms of each:
+`results/ablation/` held the A/B measurement behind the decision to ship bounded
+single-source pricing (manuscript section 3.3, gh #41) DISABLED. It was the one
+tracked log set in this repo: 424 run logs across three paired sweeps, committed
+because the ablation settles a design question rather than feeding a tabulated
+result.
 
-    logs/intermodal_tree/         intermodal x tree x {copt-cpu 3 reps, copt-gpu 2}
-    logs/transportation_tree/     transportation x tree x copt-gpu, 3 reps
-    logs/gridplanar_path_tree/    grid + planar<=1000 x {path,tree} x copt-gpu, 3 reps
+Those logs, and the two CSVs derived from them, were REMOVED in gh #42. They ran
+under the flag's original name, `--pricing-cutoff`, and carried a
+`[pricing-cutoff]` banner line; rather than keep a parser that understands two
+spellings of the same field, the evidence was deleted and gh #43 re-runs the
+whole ablation under `--bounded-pricing`. The logs remain recoverable from git
+history at the commit before that removal.
 
-Every log ran on 2026-08-13 between 17:22 and 23:59, on the same host as section
-3 — after 616c4b8, the commit that added the flag (authored 17:16; note `git log`
-prints its 20:51 committer date), and before the next commit, so the whole
-ablation reproduces at exactly that tree. Timestamps come from the file mtimes at
-the time of tracking; the logs themselves carry no clock. The two arms of a
-sweep differ ONLY in `--extra-args=--pricing-cutoff` and always ran in the same
-session, which matters: cross-session wall clock is not comparable here (see the
-results/ablation/README.md note on a between-session drift of -5.5% to +15.3% on
-cells the flag provably did not touch). When the logs were tracked, the absolute
-repo prefix was stripped everywhere it appeared -- the `# cmd:` header, the
-instance field of the embedded result-CSV row, and transportation's `TNTP:
-net=/trips=` line. Nothing else was altered: each tracked log is byte-identical
-to its original once that one prefix string is removed. The flag was named
-`--pricing-cutoff` when these logs were produced and was renamed
-`--bounded-pricing` afterwards (gh #42); the logs retain the name they ran under,
-including their `[pricing-cutoff]` banner line, and the analyzer accepts both
-spellings for exactly that reason.
+Consequence for anyone reading `results/ablation/README.md`: its numbers are
+currently UNSOURCED in the working tree. They were derived from the deleted logs
+and have not been re-measured. Do not cite them in the manuscript until gh #43
+regenerates the sweeps and this section is rewritten to describe what it produced
+— host, date, commit, backend, rep count, and the arm-differing flag.
 
-`scripts/analyze_pricing_cutoff_ablation.py` re-derives both CSVs
-(`pricing_cutoff_runs.csv`, `pricing_cutoff_summary.csv`) from those logs and
-never re-solves, the same relationship `consolidate_cg_logs.py` has to the main
-table.
+`scripts/analyze_pricing_cutoff_ablation.py` still re-derives both CSVs from a
+sweep directory and never re-solves, the same relationship `consolidate_cg_logs.py`
+has to the main table. With no sweep present it exits with "sweep dir(s) not
+found" rather than writing an empty table.
 
 This ablation does NOT feed `results/cg_benchmark.csv`. No log behind that table
 carries the flag under either name — the feature postdates all 440 cells — so the
