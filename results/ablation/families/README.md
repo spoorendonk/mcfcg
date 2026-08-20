@@ -10,9 +10,9 @@ round (a) *measured* — scope, how to reproduce it, and which of its numbers ar
 quotable.
 
 Everything here replaces a mixed-backend, mixed-rep archive that was deleted in
-gh #42 rather than carried past the `--pricing-cutoff` → `--bounded-pricing`
-rename. This round is uniform: **one executor per family cell, 3 reps
-everywhere, both arms in one session on one build.**
+gh #42 rather than carried past the flag's rename. This round is uniform: **one
+executor per family cell, 3 reps everywhere, both arms in one session on one
+build.**
 
 ## What ran
 

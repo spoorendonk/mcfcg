@@ -37,11 +37,10 @@ code change that was then reverted, so no tracked log can carry it and
 re-deriving it means re-applying the change; the table is the record.
 
 Nothing from the flag's development survives as an artifact: the pre-rename
-passes under `--pricing-cutoff`, the implementation variants that preceded the
-shipped bound, and the all-backend on-arm pass whose `[pricing-cutoff]` banner
-the analyzer refuses by policy were all deleted rather than archived (gh #45).
-Rounds (a) and (b) re-measured the shipped implementation from scratch, and
-nothing here cites any of it.
+passes, the implementation variants that preceded the shipped bound, and the
+all-backend on-arm pass whose banner the analyzer refuses by policy were all
+deleted rather than archived (gh #45). Rounds (a) and (b) re-measured the shipped
+implementation from scratch, and nothing here cites any of it.
 
 ## How it works
 

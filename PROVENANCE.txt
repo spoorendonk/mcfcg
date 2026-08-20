@@ -422,10 +422,10 @@ It is organised into rounds, each a directory named for the axis it varies.
     Limits     --time-limit 7200; no cell reached it, 0 failures, every cell
                matched its reference optimum
 
-Round (a) supersedes an earlier archive of 424 logs that was REMOVED in gh #42:
-those ran under the flag's original name, `--pricing-cutoff`, and carried a
-`[pricing-cutoff]` banner, and rather than keep a parser that understands two
-spellings of the same field the evidence was deleted and re-measured. The
+Round (a) supersedes an earlier archive of 424 logs that was REMOVED in gh #42,
+when the flag was renamed: those logs carry the earlier banner spelling, and
+rather than keep a parser that understands two spellings of the same field the
+evidence was deleted and re-measured. The
 deleted logs remain recoverable from git history at the commit before their
 removal. Two numbers moved in the re-run beyond session drift: intermodal's
 family wall-clock total (−3.6% → −4.8% on copt-cpu), which is trajectory luck
@@ -436,9 +436,9 @@ the deleted round's within its error bar (−2.53% ± 1.08 pp vs −2.45% ± 0.5
 
 Round (b) likewise re-ran both of its arms rather than pairing against an
 existing 2026-08-17 on-arm pass of the same 100 cells. That pass carried the
-pre-rename `[pricing-cutoff]` banner, which the analyzer refuses by policy and
-two tests pin it as refusing, and pairing it against a fresh off arm would have
-rebuilt the cross-session confound the round exists to remove. That pass was
+pre-rename banner, which the analyzer refuses by policy and two tests pin it as
+refusing, and pairing it against a fresh off arm would have rebuilt the
+cross-session confound the round exists to remove. That pass was
 deleted in gh #45, along with every other pre-round artifact of this feature —
 the earlier implementation variants and their one-off analysis scripts. Nothing
 in `results/` cites any of them.
@@ -466,9 +466,8 @@ committed benchmark is uniformly an unbounded-pricing configuration, and the fla
 stays off in `benchmark_solvers.py`'s per-family defaults. Note also that
 `cg_benchmark.csv` has no `extra_args` column: if a family default ever does gain
 a flag — and round (b) is the case for intermodal gaining this one — this file is
-the only place that can record it. The flag itself was renamed in gh #42, from
-`--pricing-cutoff` to `--bounded-pricing`; the rename is forward-only, nothing
-parses the old banner, and no committed artifact predates it.
+the only place that can record it. The flag is `--bounded-pricing`; it was
+renamed in gh #42, and no committed artifact predates that rename.
 
 
 6. Reproducibility and licensing

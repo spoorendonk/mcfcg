@@ -216,10 +216,10 @@ saving, off an inflated `t_PR` baseline in its OFF arm. **Never quote a family
 aggregate over an instance subset** — transportation's 22.6% pricing share covers
 9% of that family's wall clock; family-wide it is 4.3%.
 
-It is a *bound*, not a cutoff (gh #42): no incumbent is involved, and "cutoff" in
-this codebase already means the reduced-cost acceptance threshold `NEG_RC_TOL`
-and the LP backends' objective-cutoff parameters. The rename is **forward-only** —
-nothing parses the old `[pricing-cutoff]` banner.
+It is a *bound*, not a cutoff: no incumbent is involved, and "cutoff" in this
+codebase already means the reduced-cost acceptance threshold `NEG_RC_TOL` and the
+LP backends' objective-cutoff parameters. Call it the bound in code, comments and
+logs; the analyzer accepts one banner spelling and no other.
 
 **Round (b) (`backends/`, gh #44) killed the reported HiGHS penalty and showed
 the bound wins on intermodal.** Five backends, both arms in one session: `t_PR`

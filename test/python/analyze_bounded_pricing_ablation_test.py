@@ -81,13 +81,13 @@ class ParseLogTest(unittest.TestCase):
         self.assertEqual(self.parse(enabled=1)["bounded_enabled"], 1)
 
     def test_a_stale_banner_yields_no_priced_rather_than_a_wrong_one(self):
-        """Forward-only (gh #42): the old `[pricing-cutoff]` tag and the
-        pre-`enabled=` banner format are both rejected outright. The failure has
+        """The parser accepts one banner spelling and no other: a foreign tag
+        and the pre-`enabled=` format are both rejected outright. The failure has
         to be absence, not a plausible default -- a record silently carrying
         `priced` from an unrecognised line would feed per_price_us, the metric
         the whole argument rests on."""
         current = "[bounded-pricing] enabled=1 cut=250 priced=500 rate=0.0%"
-        for stale in ("[pricing-cutoff] enabled=1 cut=250 priced=500 rate=0.0%",
+        for stale in ("[some-other-tag] enabled=1 cut=250 priced=500 rate=0.0%",
                       "[bounded-pricing] cut=250 priced=500 rate=0.0%"):
             with self.subTest(stale=stale):
                 path = os.path.join(self.dir, "intermodal__BUS-2632-0__tree__copt-cpu.log")

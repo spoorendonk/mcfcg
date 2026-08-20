@@ -139,12 +139,12 @@ ROUNDS = {
 SUMMARY_LINE = re.compile(
     r"CG optimal after (\d+) iterations\. UB=(\S+) LB=(\S+) gap=(\S+) tol=(\S+)\s+"
     r"t_LP=(\S+)\s+t_PR=(\S+)\s+t_SP=(\S+)\s+t_Tot=(\S+)")
-# Only the current banner is accepted, in full. Logs written under the old
-# `--pricing-cutoff` name, or by a build predating the `enabled=` field, do not
-# parse and are not kept: the archived sweeps were deleted rather than carried
-# forward (gh #42), and gh #43 re-runs the whole ablation under the current flag.
-# A log that fails to match here has no `priced`, so per_price_us -- the metric
-# the argument rests on -- is absent rather than wrong.
+# Only this banner is accepted, in full: any other tag, or a build predating the
+# `enabled=` field, does not parse and is not kept. There is deliberately no
+# backward-compatible alternation -- every sweep that used an earlier spelling was
+# deleted and re-measured rather than carried forward. A log that fails to match
+# here has no `priced`, so per_price_us -- the metric the argument rests on -- is
+# absent rather than wrong.
 BANNER_LINE = re.compile(
     r"\[bounded-pricing\] enabled=(\d+) cut=(\d+) priced=(\d+)")
 # The exit type comes from the last iteration row's '+col' count, which carries a
