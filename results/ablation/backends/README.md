@@ -1,5 +1,10 @@
 # Round (b): bounded pricing across five backends, one family (gh #44)
 
+**Two results.** The reported HiGHS penalty was cross-session drift and does not
+exist. And on intermodal the bound is a **−2.8%** net win, faster on 74 of 100
+cells and on four of the five backends — so "evaluated and rejected" is a verdict
+about the *global* default, not about this family.
+
 Round (a) established that intermodal is the only family where the bound has room
 to pay — pricing share is the ceiling on anything it can deliver, and only
 intermodal's is high (78–80% under COPT) rather than 0.2–4.3%. This round takes
@@ -54,10 +59,52 @@ HiGHS is the clearest case precisely because its LP share is the outlier (34–4
 against 75–85% for the others), so the same trajectory noise moves its wall clock
 furthest in both directions.
 
-None of this changes the disposition. The flag stays **off by default**: a
-mechanism whose sign depends on which way an unpredictable trajectory shift lands
-is not one to enable globally, even though its direct effect is a consistent
-pricing win.
+## On this family, the bound is a net win
+
+The per-cell table above is easy to misread as a wash, because two loud trajectory
+swings sit in it. Rolled up per backend, over all 20 cells each (10 instances ×
+path and tree), it is not a wash:
+
+| backend | off (s) | on (s) | wall | cells faster |
+|---|---|---|---|---|
+| copt-cpu | 287.5 | 265.9 | **−7.5%** | 17/20 |
+| copt-gpu | 300.7 | 286.7 | **−4.6%** | 15/20 |
+| highs | 604.7 | 591.5 | **−2.2%** | 13/20 |
+| cuopt | 339.3 | 333.8 | **−1.6%** | 15/20 |
+| mosek | 302.2 | 305.6 | **+1.1%** | 14/20 |
+| **all** | **1834.4** | **1783.5** | **−2.8%** | **74/100** |
+
+Four of five backends gain; only MOSEK loses, by 1.1%. Across all 100 cells the
+bound is **−2.8%** wall clock, faster on **74**, median **−2.4%**.
+
+Two details make this stronger than the headline number:
+
+**The losing rows are thinner than their percentages.** MOSEK tree is +2.2% yet 6
+of its 10 instances got faster, and cuopt path is +1.6% with 7 of 10 faster. Those
+aggregates are dragged by one or two cells with large trajectory swings. The copt
+gains, by contrast, are broad-based — 17/20 and 15/20 cells.
+
+**Restricting to the cells where the trajectory did *not* move gives −3.6%**,
+against −1.6% on the 59 cells where it did. The subset where the effect is actually
+attributable is *more* favourable than the average, which is the tell that the
+underlying mechanism is a genuine gain and the trajectory is noise around it.
+
+## Disposition: off globally, but not because it loses here
+
+The flag stays **off by default**, and that verdict is about the *global* default,
+not about this family. On intermodal the evidence supports turning it on.
+
+Everywhere else there is nothing to win. Pricing share is the ceiling on anything
+the bound can deliver, and round (a) measured it at 0.2% on planar, 1.4–3.1% on
+grid, 4.3% on transportation — against 75–85% here. Round (a)'s grid result is the
+decisive one: the bound removed 26% of grid's tree pricing time and moved the clock
+by −0.33%. A pricing optimization cannot be paid for out of 2% of the wall clock.
+
+So the honest summary is **family-dependent, not rejected**: a consistent pricing
+win everywhere, which converts to wall clock only where pricing dominates. The
+natural place to act on that is the `PricerHeavy` preset, which is already what
+intermodal selects — though wiring it there needs its own before/after check, since
+`PricerHeavy` is not intermodal-only.
 
 ## Nothing here is quotable per-price
 

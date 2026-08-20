@@ -191,17 +191,19 @@ Runtime signal that the ceiling is too low: the (valid) `best_lb` exceeds the cu
 
 Unreachable sinks (A* heap exhausts without settling the sink) are skipped: path emits columns for reachable commodities only, tree emits a partial tree covering reachable sinks only. Graceful **only** in `CommodityRows` mode, where demand-row slacks absorb unmet demand; in `EdgeRows` there is no demand slack and a disconnected source→sink surfaces as LP infeasibility. The tree's partial column is genuinely lossy — its master counts trees, not demand, so nothing notices the under-served commodities — tolerable only because a disconnected commodity makes the MCF infeasible anyway. Preprocess disconnected instances with `mcfcg_clean`.
 
-#### Bounded single-source pricing — evaluated and rejected
+#### Bounded single-source pricing — off by default, but a win on intermodal
 
 `CGParams::bounded_pricing` / CLI `--bounded-pricing` (manuscript §3.3) stops a
 source's A* once the frontier proves no negative-RC column remains, instead of
 settling every sink. It is **exact** — the column set is identical bit-for-bit —
-but not faster. **Pricing share is the ceiling**, and under COPT it is planar
-0.2%, grid 1.4–3.1%, transportation 4.3%, intermodal 78–80%. grid is the decisive
-test: the bound removes **26%** of its tree pricing time and moves the clock by
-**−0.33%**. Only intermodal has room — best case −2.4% (mechanistic: 85.3% share ×
-−2.8% per price), −4.8% measured including a trajectory that also shortened.
-**Off by default everywhere, including the benchmark driver.** Measure it with
+and it always saves pricing time; what it does not do is convert that into wall
+clock on most families. **Pricing share is the ceiling**, and under COPT it is
+planar 0.2%, grid 1.4–3.1%, transportation 4.3%, intermodal 75–85%. grid is the
+decisive test: the bound removes **26%** of its tree pricing time and moves the
+clock by **−0.33%**. Only intermodal has room, and there it delivers — **−2.8%**
+over 100 paired cells on five backends (round (b) below).
+**Off by default everywhere, including the benchmark driver** — the default is
+global, and outside intermodal there is nothing to win. Measure it with
 `--extra-args=--bounded-pricing`.
 
 A family's raw wall-clock delta is **not** the effect: where the trajectory moves
@@ -219,16 +221,24 @@ this codebase already means the reduced-cost acceptance threshold `NEG_RC_TOL`
 and the LP backends' objective-cutoff parameters. The rename is **forward-only** —
 nothing parses the old `[pricing-cutoff]` banner.
 
-**Round (b) (`backends/`, gh #44) killed the reported HiGHS penalty.** Five
-backends on intermodal, both arms in one session: `t_PR` falls in all ten
-solver×formulation groups (−2.0% to −9.2%) — the bound works everywhere — while
-`t_LP` swings −18.0% to +27.1% and decides the wall-clock sign. HiGHS path is
-**−9.8%**, HiGHS tree **+7.7%**; the +18–32% penalty a cross-session comparison
-had reported does not exist. The flag is backend-specific not because backends
-price differently but because the same trajectory shift lands on an LP worth
-34–45% of the clock under HiGHS against 75–85% elsewhere. Disposition is
-unchanged — a mechanism whose sign rides on an unpredictable trajectory shift
-does not go on by default.
+**Round (b) (`backends/`, gh #44) killed the reported HiGHS penalty and showed
+the bound wins on intermodal.** Five backends, both arms in one session: `t_PR`
+falls in all ten solver×formulation groups (−2.0% to −9.2%) — the bound works
+everywhere — while `t_LP` swings −18.0% to +27.1% and decides the wall-clock
+sign. The +18–32% HiGHS penalty a cross-session comparison had reported does not
+exist (path is −9.8%, tree +7.7%).
+
+Rolled up per backend on intermodal: copt-cpu **−7.5%**, copt-gpu **−4.6%**,
+highs **−2.2%**, cuopt **−1.6%**, mosek **+1.1%** — **−2.8%** overall, faster on
+74 of 100 cells. Restricting to cells whose trajectory did not move gives
+**−3.6%**, i.e. the attributable subset is better than the average.
+
+**So "rejected" is about the global default, not this family.** Pricing share is
+the ceiling and it is 0.2–4.3% everywhere else (round (a): grid loses 26% of its
+tree pricing time and moves the clock −0.33%), so the flag stays off by default —
+but on intermodal the evidence supports enabling it, and `PricerHeavy` is the
+natural home if you do. Wiring it there needs its own before/after check;
+`PricerHeavy` is not intermodal-only.
 
 The evidence lives in `results/ablation/`, split into rounds named for the axis
 each varies: round (a) (`families/`, gh #43) is 444 tracked logs / 74 paired

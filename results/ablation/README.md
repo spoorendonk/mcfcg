@@ -7,8 +7,15 @@ identical bit-for-bit — cost, reduced cost, full arc list / arc-flow vector �
 pinned by `FeatureTests.BoundedPricingShadow{Tree,Path,IntermodalTree}`. So the
 only open question was whether it is *faster*.
 
-It is not, by enough to matter. **The flag ships off by default**, and this file
-is the argument for that.
+The answer is family-dependent. It always saves pricing time, but pricing share
+is the ceiling on converting that into wall clock, and on three of the four
+families that share is 0.2–4.3% — so the saving disappears into the noise. On
+intermodal, where pricing is 75–85% of the clock, it is worth **−2.8%** over 100
+paired cells on five backends (round (b)).
+
+**The flag ships off by default**, because the default is global and most
+families have nothing to win. That is not the same as the flag being useless, and
+this file is the argument for both halves.
 
 The measurement is split into rounds, each a directory named for the axis it
 varies. This file carries the argument — mechanism, gain model, traps — and each
