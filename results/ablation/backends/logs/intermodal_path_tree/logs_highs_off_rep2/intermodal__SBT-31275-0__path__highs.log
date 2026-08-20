@@ -1,0 +1,24 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_g3gv5nxp.txt -f %M build/mcfcg_cli data/intermodal/SBT-31275-0.txt.gz --solver highs --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 1440788
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 213509 vertices, 2760366 arcs, 31252 commodities, 31252 sources
+Solver: highs, formulation: path
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=31252, capped_arcs=2513346)
+[lp-config] backend=highs version=1.15.1-04024d701f method=hipo exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   7.9697e+05  62504  31318   523      0      0     66      0   0.610   0.000   0.184   0.795     0.795
+    2          inf         -inf   8.0461e+05  63528  31318   892   1024      0      0      0   1.346   0.321   0.188   1.858     2.653
+    3          inf         -inf   8.0139e+05  63528  31330     0      0      0     12      0   1.597   0.000   0.182   1.780     4.433
+    4          inf         -inf   8.0149e+05  63669  31330    20    141      0      0      0   2.000   0.166   0.183   2.349     6.783
+    5   8.0138e+05   8.0079e+05   8.0138e+05  63790  31330     0    121      0      0      0   1.628   5.032   0.182   6.842    13.624
+    6   8.0132e+05   8.0126e+05   8.0132e+05  63790  31330     0     *0      0      0      0   1.589  10.029   0.183  11.801    25.425
+CG optimal after 6 iterations. UB=801323.000095 LB=801264.540999 gap=5.846e+01 tol=8.013e+01  t_LP=8.769  t_PR=20.601  t_SP=1.102  t_Tot=30.479
+[bounded-pricing] enabled=0 cut=0 priced=126342 rate=0.0%
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/SBT-31275-0.txt.gz,path,6,32538,801323.000095,801264.540999,1,31.049,8.769,20.601,1.102

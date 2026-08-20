@@ -1,0 +1,31 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem__4nnglt6.txt -f %M build/mcfcg_cli data/intermodal/SBT-18765-0.txt.gz --solver copt --copt-gpu-mode 0 --formulation tree --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 1079468
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 188487 vertices, 1782614 arcs, 18745 commodities, 18745 sources
+Solver: copt (gpu-mode 0), formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=18745, capped_arcs=1535594)
+[lp-config] backend=copt version=8.0.1 method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   4.7848e+05  37490  18814   327      0      0     69      0   0.064   0.000   0.129   0.194     0.194
+    2          inf         -inf   4.8278e+05  38150  18814   549    660      0      0      0   0.015   0.172   0.130   0.319     0.513
+    3          inf         -inf   4.8145e+05  38150  18833    12      0      0     19      0   0.015   0.000   0.124   0.140     0.654
+    4          inf         -inf   4.8156e+05  38150  18834    25      0      0      1      0   0.017   0.000   0.124   0.142     0.796
+    5          inf         -inf   4.8165e+05  38171  18834    30     21      0      0      0   0.018   0.050   0.124   0.192     0.987
+    6          inf   4.7023e+05   4.8629e+05  38420  18834    27    249      0      0      0   0.017   2.091   0.126   2.234     3.222
+    7   4.8111e+05   4.8106e+05   4.8111e+05  38431  18817     0     11      0      0     17   0.018   2.135   0.129   2.282     5.503
+    8   4.8111e+05   4.8106e+05   4.8111e+05  38431  18818     0      0      0      1      0   0.017   0.000   0.124   0.142     5.645
+    9   4.8111e+05   4.8107e+05   4.8111e+05  38431  18818     0     *7      0      0      0   0.017   2.129   0.124   2.270     7.915
+CG optimal after 9 iterations. UB=481107.500000 LB=481069.921790 gap=3.758e+01 tol=4.811e+01  t_LP=0.198  t_PR=8.720  t_SP=1.134  t_Tot=10.059
+[bounded-pricing] enabled=0 cut=0 priced=75755 rate=0.0%
+
+# === STDOUT (result CSV) ===
+Setting parameter 'LpMethod' to 2
+Setting parameter 'GPUMode' to 0
+Setting parameter 'Presolve' to 0
+Setting parameter 'Crossover' to 0
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/SBT-18765-0.txt.gz,tree,9,19686,481107.500000,481069.921790,1,10.524,0.198,8.720,1.134

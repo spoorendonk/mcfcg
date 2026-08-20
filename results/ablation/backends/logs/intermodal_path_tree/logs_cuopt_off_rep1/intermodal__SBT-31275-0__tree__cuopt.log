@@ -1,0 +1,24 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_i1cyftqo.txt -f %M build/mcfcg_cli data/intermodal/SBT-31275-0.txt.gz --solver cuopt --formulation tree --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 1812100
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 213509 vertices, 2760366 arcs, 31252 commodities, 31252 sources
+Solver: cuopt, formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=31252, capped_arcs=2513346)
+[lp-config] backend=cuopt version=26.8.0 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   7.9697e+05  62504  31318   523      0      0     66      0   0.531   0.000   0.210   0.743     0.743
+    2          inf         -inf   8.0461e+05  63528  31318   892   1024      0      0      0   0.189   0.337   0.206   0.735     1.478
+    3          inf         -inf   8.0139e+05  63528  31331     0      0      0     13      0   0.193   0.000   0.205   0.399     1.877
+    4          inf         -inf   8.0149e+05  63664  31331    20    136      0      0      0   0.186   0.187   0.202   0.576     2.453
+    5   8.0138e+05   8.0097e+05   8.0138e+05  63785  31331     0    121      0      0      0   0.184   5.712   0.204   6.101     8.554
+    6   8.0132e+05   8.0126e+05   8.0132e+05  63785  31331     0     *0      0      0      0   0.196  11.769   0.209  12.174    20.727
+CG optimal after 6 iterations. UB=801323.010641 LB=801264.522177 gap=5.849e+01 tol=8.013e+01  t_LP=1.480  t_PR=23.767  t_SP=1.235  t_Tot=26.490
+[bounded-pricing] enabled=0 cut=0 priced=126342 rate=0.0%
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/SBT-31275-0.txt.gz,tree,6,32533,801323.010641,801264.522177,1,27.075,1.480,23.767,1.235

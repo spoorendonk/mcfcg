@@ -18,16 +18,22 @@ quotable:
 | round | dir | varies | status |
 |---|---|---|---|
 | (a) | [`families/`](families/README.md) | four families at one backend, 3 reps | landed (gh #43) |
-| (b) | `backends/` | five backends on one family | gh #44 |
+| (b) | [`backends/`](backends/README.md) | five backends on one family, HiGHS at 3 off reps | landed (gh #44) |
 
 Every number below comes from round (a) unless it says otherwise, and every one
 of them is re-derivable from that round's tracked logs.
 
-Scope: two supporting measurements cited below are *not* archived — the
-all-backend on-arm pass (round (b) pairs it) and the rejected stale-arc
-experiment (+31% wall clock, `bench_runs/issue41_stalearcs/ANALYSIS.md`), both in
-the gitignored `bench_runs/`. Neither is load-bearing for the conclusion below;
-both are flagged where they are cited.
+Scope: one supporting measurement cited below is *not* archived — the rejected
+stale-arc experiment (+31% wall clock, `bench_runs/issue41_stalearcs/ANALYSIS.md`),
+in the gitignored `bench_runs/`. It is not load-bearing for the conclusion below
+and is flagged where it is cited.
+
+The old all-backend on-arm pass is no longer cited at all. Round (b) did not pair
+it, as this file once said it would: that pass predates the gh #42 rename, so its
+`[pricing-cutoff]` banner is one the analyzer refuses by policy, and pairing a
+2026-08-17 arm against a fresh one would have rebuilt the very cross-session
+confound the round exists to remove. Round (b) re-ran both arms instead, and its
+numbers supersede it. Retiring the pass itself is gh #45.
 
 ## How it works
 
@@ -232,8 +238,13 @@ Each round owns its artifacts; nothing sits at this level but this file.
 | `families/runs.csv` | one row per run log: timings, iterations, columns, bound fire counts, `per_price_us` |
 | `families/summary.csv` | one row per cell, off and on arms paired and reduced to medians, with deltas |
 | `families/logs/<sweep>/logs_<executor>_<off\|on>_<rep>/` | the raw run logs both CSVs are derived from |
+| `backends/README.md` | round (b): the five-backend result, and why the reported HiGHS penalty was not real |
+| `backends/runs.csv` | as above, for round (b): 240 runs |
+| `backends/summary.csv` | as above, for round (b): 100 cells, wall clock decomposed into `t_pr`/`t_lp` |
+| `backends/logs/intermodal_path_tree/logs_<solver>_<off\|on>_<rep>/` | round (b)'s raw run logs |
 
-Derive both CSVs from the tracked logs — this re-parses and never re-solves:
+Derive every round's CSVs from its tracked logs — this re-parses and never
+re-solves. Add `--round families|backends` to do just one:
 
     python3 scripts/analyze_bounded_pricing_ablation.py
 

@@ -1,0 +1,28 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_nu3rrxu2.txt -f %M build/mcfcg_cli data/intermodal/SBT-56295-0.txt.gz --solver mosek --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 2326512
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 263559 vertices, 4725174 arcs, 56269 commodities, 56269 sources
+Solver: mosek, formulation: path
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=56269, capped_arcs=4478154)
+[lp-config] backend=mosek version=11.0.30 method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   1.4398e+06 112538  56332   974      0      0     63      0   0.053   0.000   0.353   0.410     0.410
+    2          inf         -inf   1.4540e+06 114370  56332  1694   1832      0      0      0   0.153   0.906   0.351   1.417     1.827
+    3          inf         -inf   1.4481e+06 114370  56349     2      0      0     17      0   0.173   0.000   0.356   0.531     2.358
+    4          inf         -inf   1.4483e+06 114370  56351    37      0      0      2      0   0.178   0.000   0.354   0.535     2.893
+    5          inf         -inf   1.4483e+06 114422  56351    37     52      0      0      0   0.196   0.156   0.353   0.706     3.599
+    6          inf   1.4449e+06   1.4486e+06 115003  56351    44    581      0      0      0   0.182  15.956   0.353  16.493    20.092
+    7          inf   1.4449e+06   1.4479e+06 115003  56352     0      0      0      1      0   0.181   0.000   0.356   0.540    20.631
+    8   1.4479e+06   1.4449e+06   1.4479e+06 115034  56322     0     31      0      0     30   0.183   0.158   0.358   0.701    21.332
+    9   1.4479e+06   1.4449e+06   1.4479e+06 115034  56327     0      0      0      5      0   0.179   0.000   0.371   0.553    21.884
+   10   1.4479e+06   1.4478e+06   1.4479e+06 115034  56327     0     *3      0      0      0   0.188  15.580   0.380  16.149    38.033
+CG optimal after 10 iterations. UB=1447868.477887 LB=1447761.228680 gap=1.072e+02 tol=1.448e+02  t_LP=1.665  t_PR=48.496  t_SP=3.586  t_Tot=53.777
+[bounded-pricing] enabled=0 cut=0 priced=171079 rate=0.0%
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/SBT-56295-0.txt.gz,path,10,58765,1447868.477887,1447761.228680,1,54.855,1.665,48.496,3.586

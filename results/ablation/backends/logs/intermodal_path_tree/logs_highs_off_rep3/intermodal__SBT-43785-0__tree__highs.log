@@ -1,0 +1,24 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_80rbhgoe.txt -f %M build/mcfcg_cli data/intermodal/SBT-43785-0.txt.gz --solver highs --formulation tree --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 1820516
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 238529 vertices, 3741246 arcs, 43757 commodities, 43757 sources
+Solver: highs, formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=43757, capped_arcs=3494226)
+[lp-config] backend=highs version=1.15.1-04024d701f method=hipo exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   1.1175e+06  87514  43829   745      0      0     72      0   0.666   0.000   0.282   0.950     0.950
+    2          inf         -inf   1.1284e+06  89103  43829  1264   1589      0      0      0   1.333   0.619   0.285   2.242     3.192
+    3          inf         -inf   1.1237e+06  89103  43839     0      0      0     10      0   1.847   0.000   0.285   2.134     5.326
+    4          inf         -inf   1.1238e+06  89259  43839    23    156      0      0      0   2.036   0.239   0.280   2.555     7.881
+    5   1.1237e+06   1.1234e+06   1.1237e+06  89490  43839     0    231      0      0      0   1.916   9.163   0.280  11.360    19.242
+    6   1.1236e+06   1.1235e+06   1.1236e+06  89490  43839     0     *1      0      0      0   1.672   9.195   0.278  11.145    30.387
+CG optimal after 6 iterations. UB=1123600.000865 LB=1123516.980578 gap=8.302e+01 tol=1.124e+02  t_LP=9.470  t_PR=28.637  t_SP=1.690  t_Tot=39.808
+[bounded-pricing] enabled=0 cut=0 priced=133286 rate=0.0%
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/SBT-43785-0.txt.gz,tree,6,45733,1123600.000865,1123516.980578,1,40.665,9.470,28.637,1.690

@@ -17,6 +17,7 @@ disabled. Every way it can be wrong is quiet:
 Run:  python3 -m unittest discover -s test/python -p '*_test.py'
 """
 
+import collections
 import contextlib
 import csv
 import io
@@ -133,7 +134,7 @@ def run(arm, **kw):
     base = dict(sweep="s", family="intermodal", instance="BUS-2632-0",
                 formulation="tree", solver="copt-cpu", arm=arm, rep="rep1",
                 per_source=1.0, exit="gap", lower_bound=100.0,
-                t_tot=2.0, t_pr=1.0, per_price_us=100.0, iterations=10,
+                t_tot=2.0, t_pr=1.0, t_lp=0.5, per_price_us=100.0, iterations=10,
                 columns=1000, priced=500)
     base.update(kw)
     return base
@@ -221,6 +222,29 @@ class SummarizePairingTest(unittest.TestCase):
         # 50% of the clock, 10% cheaper per price -> 5% of the clock.
         self.assertAlmostEqual(r["pred_wall_pct"], -5.0)
 
+    def test_lp_time_is_paired_too_not_only_pricing(self):
+        """A wall delta decomposes into pricing + LP + the rest, and the flag's
+        second-order effect (-LP_share x Delta-iterations) lands entirely in LP.
+        With only the t_pr triple in the summary, "did the bound work or did the
+        trajectory move?" is answerable solely by hand from runs.csv -- and that
+        question is the whole point of the five-backend round (gh #44), where LP
+        share runs from 3% (copt-cpu) to 51% (highs)."""
+        rows = abl.summarize([run("off", t_tot=4.0, t_pr=2.0, t_lp=1.0),
+                              run("on", t_tot=3.6, t_pr=1.6, t_lp=1.1)])
+        r = rows[0]
+        self.assertAlmostEqual(r["t_lp_off"], 1.0)
+        self.assertAlmostEqual(r["t_lp_on"], 1.1)
+        # Signed on-vs-off like every other delta: a SLOWER LP reads positive
+        # even while the wall clock and the pricing time both fell.
+        self.assertAlmostEqual(r["d_t_lp_pct"], 10.0)
+        self.assertLess(r["d_t_tot_pct"], 0.0)
+        self.assertIn("t_lp_off", abl.SUMMARY_FIELDS)
+        # The first seven fields are write_csv's sort key; adding columns must not
+        # reorder the committed rows.
+        self.assertEqual(abl.SUMMARY_FIELDS[:7],
+                         ["sweep", "family", "instance", "formulation", "solver",
+                          "per_source", "reps_off"])
+
     def test_traj_moved_flags_iteration_or_column_changes(self):
         same = abl.summarize([run("off"), run("on")])[0]
         self.assertEqual(same["traj_moved"], 0)
@@ -228,6 +252,35 @@ class SummarizePairingTest(unittest.TestCase):
         self.assertEqual(iters["traj_moved"], 1)
         cols = abl.summarize([run("off", columns=1000), run("on", columns=1001)])[0]
         self.assertEqual(cols["traj_moved"], 1)
+
+    def test_a_single_rep_cell_reports_no_stability_rather_than_a_free_one(self):
+        """One run agrees with itself, so `len(shape(recs)) == 1` is vacuous at one
+        rep per arm -- and `spread_off_pct` is absent on exactly those cells, so
+        nothing else would catch it. A free `traj_stable=1` would make every cell
+        of a 1-rep round (gh #44) print as quotable per-price, on evidence it never
+        had. Blank means "not established", and the quotable filter must drop it."""
+        one = abl.summarize([run("off"), run("on")])[0]
+        self.assertIsNone(one["traj_stable"])
+        self.assertEqual(one["traj_moved"], 0)  # medians still compare fine
+        self.assertEqual(abl.cell(one, "traj_stable"), "")
+
+        # Two reps per arm is the least that can demonstrate it, either way.
+        stable = abl.summarize([run("off", rep="rep1"), run("off", rep="rep2"),
+                                run("on", rep="rep1"), run("on", rep="rep2")])[0]
+        self.assertEqual(stable["traj_stable"], 1)
+        wobbly = abl.summarize([run("off", rep="rep1", iterations=10),
+                                run("off", rep="rep2", iterations=11),
+                                run("on", rep="rep1"), run("on", rep="rep2")])[0]
+        self.assertEqual(wobbly["traj_stable"], 0)
+
+    def test_a_single_rep_cell_is_never_quoted_as_per_price(self):
+        """The report side of the same failure: `None` has to be falsy in the
+        quotable filter AND printable in the table, or a 1-rep round either
+        over-claims or dies with a TypeError after all the parse work is done."""
+        rows = abl.summarize([run("off"), run("on", per_price_us=90.0)])
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            abl.print_tables(rows)
+        self.assertIn("none of 1 cells", out.getvalue())
 
     def test_unpaired_cell_is_dropped_not_half_reported(self):
         with contextlib.redirect_stderr(io.StringIO()) as err:
@@ -273,37 +326,43 @@ class ReportingTest(unittest.TestCase):
             shutil.rmtree(os.path.dirname(path), ignore_errors=True)
 
 
-class CommittedAblationTest(unittest.TestCase):
+class CommittedRoundMixin:
     """The tracked CSVs must still be what the tracked logs say.
 
     This is the provenance chain the manuscript cites: logs -> analyzer -> CSV.
     A parser change that silently alters a column would otherwise leave the
     committed CSV describing runs it no longer matches.
+
+    One subclass per round in `abl.ROUNDS`. The schemas are identical, so only
+    the pins differ -- and they differ in kind, not just in value: round (a) is
+    uniformly 3 reps per arm, round (b) is deliberately mixed (HiGHS carries 3
+    off reps because the round's headline rests on it, everything else 1+1). So
+    the rep pin is a SHAPE -- (reps_off, reps_on) -> how many cells have it --
+    rather than a single expected count, which fits both and stays exact.
     """
+
+    ROUND = None
+    N_RUNS = None
+    N_CELLS = None
+    REP_SHAPE = None
 
     @classmethod
     def setUpClass(cls):
-        cls.sweeps = [os.path.join(REPO, s) for s in abl.DEFAULT_SWEEPS]
+        cls.sweeps = [os.path.join(REPO, s) for s in abl.ROUNDS[cls.ROUND]["sweeps"]]
         if not all(os.path.isdir(s) for s in cls.sweeps):
-            raise unittest.SkipTest("results/ablation/families logs not present")
+            raise unittest.SkipTest(f"round '{cls.ROUND}' logs not present")
         cls.rows = abl.summarize(abl.collect(cls.sweeps))
 
-    def test_every_cell_is_paired_at_the_round_s_uniform_three_reps(self):
-        # 3 reps everywhere is the point of round (a): the archived sweep it
-        # replaced was mixed-rep, and its 2-rep cells misread the sign of the
-        # per-price effect (gh #43). An exact count, not a floor, so a cell
-        # silently dropping to 2 fails here rather than being quoted.
-        #
-        # Pin the totals too: a whole logs_*/ dir going missing would still leave
-        # a full rep count on the cells that survive.
-        #   288 = 48 grid+planar cells x 6 dirs (3 reps x 2 arms)
-        #    36 =  6 transportation x 6
-        #   120 = 10 intermodal x 6, on each of copt-gpu and copt-cpu
-        self.assertEqual(len(abl.collect(self.sweeps)), 444, "log count changed")
-        self.assertEqual(len(self.rows), 74, "cell count changed")
-        for r in self.rows:
-            self.assertEqual(r["reps_off"], 3, f"{r['sweep']}/{r['instance']} off reps")
-            self.assertEqual(r["reps_on"], 3, f"{r['sweep']}/{r['instance']} on reps")
+    def test_every_cell_is_paired_at_the_round_s_own_rep_shape(self):
+        # Exact counts, not floors: a cell silently dropping a rep, or a whole
+        # logs_*/ dir going missing, has to fail here rather than be quoted. The
+        # archived sweep round (a) replaced was mixed-rep by accident, and its
+        # 2-rep cells misread the SIGN of the per-price effect (gh #43) -- which
+        # is why the rep structure is pinned at all.
+        self.assertEqual(len(abl.collect(self.sweeps)), self.N_RUNS, "log count changed")
+        self.assertEqual(len(self.rows), self.N_CELLS, "cell count changed")
+        shape = collections.Counter((r["reps_off"], r["reps_on"]) for r in self.rows)
+        self.assertEqual(dict(shape), self.REP_SHAPE, "rep structure changed")
 
     def test_the_two_arms_agree_on_the_optimum(self):
         """The bound is a proof, not a heuristic: switching it on must not move
@@ -332,7 +391,7 @@ class CommittedAblationTest(unittest.TestCase):
     def test_runs_csv_matches_the_logs(self):
         """The per-run CSV carries the fields the summary is built from, so a
         parser change touching only those would slip past a summary-only check."""
-        with open(os.path.join(REPO, abl.RUNS_CSV), newline="") as fh:
+        with open(os.path.join(REPO, abl.ROUNDS[self.ROUND]["runs"]), newline="") as fh:
             committed = list(csv.DictReader(fh))
         derived = {(r["sweep"], r["solver"], r["formulation"], r["instance"],
                     r["arm"], r["rep"]): r for r in abl.collect(self.sweeps)}
@@ -347,7 +406,7 @@ class CommittedAblationTest(unittest.TestCase):
                                  f"{key} {field} drifted from the logs")
 
     def test_summary_csv_matches_the_logs(self):
-        path = os.path.join(REPO, abl.SUMMARY_CSV)
+        path = os.path.join(REPO, abl.ROUNDS[self.ROUND]["summary"])
         with open(path, newline="") as fh:
             committed = list(csv.DictReader(fh))
         self.assertEqual(len(committed), len(self.rows))
@@ -363,6 +422,47 @@ class CommittedAblationTest(unittest.TestCase):
                 want = abl.cell(derived[key], field)
                 self.assertEqual(row[field], "" if want == "" else str(want),
                                  f"{key} {field} drifted from the logs")
+
+
+class CommittedAblationTest(CommittedRoundMixin, unittest.TestCase):
+    """Round (a), gh #43: four families at one backend, 3 reps everywhere.
+
+    444 = 288 grid+planar (48 cells x 6 dirs: 3 reps x 2 arms)
+        +  36 transportation (6 x 6)
+        + 120 intermodal (10 x 6, on each of copt-gpu and copt-cpu)
+    """
+
+    ROUND = "families"
+    N_RUNS = 444
+    N_CELLS = 74
+    REP_SHAPE = {(3, 3): 74}
+
+
+class CommittedBackendsAblationTest(CommittedRoundMixin, unittest.TestCase):
+    """Round (b), gh #44: one family on five backends, path and tree.
+
+    240 = 12 dirs x 20 logs (10 intermodal instances x 2 formulations), the 12
+    being 5 backends x 2 arms plus HiGHS's two extra off reps. That gives 100
+    cells, of which the 20 HiGHS ones are 3 off reps against 1 on rep and the
+    other 80 are 1+1 -- so nothing here is quotable per-price (`traj_stable` is
+    blank below 2 reps) and the round is read as wall clock. The asymmetry is
+    deliberate: HiGHS is the backend whose LP share makes it the round's
+    headline, so its baseline is the one worth replicating.
+    """
+
+    ROUND = "backends"
+    N_RUNS = 240
+    N_CELLS = 100
+    REP_SHAPE = {(1, 1): 80, (3, 1): 20}
+
+    def test_no_cell_claims_a_per_price_number(self):
+        """A 1-rep arm cannot demonstrate trajectory stability, and 80 of these
+        100 cells have one. Before the guard in `summarize`, every one of them
+        would have reported `traj_stable=1` for free and printed as quotable --
+        a wall-clock round silently publishing per-price claims."""
+        blank = [r for r in self.rows if r["traj_stable"] is None]
+        self.assertEqual(len(blank), self.N_CELLS,
+                         "a round with 1-rep arms must not report traj_stable")
 
 
 if __name__ == "__main__":

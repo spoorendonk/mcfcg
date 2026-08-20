@@ -219,15 +219,34 @@ this codebase already means the reduced-cost acceptance threshold `NEG_RC_TOL`
 and the LP backends' objective-cutoff parameters. The rename is **forward-only** —
 nothing parses the old `[pricing-cutoff]` banner.
 
+**Round (b) (`backends/`, gh #44) killed the reported HiGHS penalty.** Five
+backends on intermodal, both arms in one session: `t_PR` falls in all ten
+solver×formulation groups (−2.0% to −9.2%) — the bound works everywhere — while
+`t_LP` swings −18.0% to +27.1% and decides the wall-clock sign. HiGHS path is
+**−9.8%**, HiGHS tree **+7.7%**; the +18–32% penalty a cross-session comparison
+had reported does not exist. The flag is backend-specific not because backends
+price differently but because the same trajectory shift lands on an LP worth
+34–45% of the clock under HiGHS against 75–85% elsewhere. Disposition is
+unchanged — a mechanism whose sign rides on an unpredictable trajectory shift
+does not go on by default.
+
 The evidence lives in `results/ablation/`, split into rounds named for the axis
-each varies; round (a) (`families/`, gh #43) is 444 tracked logs and 74 paired
-cells, re-derivable with `scripts/analyze_bounded_pricing_ablation.py` and pinned
-by `CommittedAblationTest`.
+each varies: round (a) (`families/`, gh #43) is 444 tracked logs / 74 paired
+cells at 3 reps; round (b) (`backends/`, gh #44) is 240 logs / 100 cells, mixed
+reps by design (HiGHS 3 off reps, the rest 1+1). Both re-derive with
+`scripts/analyze_bounded_pricing_ablation.py` (`--round` for one) and are pinned
+by `CommittedRoundMixin` subclasses.
+
+**Never pair arms across sessions.** It is the trap this whole ablation keeps
+re-learning: it is what made the HiGHS penalty look real, and round (b) had to
+re-run an existing 100-cell on-arm pass rather than reuse it. Round (b)'s 1-rep
+cells are wall clock only — `traj_stable` is blank at one rep, so nothing there is
+quotable per-price, and HiGHS's own off-arm spread reaches 30–46% on some cells.
 
 **Read `results/ablation/README.md` before re-opening the question or touching
-the bounded-pricing code**, and `results/ablation/families/README.md` before
-citing a number. Together they carry the gain model and why it loses, the
-three correctness traps the implementation must respect
+the bounded-pricing code**, and the round README — `families/` or `backends/` —
+before citing a number from it. Together they carry the gain model and why it
+loses, the three correctness traps the implementation must respect
 (`FeatureTests.BoundedPricing*`), the two channels by which the flag shifts the
 CG trajectory without changing columns, and which backends the measurement is
 valid on — a single-backend result is worthless, copt-gpu cannot reproduce itself

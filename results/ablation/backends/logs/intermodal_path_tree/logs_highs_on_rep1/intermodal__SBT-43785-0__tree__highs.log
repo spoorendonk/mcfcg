@@ -1,0 +1,24 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem__3t2byhb.txt -f %M build/mcfcg_cli data/intermodal/SBT-43785-0.txt.gz --solver highs --formulation tree --max-iters 10000 --strategy pricer-heavy --bounded-pricing --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 1835676
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 238529 vertices, 3741246 arcs, 43757 commodities, 43757 sources
+Solver: highs, formulation: tree
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=43757, capped_arcs=3494226)
+[lp-config] backend=highs version=1.15.1-04024d701f method=hipo exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   1.1175e+06  87514  43829   745      0      0     72      0   0.675   0.000   0.285   0.962     0.962
+    2          inf         -inf   1.1284e+06  89103  43829  1264   1589      0      0      0   1.400   0.600   0.280   2.285     3.247
+    3          inf         -inf   1.1237e+06  89103  43839     0      0      0     10      0   1.827   0.000   0.291   2.120     5.367
+    4          inf         -inf   1.1238e+06  89259  43839    23    156      0      0      0   1.977   0.238   0.288   2.504     7.870
+    5   1.1237e+06   1.1235e+06   1.1237e+06  89490  43839     0    231      0      0      0   1.866   8.971   0.278  11.116    18.986
+    6   1.1236e+06   1.1236e+06   1.1236e+06  89490  43839     0     *1      0      0      0   1.770   8.981   0.272  11.023    30.009
+CG optimal after 6 iterations. UB=1123600.000207 LB=1123593.785554 gap=6.215e+00 tol=1.124e+02  t_LP=9.515  t_PR=28.082  t_SP=1.693  t_Tot=39.301
+[bounded-pricing] enabled=1 cut=87552 priced=133286 rate=65.7%
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/SBT-43785-0.txt.gz,tree,6,45733,1123600.000207,1123593.785554,1,40.141,9.515,28.082,1.693

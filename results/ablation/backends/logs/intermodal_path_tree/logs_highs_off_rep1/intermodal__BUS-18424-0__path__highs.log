@@ -1,0 +1,37 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_0h6kg7oz.txt -f %M build/mcfcg_cli data/intermodal/BUS-18424-0.txt.gz --solver highs --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 943596
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 151455 vertices, 1338522 arcs, 18388 commodities, 18388 sources
+Solver: highs, formulation: path
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=18388, capped_arcs=1151624)
+[lp-config] backend=highs version=1.15.1-04024d701f method=hipo exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   4.7151e+05  36776  18454  1078      0      0     66      0   0.354   0.000   0.093   0.447     0.447
+    2          inf         -inf   4.7582e+05  37657  18454  1435    881      0      0      0   0.821   0.171   0.091   1.087     1.534
+    3          inf         -inf   4.8637e+05  37657  18497   112      0      0     43      0   0.948   0.000   0.092   1.041     2.575
+    4          inf         -inf   4.8791e+05  38303  18497   229    646      0      0      0   1.012   0.147   0.088   1.249     3.824
+    5          inf         -inf   4.9530e+05  38303  18508    93      0      0     11      0   1.236   0.000   0.093   1.330     5.154
+    6          inf         -inf   4.9542e+05  38303  18513   104      0      0      5      0   1.219   0.000   0.095   1.315     6.469
+    7          inf         -inf   4.9543e+05  38328  18491   106     25      0      0     22   1.170   0.044   0.091   1.306     7.775
+    8          inf   4.0890e+05   5.0703e+05  39325  18484   105    997      0      0      7   1.426   0.801   0.094   2.323    10.098
+    9          inf   4.0890e+05   4.8494e+05  39325  18512     0      0      0     28      0   1.377   0.000   0.092   1.469    11.568
+   10          inf   4.0890e+05   4.8511e+05  39325  18514    14      0      0      2      0   1.772   0.000   0.094   1.867    13.434
+   11          inf   4.0890e+05   4.8511e+05  39342  18483    14     17      0      0     31   1.664   0.038   0.091   1.793    15.227
+   12          inf   4.0890e+05   4.8523e+05  39342  18484     7      0      0      1      0   1.784   0.000   0.090   1.874    17.101
+   13          inf   4.8269e+05   4.8523e+05  39592  18480     7    250      0      0      4   1.717   0.791   0.090   2.599    19.700
+   14          inf   4.8269e+05   4.8504e+05  39592  18482     0      0      0      2      0   1.584   0.000   0.091   1.676    21.376
+   15   4.8504e+05   4.8269e+05   4.8504e+05  39595  18459     0      3      0      0     23   1.587   0.052   0.090   1.730    23.105
+   16   4.8504e+05   4.8269e+05   4.8504e+05  39595  18460     0      0      0      1      0   1.832   0.000   0.093   1.925    25.030
+   17   4.8504e+05   4.8496e+05   4.8504e+05  39669  18455     0     74      0      0      5   1.822   0.853   0.092   2.767    27.798
+   18   4.8504e+05   4.8496e+05   4.8503e+05  39669  18456     0      0      0      1      0   1.618   0.000   0.090   1.709    29.507
+   19   4.8503e+05   4.8499e+05   4.8503e+05  39669  18456     0     *0      0      0      0   1.623   0.841   0.089   2.552    32.059
+CG optimal after 19 iterations. UB=485025.502145 LB=484993.522556 gap=3.198e+01 tol=4.850e+01  t_LP=26.567  t_PR=4.531  t_SP=1.737  t_Tot=32.853
+[bounded-pricing] enabled=0 cut=0 priced=94482 rate=0.0%
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/BUS-18424-0.txt.gz,path,19,21281,485025.502145,484993.522556,1,33.125,26.567,4.531,1.737

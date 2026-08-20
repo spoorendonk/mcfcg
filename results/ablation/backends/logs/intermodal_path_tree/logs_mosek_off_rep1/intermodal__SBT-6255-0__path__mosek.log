@@ -1,0 +1,25 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_zknknb2v.txt -f %M build/mcfcg_cli data/intermodal/SBT-6255-0.txt.gz --solver mosek --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 754540
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 163487 vertices, 809375 arcs, 6251 commodities, 6251 sources
+Solver: mosek, formulation: path
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=6251, capped_arcs=562355)
+[lp-config] backend=mosek version=11.0.30 method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   1.5957e+05  12502   6351   120      0      0    100      0   0.063   0.000   0.057   0.120     0.120
+    2          inf         -inf   1.6193e+05  12842   6351   241    340      0      0      0   0.010   0.056   0.057   0.125     0.245
+    3          inf         -inf   1.6080e+05  12842   6370     6      0      0     19      0   0.013   0.000   0.058   0.072     0.317
+    4          inf         -inf   1.6086e+05  12921   6370    13     79      0      0      0   0.015   0.036   0.056   0.107     0.424
+    5          inf         -inf   1.6277e+05  12921   6371     5      0      0      1      0   0.015   0.000   0.056   0.072     0.496
+    6          inf   1.5720e+05   1.6277e+05  12991   6371     5     70      0      0      0   0.015   0.415   0.059   0.490     0.986
+    7   1.6061e+05   1.6059e+05   1.6061e+05  12991   6371     0     *1      0      0      0   0.014   0.385   0.055   0.455     1.441
+CG optimal after 7 iterations. UB=160606.013094 LB=160593.724320 gap=1.229e+01 tol=1.606e+01  t_LP=0.147  t_PR=1.325  t_SP=0.399  t_Tot=1.874
+[bounded-pricing] enabled=0 cut=0 priced=19245 rate=0.0%
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/SBT-6255-0.txt.gz,path,7,6740,160606.013094,160593.724320,1,2.064,0.147,1.325,0.399

@@ -45,7 +45,9 @@ cell's wall delta can be read as a pricing effect at all:
   * `traj_stable` -- every repetition *within* each arm agreed on (iterations,
     columns). A cell can have `traj_moved=0` while individual reps disagreed and
     the medians happened to coincide, which is not the same thing. Quote per-price
-    numbers over `traj_moved=0 AND traj_stable=1`.
+    numbers over `traj_moved=0 AND traj_stable=1`. It is blank, not 1, on a cell
+    with a single rep per arm: one run agrees with itself by construction, so
+    there is no stability to report and nothing is quotable off that cell.
 
 `pred_wall_pct` is the cost model's first term, `pricing_share x per-price
 saving` -- the gain the bound can deliver when the trajectory holds still. On
@@ -63,8 +65,11 @@ the CG gap tolerance. (The bit-for-bit column identity claim is a stronger
 statement and is pinned in C++, by FeatureTests.BoundedPricingShadow*.)
 
 Usage:
-  # regenerate round (a)'s committed CSVs from its three tracked sweeps
+  # regenerate every committed round's CSVs from its own tracked sweeps
   python3 scripts/analyze_bounded_pricing_ablation.py
+
+  # just one round
+  python3 scripts/analyze_bounded_pricing_ablation.py --round backends
 
   # a fresh sweep, print only
   python3 scripts/analyze_bounded_pricing_ablation.py bench_runs/mysweep --no-write
@@ -81,33 +86,55 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from benchmark_solvers import REPO, parse_csv_row, parse_iteration_table  # noqa: E402
 
-# Round (a) of the ablation -- one backend (copt-gpu) across four families, 3
-# reps everywhere. Order is presentation order -- nothing supersedes anything
+# The ablation is split into rounds, each a directory named for the axis it
+# varies: round (a) varies FAMILY at a fixed backend and lives under families/,
+# round (b) varies BACKEND at a fixed family and lives under backends/.
+#
+# Each round derives its own pair of CSVs from its own sweeps, and the two are
+# NEVER merged into one collect()/summarize() pass. They are different sessions,
+# so their cells are not comparable cell-for-cell; and print_tables groups by
+# (sweep, solver, formulation), which would interleave two rounds into one
+# reading. The per-round CSVs carry no `round` column -- the directory already
+# says which round it is.
+#
+# Within a round, sweep order is presentation order: nothing supersedes anything
 # here, unlike consolidate_cg_logs.py's --logdir list.
 #
-# The round dir is named for the axis it varies: round (a) varies FAMILY at a
-# fixed backend, so it lives under families/. Round (b) (gh #44) varies backend
-# at a fixed family and gets its own backends/ sibling; keep the two apart, since
-# their cells are not comparable cell-for-cell (different sessions).
-#
 # These paths are the committed record. An argument-less invocation re-derives
-# runs.csv and summary.csv from them and must be byte-identical to what is
-# tracked -- CommittedAblationTest pins exactly that.
-DEFAULT_SWEEPS = [
-    # intermodal (10 instances), tree + PricerHeavy, 3 reps, on copt-gpu AND
-    # copt-cpu: this is the only family where a per-price number is quotable, so
-    # it carries a second executor to corroborate the one the round varies on.
-    "results/ablation/families/logs/intermodal_tree",
-    # transportation (6 of 9 instances; 3 excluded on cost), tree, copt-gpu, 3 reps
-    "results/ablation/families/logs/transportation_tree",
-    # grid (15) + planar<=1000 (9), path and tree, copt-gpu, 3 reps
-    "results/ablation/families/logs/gridplanar_path_tree",
-]
-
-# Plain names: the round directory already says which round these describe, so a
-# filename prefix would only repeat it.
-RUNS_CSV = "results/ablation/families/runs.csv"
-SUMMARY_CSV = "results/ablation/families/summary.csv"
+# every round's runs.csv and summary.csv from them and must be byte-identical to
+# what is tracked -- the CommittedAblationTest subclasses pin exactly that.
+ROUNDS = {
+    # Round (a), gh #43 -- one backend (copt-gpu) across four families, 3 reps
+    # everywhere, 444 logs / 74 cells.
+    "families": {
+        "sweeps": [
+            # intermodal (10 instances), tree + PricerHeavy, 3 reps, on copt-gpu
+            # AND copt-cpu: this is the only family where a per-price number is
+            # quotable, so it carries a second executor to corroborate the one
+            # the round varies on.
+            "results/ablation/families/logs/intermodal_tree",
+            # transportation (6 of 9 instances; 3 excluded on cost), tree,
+            # copt-gpu, 3 reps
+            "results/ablation/families/logs/transportation_tree",
+            # grid (15) + planar<=1000 (9), path and tree, copt-gpu, 3 reps
+            "results/ablation/families/logs/gridplanar_path_tree",
+        ],
+        # Plain names: the round directory already says which round these
+        # describe, so a filename prefix would only repeat it.
+        "runs": "results/ablation/families/runs.csv",
+        "summary": "results/ablation/families/summary.csv",
+    },
+    # Round (b), gh #44 -- one family (intermodal, PricerHeavy) on all five
+    # backends, path and tree. MIXED reps by design: HiGHS carries 3 off reps
+    # because it is the backend the round's headline rests on, everything else
+    # 1+1. So per-price is not quotable anywhere here (traj_stable is blank at
+    # one rep) and the round is read as wall clock, decomposed into t_pr/t_lp.
+    "backends": {
+        "sweeps": ["results/ablation/backends/logs/intermodal_path_tree"],
+        "runs": "results/ablation/backends/runs.csv",
+        "summary": "results/ablation/backends/summary.csv",
+    },
+}
 
 SUMMARY_LINE = re.compile(
     r"CG optimal after (\d+) iterations\. UB=(\S+) LB=(\S+) gap=(\S+) tol=(\S+)\s+"
@@ -141,7 +168,14 @@ SUMMARY_FIELDS = [
     "sweep", "family", "instance", "formulation", "solver",
     "per_source", "reps_off", "reps_on",
     "t_tot_off", "t_tot_on", "d_t_tot_pct",
+    # The wall delta decomposes into pricing + LP + the rest, and the flag's
+    # second-order effect (-LP_share x Delta-iterations) lands entirely in the LP
+    # term -- so a t_pr triple without its t_lp counterpart cannot say whether a
+    # backend's delta came from the bound working or from the trajectory moving.
+    # Both are appended after the first seven fields, which are write_csv's sort
+    # key; inserting into that prefix would reorder every committed row.
     "t_pr_off", "t_pr_on", "d_t_pr_pct",
+    "t_lp_off", "t_lp_on", "d_t_lp_pct",
     "per_price_us_off", "per_price_us_on", "d_per_price_pct",
     "iters_off", "iters_on", "cols_off", "cols_on",
     "priced_off", "priced_on", "traj_moved", "traj_stable",
@@ -287,12 +321,13 @@ def summarize(runs):
         row = dict(zip(("sweep", "family", "instance", "formulation", "solver"), key))
         row["per_source"] = off[0].get("per_source")
         row["reps_off"], row["reps_on"] = len(off), len(on)
-        for field, name in (("t_tot", "t_tot"), ("t_pr", "t_pr"),
+        for field, name in (("t_tot", "t_tot"), ("t_pr", "t_pr"), ("t_lp", "t_lp"),
                             ("per_price_us", "per_price_us"), ("iterations", "iters"),
                             ("columns", "cols"), ("priced", "priced")):
             row[f"{name}_off"], row[f"{name}_on"] = m(off, field), m(on, field)
         row["d_t_tot_pct"] = pct(row["t_tot_on"], row["t_tot_off"])
         row["d_t_pr_pct"] = pct(row["t_pr_on"], row["t_pr_off"])
+        row["d_t_lp_pct"] = pct(row["t_lp_on"], row["t_lp_off"])
         row["d_per_price_pct"] = pct(row["per_price_us_on"], row["per_price_us_off"])
         row["traj_moved"] = int(row["iters_off"] != row["iters_on"]
                                 or row["cols_off"] != row["cols_on"])
@@ -302,7 +337,14 @@ def summarize(runs):
         # quoting when both hold.
         def shape(recs):
             return {(r.get("iterations"), r.get("columns")) for r in recs}
-        row["traj_stable"] = int(len(shape(off)) == 1 and len(shape(on)) == 1)
+        # At one rep per arm there is nothing for the reps to agree with: a
+        # single-rep set is size 1 whatever it holds, so an int here would report
+        # stability the cell never demonstrated -- and `spread_off_pct` is absent
+        # on exactly those cells, so nothing else would catch it either. None
+        # (blank in the CSV, falsy in the quotable filter) says "not established"
+        # rather than "established true".
+        row["traj_stable"] = (int(len(shape(off)) == 1 and len(shape(on)) == 1)
+                              if len(off) > 1 and len(on) > 1 else None)
         row["pricing_share_pct"] = (100.0 * row["t_pr_off"] / row["t_tot_off"]
                                     if row["t_tot_off"] else None)
         row["cut_rate_pct"] = med([r.get("cut_rate_pct") for r in on
@@ -362,7 +404,8 @@ def print_tables(rows):
                   f"{fmt(r['t_tot_off'], '10.3f')} {fmt(r['t_tot_on'], '9.3f')} "
                   f"{fmt(r['d_t_tot_pct'], '+6.1f')}% {fmt(r['pred_wall_pct'], '+6.2f')}% "
                   f"{fmt(r['iters_off'], '5.0f')}->{fmt(r['iters_on'], '<4.0f')} "
-                  f"{fmt(r['cut_rate_pct'], '5.1f')}% {r['traj_moved']:>6} {r['traj_stable']:>7}")
+                  f"{fmt(r['cut_rate_pct'], '5.1f')}% {r['traj_moved']:>6} "
+                  f"{fmt(r['traj_stable'], '>7')}")
 
         tt_off = sum(r["t_tot_off"] for r in sel)
         tt_on = sum(r["t_tot_on"] for r in sel)
@@ -375,6 +418,14 @@ def print_tables(rows):
               f"{pct(tt_on, tt_off):+6.1f}%")
         print(f"{'  of which t_PR':<16} {pr_off:60.3f} {pr_on:9.3f} "
               f"{pct(pr_on, pr_off):+6.1f}%")
+        # LP sits beside pricing rather than in the per-instance table: the header
+        # above is already 14 columns wide, and the decomposition the LP term
+        # answers ("was this delta the bound, or the trajectory moving?") is read
+        # per group, not per instance. The CSV carries the per-cell numbers.
+        lp_off = sum(r["t_lp_off"] for r in sel)
+        lp_on = sum(r["t_lp_on"] for r in sel)
+        print(f"{'  and t_LP':<16} {lp_off:60.3f} {lp_on:9.3f} "
+              f"{fmt(pct(lp_on, lp_off), '+6.1f')}%")
 
         spreads = [r["spread_off_pct"] for r in sel if r["spread_off_pct"] is not None]
         if spreads:
@@ -418,39 +469,62 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("sweeps", nargs="*", default=None,
                     help="ablation sweep directories, each holding "
-                         "logs_<solver>_<off|on>_<rep>/ subdirs. Defaults to the three "
-                         "paired sweeps behind the committed CSVs.")
-    ap.add_argument("--runs-out", default=RUNS_CSV,
-                    help=f"per-run CSV, one row per log (default: {RUNS_CSV})")
-    ap.add_argument("--summary-out", default=SUMMARY_CSV,
-                    help=f"paired per-cell CSV, off vs on (default: {SUMMARY_CSV})")
+                         "logs_<solver>_<off|on>_<rep>/ subdirs. Omit to regenerate "
+                         "the committed rounds instead.")
+    ap.add_argument("--round", choices=sorted(ROUNDS), default=None,
+                    help="regenerate just this committed round (default: all of them, "
+                         f"{', '.join(sorted(ROUNDS))}). Ignored when sweep dirs are "
+                         "given.")
+    ap.add_argument("--runs-out", default=None,
+                    help="per-run CSV, one row per log (default: the round's own)")
+    ap.add_argument("--summary-out", default=None,
+                    help="paired per-cell CSV, off vs on (default: the round's own)")
     ap.add_argument("--no-write", action="store_true",
                     help="print the tables only; write no CSVs")
     args = ap.parse_args()
 
-    # The default output paths ARE the committed ablation record, so they are
-    # only valid for the default sweeps. A custom sweep must name its own outputs
-    # (or pass --no-write) rather than silently clobber it.
-    if args.sweeps and not args.no_write and (args.runs_out, args.summary_out) == (
-            RUNS_CSV, SUMMARY_CSV):
-        sys.exit("error: custom sweep dirs with the default --runs-out/--summary-out "
-                 "would overwrite the committed ablation CSVs. Pass --no-write, or "
-                 "give your own --runs-out/--summary-out.")
+    # A custom sweep writing to ANY round's committed paths would silently
+    # rewrite that round's record with cells it did not measure. Guard every
+    # round's paths, not just one: round (b)'s are as committed as round (a)'s.
+    committed = {r[k] for r in ROUNDS.values() for k in ("runs", "summary")}
+    if args.sweeps and not args.no_write and (
+            {args.runs_out, args.summary_out} & committed):
+        sys.exit("error: custom sweep dirs writing to a committed round's CSV "
+                 f"({', '.join(sorted(committed))}) would overwrite the ablation "
+                 "record. Pass --no-write, or give your own "
+                 "--runs-out/--summary-out.")
 
-    sweeps = args.sweeps or [os.path.join(REPO, s) for s in DEFAULT_SWEEPS]
-    missing = [s for s in sweeps if not os.path.isdir(s)]
-    if missing:
-        sys.exit(f"error: sweep dir(s) not found: {', '.join(missing)}\n"
-                 f"See results/ablation/README.md for the sweep layout.")
+    # One round per collect()/summarize() pass -- never merged. See the ROUNDS
+    # comment: the rounds are different sessions, and print_tables groups by
+    # (sweep, solver, formulation), so a merged pass would interleave them.
+    if args.sweeps:
+        jobs = [(None, args.sweeps, args.runs_out, args.summary_out)]
+    else:
+        names = [args.round] if args.round else sorted(ROUNDS)
+        # Every round would write to the same file and the last would win, which
+        # looks like a successful regeneration of all of them.
+        if len(names) > 1 and (args.runs_out or args.summary_out):
+            sys.exit("error: --runs-out/--summary-out redirect one round's output, "
+                     "so they need --round <name> (or explicit sweep dirs).")
+        jobs = [(n, [os.path.join(REPO, s) for s in ROUNDS[n]["sweeps"]],
+                 args.runs_out or ROUNDS[n]["runs"],
+                 args.summary_out or ROUNDS[n]["summary"]) for n in names]
 
-    runs = collect(sweeps)
-    if not runs:
-        sys.exit("error: no run logs found")
-    rows = summarize(runs)
-    print_tables(rows)
-    if not args.no_write:
-        write_csv(os.path.join(REPO, args.runs_out), RUN_FIELDS, runs)
-        write_csv(os.path.join(REPO, args.summary_out), SUMMARY_FIELDS, rows)
+    for name, sweeps, runs_out, summary_out in jobs:
+        missing = [s for s in sweeps if not os.path.isdir(s)]
+        if missing:
+            sys.exit(f"error: sweep dir(s) not found: {', '.join(missing)}\n"
+                     f"See results/ablation/README.md for the sweep layout.")
+        if name:
+            print(f"\n##### round: {name}")
+        runs = collect(sweeps)
+        if not runs:
+            sys.exit("error: no run logs found")
+        rows = summarize(runs)
+        print_tables(rows)
+        if not args.no_write:
+            write_csv(os.path.join(REPO, runs_out), RUN_FIELDS, runs)
+            write_csv(os.path.join(REPO, summary_out), SUMMARY_FIELDS, rows)
 
 
 if __name__ == "__main__":

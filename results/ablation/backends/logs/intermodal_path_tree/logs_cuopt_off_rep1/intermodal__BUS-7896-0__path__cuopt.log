@@ -1,0 +1,35 @@
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_bisalvsx.txt -f %M build/mcfcg_cli data/intermodal/BUS-7896-0.txt.gz --solver cuopt --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# outcome: ok
+# returncode: 0
+# peak_rss_kb: 1065772
+# peak_rss_source: measured
+# === STDERR (CG iteration log + preamble) ===
+Instance: 130395 vertices, 710935 arcs, 7883 commodities, 7883 sources
+Solver: cuopt, formulation: path
+Pricing threads: 32 (auto)
+Slack mode: CommodityRows (struct=7883, capped_arcs=524037)
+[lp-config] backend=cuopt version=26.8.0 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
+   It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
+    1          inf         -inf   2.0473e+05  15766   7960   475      0      0     77      0   0.463   0.000   0.051   0.514     0.514
+    2          inf         -inf   2.0647e+05  16201   7960   631    435      0      0      0   0.133   0.056   0.051   0.241     0.756
+    3          inf         -inf   2.1095e+05  16201   8034    33      0      0     74      0   0.148   0.000   0.053   0.201     0.957
+    4          inf         -inf   2.1189e+05  16201   8036    98      0      0      2      0   0.147   0.000   0.052   0.200     1.157
+    5          inf         -inf   2.1189e+05  16232   8036    98     31      0      0      0   0.140   0.024   0.051   0.216     1.373
+    6          inf   1.6753e+05   2.1649e+05  16794   8036   107    562      0      0      0   0.152   0.217   0.050   0.420     1.793
+    7          inf   1.6753e+05   2.1070e+05  16794   8045     2      0      0      9      0   0.145   0.000   0.049   0.194     1.987
+    8          inf   1.6753e+05   2.1071e+05  16794   8046     2      0      0      1      0   0.148   0.000   0.049   0.198     2.185
+    9          inf   1.6753e+05   2.1071e+05  16794   8048     2      0      0      2      0   0.137   0.000   0.053   0.190     2.376
+   10          inf   1.6753e+05   2.1071e+05  16796   7985     2      2      0      0     63   0.145   0.027   0.053   0.227     2.602
+   11          inf   1.6753e+05   2.1118e+05  16796   7991     2      0      0      6      0   0.135   0.000   0.052   0.187     2.789
+   12          inf   1.6753e+05   2.1118e+05  16803   7960     2      7      0      0     31   0.137   0.025   0.054   0.216     3.005
+   13          inf   1.6753e+05   2.1163e+05  16803   7964     2      0      0      4      0   0.136   0.000   0.051   0.188     3.193
+   14          inf   2.0293e+05   2.1163e+05  16974   7959     2    171      0      0      5   0.130   0.240   0.055   0.426     3.619
+   15          inf   2.0293e+05   2.1059e+05  16974   7969     0      0      0     10      0   0.142   0.000   0.049   0.192     3.811
+   16   2.1060e+05   2.0293e+05   2.1060e+05  16987   7967     0     13      0      0      2   0.133   0.031   0.052   0.218     4.029
+   17   2.1060e+05   2.1058e+05   2.1060e+05  16987   7967     0     *5      0      0      0   0.143   0.254   0.053   0.450     4.479
+CG optimal after 17 iterations. UB=210595.501182 LB=210576.702768 gap=1.880e+01 tol=2.106e+01  t_LP=2.715  t_PR=1.119  t_SP=0.879  t_Tot=4.724
+[bounded-pricing] enabled=0 cut=0 priced=32508 rate=0.0%
+
+# === STDOUT (result CSV) ===
+instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
+data/intermodal/BUS-7896-0.txt.gz,path,17,9104,210595.501182,210576.702768,1,4.894,2.715,1.119,0.879
