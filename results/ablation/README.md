@@ -30,17 +30,18 @@ quotable:
 Every number below comes from round (a) unless it says otherwise, and every one
 of them is re-derivable from that round's tracked logs.
 
-Scope: one supporting measurement cited below is *not* archived — the rejected
-stale-arc experiment (+31% wall clock, `bench_runs/issue41_stalearcs/ANALYSIS.md`),
-in the gitignored `bench_runs/`. It is not load-bearing for the conclusion below
-and is flagged where it is cited.
+Scope: every number in this file and in the two round READMEs derives from those
+rounds' tracked logs, with one exception — the rejected stale-arc fix, whose
+measurement is transcribed in full in the appendix below. That one measured a
+code change that was then reverted, so no tracked log can carry it and
+re-deriving it means re-applying the change; the table is the record.
 
-The old all-backend on-arm pass is no longer cited at all. Round (b) did not pair
-it, as this file once said it would: that pass predates the gh #42 rename, so its
-`[pricing-cutoff]` banner is one the analyzer refuses by policy, and pairing a
-2026-08-17 arm against a fresh one would have rebuilt the very cross-session
-confound the round exists to remove. Round (b) re-ran both arms instead, and its
-numbers supersede it. Retiring the pass itself is gh #45.
+Nothing from the flag's development survives as an artifact: the pre-rename
+passes under `--pricing-cutoff`, the implementation variants that preceded the
+shipped bound, and the all-backend on-arm pass whose `[pricing-cutoff]` banner
+the analyzer refuses by policy were all deleted rather than archived (gh #45).
+Rounds (a) and (b) re-measured the shipped implementation from scratch, and
+nothing here cites any of it.
 
 ## How it works
 
@@ -227,8 +228,9 @@ source regardless of postponement:
   Do **not** "fix" this by treating a cut source as affected — `_source_cut[s]`
   is already that flag. Measured **+31% wall clock** on intermodal, because a
   65–77% fire rate makes nearly every source affected and the filter stops
-  filtering; SBT-56295 alone paid **+68%** at an unchanged iteration count. (This
-  is the stale-arc experiment noted as unarchived above.)
+  filtering; SBT-56295 alone paid **+68%** at an unchanged iteration count. The
+  full table is in the appendix below — it is the one measurement here with no
+  tracked logs behind it.
 - **A weaker lower bound.** `salvage_lagr_term` substitutes
   `d_k·(bound_f/SCALE − margin)` for the `sp_k` a truncated search never
   computed. Valid but weaker, so `best_lb` differs and the gap exit fires on a
@@ -290,11 +292,13 @@ repetition.
   wall clock still moved by −5.5% to **+15.3%** between sessions across the 39
   such cells. The worst is HiGHS on SBT-43785-0 tree — 6 iterations and 45,733
   columns in both arms, yet `t_LP` up **10.7%** on a byte-identical LP sequence.
-  Both arms must come from one session. This is also why the on-arm pass
-  reading **+18…+32% on HiGHS** against the committed cells is quoted nowhere as
-  a number: the direction is credible — HiGHS is the one backend whose LP share
-  is large enough for the trajectory term to dominate — but the magnitude is
-  cross-session and therefore not citable.
+  Both arms must come from one session. The sharpest case is the **+18…+32%
+  HiGHS penalty** an earlier cross-session comparison reported, which is the
+  result round (b) was opened to settle: re-running both arms in one session
+  found no penalty at all — HiGHS path **−9.8%**, tree **+7.7%**, with `t_PR`
+  down on both. The cross-session figure was not merely uncitable in magnitude,
+  its sign was wrong on one of the two formulations, and the effect it named
+  does not exist.
 
 ## Backends
 
@@ -314,3 +318,54 @@ because the `[lp-config]` banner cannot distinguish the two (it echoes the
 logs `Running HiPO` for all 17 LP solves, with no `Using dual simplex solver` and
 no `features unavailable` line. The benchmark runs themselves were not made with
 `--verbose-solver`, so that banner is absent from their logs.
+
+## Appendix: the rejected stale-arc fix
+
+The one measurement cited here with no tracked logs behind it, transcribed
+because the code it justifies is still in the tree and the run directory is not
+(gh #45). It measured a **reverted** change, so no log of the shipped build could
+carry it; reproducing it means re-applying the change below.
+
+A cut source does not refresh `_source_arcs[s]`, so `filter_for_new_caps` decides
+postponement from that source's last *complete* price. `_source_cut[s]` is
+already a sticky "this arc set is stale" flag, so making the filter respect it is
+a one-line change:
+
+```cpp
+// in filter_for_new_caps — measured, rejected, NOT in the tree
+affected = _source_cut[s] || std::any_of(...);
+```
+
+Collected 2026-08-14 on the section 3 host: intermodal, tree, `PricerHeavy`,
+COPT 8.0.1 GPUMode 0 (copt-cpu), `--time-limit 7200`, median of 2 reps per arm,
+both arms in one session, bounded pricing **on** in both — the arms differ only
+in the line above. Both arms hit all 10 reference optima.
+
+| instance | iters before | iters after | t before (s) | t after (s) | Δ |
+|---|---|---|---|---|---|
+| BUS-13160-0 | 21 | 19 | 4.8 | 5.3 | +12% |
+| BUS-18424-0 | 32 | 34 | 8.6 | 9.7 | +12% |
+| BUS-23688-0 | 20 | 27 | 9.6 | 15.5 | +61% |
+| BUS-2632-0 | 24 | 18 | 1.6 | 1.3 | −22% |
+| BUS-7896-0 | 20 | 24 | 2.9 | 3.4 | +17% |
+| SBT-18765-0 | 7 | 7 | 8.6 | 8.1 | −5% |
+| SBT-31275-0 | 6 | 6 | 24.6 | 25.6 | +4% |
+| SBT-43785-0 | 6 | 6 | 35.9 | 36.4 | +1% |
+| SBT-56295-0 | 10 | 10 | 54.9 | 92.2 | +68% |
+| SBT-6255-0 | 8 | 10 | 2.2 | 3.2 | +47% |
+| **total** | | | **153.7** | **200.7** | **+31%** |
+
+Rejected. At a 65–77% fire rate nearly every source reads as affected, so the
+filter stops filtering: SBT-56295-0 paid **+68% at an unchanged iteration
+count**, which is pure extra pricing and not a trajectory effect. Only the
+comments explaining the choice were kept, plus
+`FeatureTests.BoundedPricingFilterUsesStaleArcsForCutSources`, which pins the
+shipped behaviour.
+
+Two caveats on the numbers. They are same-session wall clocks and are not
+comparable to any other sweep in this file. And this run is where intermodal's
+near-determinism was first measured across sessions rather than within one: the
+off arm moved on BUS-18424-0 (42 → 33 iterations at an identical column count)
+and the on arm on BUS-13160-0 (15,008 → 14,990 columns at 21 iterations). The
++31% is far larger than that residual, which is why the rejection stands on 2
+reps.

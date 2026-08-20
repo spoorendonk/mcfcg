@@ -597,6 +597,8 @@ protected:
     // intermodal tree/PricerHeavy under COPT: +31% wall clock, because the 65-77%
     // fire rate makes almost every source affected and the filter stops
     // filtering — SBT-56295 alone paid +68% at an unchanged iteration count.
+    // The per-instance table is the appendix of results/ablation/README.md; it
+    // measured a reverted change, so no tracked log carries it.
     // (With warm_start=false a source cut on its very first price keeps an
     // *empty* set, which reads as "unaffected"; same convergence-speed caveat.)
     [[nodiscard]] bool should_record_arcs(std::optional<int64_t> bound_f) const noexcept {

@@ -165,17 +165,55 @@ python3 scripts/analyze_bounded_pricing_ablation.py --round backends
 
 An argument-less invocation regenerates every round in `ROUNDS`.
 
-The sweep itself was `bench_runs/run_round_b.sh` — intermodal, five backends, path
-and tree, `--time-limit 7200`, both arms back to back per solver so a cell's two
-arms sit minutes apart rather than half an hour. 240 runs, 0 failures, ~87 min.
+The sweep was 240 runs, 0 failures, ~87 min. **Solver is the outer loop**, so a
+cell's two arms sit one solver-pass apart (~5 min) rather than half an hour —
+round (a) could afford arms-outer because 3 reps average the drift away, and at
+1 rep nothing does. The log-dir tag must be `logs_<solver>_<arm>_<rep>`: the
+analyzer's `collect()` splits it with `rsplit("_", 2)` for the arm and rep, and
+takes the real solver from the log *filename*. The sweep basename must also
+differ from round (a)'s `intermodal_tree`, since `collect()` hard-errors on two
+sweep dirs sharing one.
 
-Two things that invalidate a re-run if you get them wrong. The build must carry all
-five backends (`ldd build/mcfcg_cli` must show cuopt, copt and mosek — a push
-resets it to HiGHS-only), and HiGHS must genuinely be on HiPO rather than silently
-falling back to dual simplex (`--verbose-solver` must print `Running HiPO`). The
-driver guards the first and refuses to resume into an existing sweep dir, since a
-half-sweep finished in a later session would silently reconstitute the cross-session
-confound this round exists to remove.
+```sh
+SWEEP=bench_runs/ablation/backends/intermodal_path_tree
+TL=7200
+
+# A HiGHS-only build does not stop the sweep — benchmark_solvers.py always exits
+# 0, so it would fill 80 cells with error rows and surface an hour later as
+# "unpaired cell" warnings. A push resets this build to HiGHS-only.
+for lib in cuopt copt mosek; do
+  ldd build/mcfcg_cli | grep -q "$lib" || { echo "error: not linked against $lib" >&2; exit 1; }
+done
+
+# Refuse rather than append: a half-sweep resumed in a later session silently
+# reconstitutes the cross-session confound this round exists to remove.
+[ -e "$SWEEP" ] && { echo "error: $SWEEP exists; both arms must come from ONE session" >&2; exit 1; }
+
+run_cell() {  # arm solver rep
+  local extra=(); [ "$1" = on ] && extra=(--extra-args=--bounded-pricing)
+  python3 scripts/benchmark_solvers.py \
+    --families intermodal --solvers "$2" --formulations path,tree \
+    --time-limit $TL "${extra[@]}" \
+    --out    "$SWEEP/$2_$1_$3.csv" \
+    --logdir "$SWEEP/logs_$2_$1_$3"
+}
+
+for solver in highs copt-cpu copt-gpu cuopt mosek; do
+  # HiGHS gets three OFF reps — it carries this round's one quotable claim, and
+  # round (a) showed the OFF arm is where this family's trajectory wobbles. Three
+  # reps buy `spread_off_pct`, a measured noise floor one rep cannot produce.
+  if [ "$solver" = highs ]; then off_reps="rep1 rep2 rep3"; else off_reps="rep1"; fi
+  for rep in $off_reps; do run_cell off "$solver" "$rep"; done
+  run_cell on "$solver" rep1
+done
+```
+
+Two things that invalidate a re-run if you get them wrong, one guarded above and
+one not: the build must carry all five backends, and HiGHS must genuinely be on
+HiPO rather than silently falling back to dual simplex (`--verbose-solver` must
+print `Running HiPO`). One thing the guards do *not* fix: OFF always precedes ON,
+so a monotone warm-up across a pair biases every cell the same way. Shrinking the
+gap shrinks that drift; only alternating the order removes it.
 
 ## Files
 

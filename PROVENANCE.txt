@@ -321,7 +321,16 @@ cuOpt — delta-API fork, CG benchmark ONLY (the compact baseline uses stock 26.
 The 440 CG cells were collected between 2026-06-22 and 2026-08-07 and
 consolidated from six log directories by `scripts/consolidate_cg_logs.py`, which
 re-parses logs and never re-solves; the `source` column names the log behind every
-row. Four commits inside that window could affect a number:
+row. The six, in the order the consolidator takes them:
+
+    bench_runs/logs                     the main grid/planar/intermodal sweep
+    bench_runs/intermodal_logs          intermodal
+    bench_runs/transportation_logs      transportation
+    bench_runs/transportation_logs_v2   transportation, re-run cells
+    bench_runs/highs_hipo_ablation/logs all 88 HiGHS cells
+    bench_runs/issue40_rerun/logs       the five cells re-run for issue #40 below
+
+Four commits inside that window could affect a number:
 
     3fc9ce9 (2026-08-07)  report best_ub, not the terminating iteration's LP
                           objective, on the pricing-exhaustion optimal exit
@@ -357,10 +366,14 @@ means re-running it, not re-parsing a log.
 -----------------------------------------------------------
 
 `results/ablation/` holds the A/B measurement behind the decision to ship bounded
-single-source pricing (manuscript section 3.3, gh #41) DISABLED. It is the one
-tracked log set in this repo, committed because the ablation settles a design
-question rather than feeding a tabulated result: the logs are the primary
-artifact and the CSVs are derived from them.
+single-source pricing (manuscript section 3.3, gh #41) DISABLED BY DEFAULT. The
+default is global, and outside intermodal pricing is 0.2–4.3% of wall clock, so
+there is nothing to win there (round (a)); on intermodal, where pricing is
+75–85%, the bound is worth −2.8% and the evidence supports enabling it (round
+(b)). Both halves of that are measured here. This is the one tracked log set in
+this repo, committed because the ablation settles a design question rather than
+feeding a tabulated result: the logs are the primary artifact and the CSVs are
+derived from them.
 
 It is organised into rounds, each a directory named for the axis it varies.
 
@@ -383,7 +396,31 @@ It is organised into rounds, each a directory named for the axis it varies.
                reference optimum
 
     round (b)  results/ablation/backends/   gh #44   one family, five backends
-               — not yet collected.
+
+    Collected  2026-08-20, in a single ~87 min session on the section 3 host
+    Build      commit 7fc24e1's tree, cmake -DMCFCG_USE_COPT=ON
+               -DMCFCG_USE_MOSEK=ON -DMCFCG_USE_CUOPT=ON, otherwise the
+               documented recipe (Release, -march=native). All five backends must
+               be linked; the sweep guards this, because a push resets the build
+               to HiGHS-only and benchmark_solvers.py would fill the missing
+               cells with error rows rather than fail.
+    Backends   HiGHS 1.15.1-04024d701f (HiPO, CPU), COPT 8.0.1 at GPUMode 0 and
+               GPUMode 2, cuOpt 26.8.0 (delta-API fork, GPU), MOSEK 11.0.30
+               (CPU) — the section 1 and section 4 versions unchanged
+    Family     intermodal only, path and tree, --strategy pricer-heavy
+    Regime     the pinned barrier config — presolve off, crossover off, tol 1e-4;
+               every log carries its own [lp-config] banner
+    Reps       mixed by design: 3 OFF + 1 ON on HiGHS, which carries the round's
+               one quotable claim, and 1 + 1 on the other four, whose effects are
+               single-digit percent and directional only. 240 logs, 100 cells.
+               At 1 rep traj_stable is blank, so no per-price number from those
+               cells is quotable — the round reports wall clock there.
+    Arms       identical invocations except --extra-args=--bounded-pricing on the
+               ON arm, with solver as the outer loop so a cell's two arms sit
+               ~5 min rather than ~30 min apart; every log records which arm via
+               its [bounded-pricing] enabled=N banner
+    Limits     --time-limit 7200; no cell reached it, 0 failures, every cell
+               matched its reference optimum
 
 Round (a) supersedes an earlier archive of 424 logs that was REMOVED in gh #42:
 those ran under the flag's original name, `--pricing-cutoff`, and carried a
@@ -397,16 +434,41 @@ identifies as a measurement artifact and declares not quotable. The conclusion �
 the flag stays off — did not move, and the copt-cpu per-price figure reproduced
 the deleted round's within its error bar (−2.53% ± 1.08 pp vs −2.45% ± 0.56 pp).
 
+Round (b) likewise re-ran both of its arms rather than pairing against an
+existing 2026-08-17 on-arm pass of the same 100 cells. That pass carried the
+pre-rename `[pricing-cutoff]` banner, which the analyzer refuses by policy and
+two tests pin it as refusing, and pairing it against a fresh off arm would have
+rebuilt the cross-session confound the round exists to remove. That pass was
+deleted in gh #45, along with every other pre-round artifact of this feature —
+the earlier implementation variants and their one-off analysis scripts. Nothing
+in `results/` cites any of them.
+
+One measurement cited in `results/ablation/README.md` has no tracked logs and
+never could: the rejected stale-arc fix (+31% wall clock, 2026-08-14, intermodal
+tree/PricerHeavy on copt-cpu, 2 reps per arm). It measured a change that was then
+reverted, so it is not reproducible from any commit in this repo; its table is
+transcribed in that file's appendix, which is the record.
+
+Commits that move a number in these CSVs: 2b04a0c and 8f26247 (2026-08-19)
+collected and documented round (a), 7fc24e1 and b096b17 (2026-08-20) round (b).
+Both rounds' numbers are otherwise frozen — re-deriving re-parses the tracked
+logs and never re-solves, so nothing outside a change to the analyzer or to the
+logs themselves can move them.
+
 `scripts/analyze_bounded_pricing_ablation.py` re-derives both CSVs from the
 tracked logs and never re-solves, the same relationship `consolidate_cg_logs.py`
-has to the main table; rerunning it is byte-identical to what is committed.
+has to the main table; rerunning it is byte-identical to what is committed. Add
+`--round families|backends` for one round.
 
 This ablation does NOT feed `results/cg_benchmark.csv`. No log behind that table
 carries the flag under either name — the feature postdates all 440 cells — so the
 committed benchmark is uniformly an unbounded-pricing configuration, and the flag
 stays off in `benchmark_solvers.py`'s per-family defaults. Note also that
 `cg_benchmark.csv` has no `extra_args` column: if a family default ever does gain
-a flag, this file is the only place that can record it.
+a flag — and round (b) is the case for intermodal gaining this one — this file is
+the only place that can record it. The flag itself was renamed in gh #42, from
+`--pricing-cutoff` to `--bounded-pricing`; the rename is forward-only, nothing
+parses the old banner, and no committed artifact predates it.
 
 
 6. Reproducibility and licensing
