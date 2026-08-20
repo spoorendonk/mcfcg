@@ -36,18 +36,22 @@ sources and post a lower `t_PR` while every individual price cost the same. The
 first intermodal result reported this way was wrong for exactly that reason.
 
 `per_price_us` = `t_PR / priced_sources` is the trajectory-immune metric, and
-`priced` comes from the `[bounded-pricing] cut=... priced=...` line every run
+`priced` comes from the `[bounded-pricing] fired=... priced=...` line every run
 emits (with `enabled=0`, so off-arm logs carry it too). Two flags say whether a
 cell's wall delta can be read as a pricing effect at all:
 
   * `traj_moved` -- the arms' MEDIAN iteration or column count differs, so the
-    delta is dominated by +/-Delta-iterations rather than by pricing;
+    two arms price a different mix of sources at different duals and the delta is
+    dominated by +/-Delta-iterations rather than by pricing. This is the ONLY
+    exclusion: quote per-price numbers over `traj_moved=0`.
   * `traj_stable` -- every repetition *within* each arm agreed on (iterations,
-    columns). A cell can have `traj_moved=0` while individual reps disagreed and
-    the medians happened to coincide, which is not the same thing. Quote per-price
-    numbers over `traj_moved=0 AND traj_stable=1`. It is blank, not 1, on a cell
-    with a single rep per arm: one run agrees with itself by construction, so
-    there is no stability to report and nothing is quotable off that cell.
+    columns). Reported, not gated: reps that disagree make the estimate noisier,
+    not biased, and `per_price_us` is pooled over an arm's reps (sum t_PR over
+    sum priced) precisely so that noise stays an error bar rather than a
+    confound. Read it with `spread_per_price_off_pct`, the baseline arm's
+    rep-to-rep spread. Both are blank at one rep per arm, where there is nothing
+    for the reps to agree with and no spread to measure -- such a cell is
+    quotable on trajectory grounds but comes with no error bar.
 
 `pred_wall_pct` is the cost model's first term, `pricing_share x per-price
 saving` -- the gain the bound can deliver when the trajectory holds still. On
@@ -146,7 +150,7 @@ SUMMARY_LINE = re.compile(
 # here has no `priced`, so per_price_us -- the metric the argument rests on -- is
 # absent rather than wrong.
 BANNER_LINE = re.compile(
-    r"\[bounded-pricing\] enabled=(\d+) cut=(\d+) priced=(\d+)")
+    r"\[bounded-pricing\] enabled=(\d+) fired=(\d+) priced=(\d+)")
 # The exit type comes from the last iteration row's '+col' count, which carries a
 # '*' when the loop returned via the gap test rather than by exhausting pricing;
 # benchmark_solvers.parse_iteration_table reports that as col_committed=False.
@@ -161,7 +165,7 @@ RUN_FIELDS = [
     "commodities", "sources", "per_source",
     "iterations", "columns", "objective", "lower_bound", "optimal", "exit",
     "t_tot", "t_lp", "t_pr", "t_sp",
-    "bounded_enabled", "cut", "priced", "cut_rate_pct", "per_price_us",
+    "bounded_enabled", "fired", "priced", "fire_rate_pct", "per_price_us",
 ]
 
 SUMMARY_FIELDS = [
@@ -179,9 +183,10 @@ SUMMARY_FIELDS = [
     "per_price_us_off", "per_price_us_on", "d_per_price_pct",
     "iters_off", "iters_on", "cols_off", "cols_on",
     "priced_off", "priced_on", "traj_moved", "traj_stable",
-    "pricing_share_pct", "cut_rate_pct", "pred_wall_pct",
+    "pricing_share_pct", "fire_rate_pct", "pred_wall_pct",
     "obj_off", "obj_on", "d_obj_rel",
     "lb_delta", "exit_off", "exit_on", "spread_off_pct",
+    "spread_per_price_off_pct",
 ]
 
 # Median counts are written as ints when they land on one, so a consumer can
@@ -229,11 +234,11 @@ def parse_log(path):
     c = BANNER_LINE.search(text)
     if c:
         rec["bounded_enabled"] = int(c.group(1))
-        rec["cut"], rec["priced"] = int(c.group(2)), int(c.group(3))
+        rec["fired"], rec["priced"] = int(c.group(2)), int(c.group(3))
         # Leave both rates absent rather than 0.0 when nothing was priced: a fake
         # zero is exactly the silent failure this whole tier guards against.
         if rec["priced"]:
-            rec["cut_rate_pct"] = 100.0 * rec["cut"] / rec["priced"]
+            rec["fire_rate_pct"] = 100.0 * rec["fired"] / rec["priced"]
             rec["per_price_us"] = 1e6 * rec["t_pr"] / rec["priced"]
     return rec
 
@@ -321,10 +326,23 @@ def summarize(runs):
         row = dict(zip(("sweep", "family", "instance", "formulation", "solver"), key))
         row["per_source"] = off[0].get("per_source")
         row["reps_off"], row["reps_on"] = len(off), len(on)
+        # Pooled, not median-of-reps: sum the arm's pricing time and sum the
+        # sources it priced, then divide once. Every repetition contributes in
+        # proportion to the work it did, which is what makes the estimate
+        # tolerate reps whose trajectories differed -- a median over per-run
+        # ratios would weight a short rep and a long one equally.
+        def pooled_per_price(recs):
+            usable = [r for r in recs if r.get("t_pr") is not None and r.get("priced")]
+            if not usable:
+                return None
+            return 1e6 * sum(r["t_pr"] for r in usable) / sum(r["priced"] for r in usable)
+
         for field, name in (("t_tot", "t_tot"), ("t_pr", "t_pr"), ("t_lp", "t_lp"),
-                            ("per_price_us", "per_price_us"), ("iterations", "iters"),
+                            ("iterations", "iters"),
                             ("columns", "cols"), ("priced", "priced")):
             row[f"{name}_off"], row[f"{name}_on"] = m(off, field), m(on, field)
+        row["per_price_us_off"] = pooled_per_price(off)
+        row["per_price_us_on"] = pooled_per_price(on)
         row["d_t_tot_pct"] = pct(row["t_tot_on"], row["t_tot_off"])
         row["d_t_pr_pct"] = pct(row["t_pr_on"], row["t_pr_off"])
         row["d_t_lp_pct"] = pct(row["t_lp_on"], row["t_lp_off"])
@@ -337,18 +355,21 @@ def summarize(runs):
         # quoting when both hold.
         def shape(recs):
             return {(r.get("iterations"), r.get("columns")) for r in recs}
-        # At one rep per arm there is nothing for the reps to agree with: a
-        # single-rep set is size 1 whatever it holds, so an int here would report
-        # stability the cell never demonstrated -- and `spread_off_pct` is absent
-        # on exactly those cells, so nothing else would catch it either. None
-        # (blank in the CSV, falsy in the quotable filter) says "not established"
+        # Reported, not gated. It says whether the reps within an arm agreed,
+        # which is a reproducibility fact worth having; it is NOT an exclusion,
+        # because reps that disagree add noise to per_price_us rather than bias
+        # to it -- the pooled estimator above divides by the sources each run
+        # actually priced, so it is trajectory-immune by construction. The
+        # spread columns carry that noise explicitly instead. At one rep per arm
+        # there is nothing for the reps to agree with: a single-rep set is size 1
+        # whatever it holds, so None (blank in the CSV) says "not established"
         # rather than "established true".
         row["traj_stable"] = (int(len(shape(off)) == 1 and len(shape(on)) == 1)
                               if len(off) > 1 and len(on) > 1 else None)
         row["pricing_share_pct"] = (100.0 * row["t_pr_off"] / row["t_tot_off"]
                                     if row["t_tot_off"] else None)
-        row["cut_rate_pct"] = med([r.get("cut_rate_pct") for r in on
-                                   if r.get("cut_rate_pct") is not None])
+        row["fire_rate_pct"] = med([r.get("fire_rate_pct") for r in on
+                                   if r.get("fire_rate_pct") is not None])
         # Cost model, first term only: a saving on each price, scaled by how much
         # of the wall clock pricing actually is. Second term (-LP_share x
         # Delta-iterations) is not predictable per instance -- see traj_moved.
@@ -369,10 +390,16 @@ def summarize(runs):
         row["exit_off"] = "/".join(sorted({r["exit"] for r in off}))
         row["exit_on"] = "/".join(sorted({r["exit"] for r in on}))
         # Rep-to-rep spread of the BASELINE arm: the noise floor any on-vs-off
-        # delta has to clear before it means anything.
+        # delta has to clear before it means anything. Both are blank at one rep,
+        # where there is no spread to measure -- which is the honest reading of a
+        # 1-rep cell, and why such a cell's per-price delta comes with no error
+        # bar even though it is now quotable on trajectory grounds.
         base = [r["t_pr"] for r in off]
         row["spread_off_pct"] = (100.0 * (max(base) - min(base)) / med(base)
                                  if len(base) > 1 and med(base) else None)
+        pp = [r["per_price_us"] for r in off if r.get("per_price_us") is not None]
+        row["spread_per_price_off_pct"] = (100.0 * (max(pp) - min(pp)) / med(pp)
+                                           if len(pp) > 1 and med(pp) else None)
         rows.append(row)
     return rows
 
@@ -396,7 +423,7 @@ def print_tables(rows):
         print(f"\n=== {sweep} :: {solver} / {formulation} (median of {nrep} reps) ===")
         print(f"{'instance':<16} {'k/src':>7} {'per-price off':>13} {'on':>9} {'d%':>7} "
               f"{'PR share':>9} {'t_tot off':>10} {'on':>9} {'d%':>7} {'pred%':>7} "
-              f"{'iters':>11} {'cut%':>6} {'moved':>6} {'stable':>7}")
+              f"{'iters':>11} {'fire%':>6} {'moved':>6} {'stable':>7}")
         for r in sorted(sel, key=lambda r: (r["per_source"] or 0.0, r["instance"])):
             print(f"{r['instance']:<16} {fmt(r['per_source'], '7.1f')} "
                   f"{fmt(r['per_price_us_off'], '13.4f')} {fmt(r['per_price_us_on'], '9.4f')} "
@@ -404,7 +431,7 @@ def print_tables(rows):
                   f"{fmt(r['t_tot_off'], '10.3f')} {fmt(r['t_tot_on'], '9.3f')} "
                   f"{fmt(r['d_t_tot_pct'], '+6.1f')}% {fmt(r['pred_wall_pct'], '+6.2f')}% "
                   f"{fmt(r['iters_off'], '5.0f')}->{fmt(r['iters_on'], '<4.0f')} "
-                  f"{fmt(r['cut_rate_pct'], '5.1f')}% {r['traj_moved']:>6} "
+                  f"{fmt(r['fire_rate_pct'], '5.1f')}% {r['traj_moved']:>6} "
                   f"{fmt(r['traj_stable'], '>7')}")
 
         tt_off = sum(r["t_tot_off"] for r in sel)
@@ -434,15 +461,19 @@ def print_tables(rows):
         moved = sum(r["traj_moved"] for r in sel)
         # A cell needs a per-price delta to be quotable at all: a run whose log
         # carried no bounded-pricing banner has no `priced`, hence no metric.
-        quotable = [r for r in sel if not r["traj_moved"] and r["traj_stable"]
+        quotable = [r for r in sel if not r["traj_moved"]
                     and r["d_per_price_pct"] is not None]
         print(f"  trajectory moved on {moved}/{len(sel)} cells "
               f"(wall delta there is +/-Delta-iterations, not pricing)")
         if quotable:
-            print(f"  quotable per-price (moved=0 and stable=1): {len(quotable)}/{len(sel)} "
-                  f"cells, median {med([r['d_per_price_pct'] for r in quotable]):+.1f}%")
+            spreads_pp = [r["spread_per_price_off_pct"] for r in quotable
+                          if r["spread_per_price_off_pct"] is not None]
+            bar = (f", baseline per-price spread median {med(spreads_pp):.1f}%"
+                   if spreads_pp else ", no baseline spread at one rep")
+            print(f"  quotable per-price (moved=0): {len(quotable)}/{len(sel)} "
+                  f"cells, median {med([r['d_per_price_pct'] for r in quotable]):+.1f}%{bar}")
         else:
-            print(f"  quotable per-price (moved=0 and stable=1): none of {len(sel)} cells")
+            print(f"  quotable per-price (moved=0): none of {len(sel)} cells")
 
 
 def cell(row, key):

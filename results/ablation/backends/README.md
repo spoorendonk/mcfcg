@@ -1,159 +1,145 @@
 # Round (b): bounded pricing across five backends, one family (gh #44)
 
-**Two results.** The reported HiGHS penalty was cross-session drift and does not
-exist. And on intermodal the bound is a **−2.8%** net win, faster on 74 of 100
-cells and on four of the five backends — so "evaluated and rejected" is a verdict
-about the *global* default, not about this family.
+**One result reproduces on every backend, and one does not reproduce at all.**
 
-Round (a) established that intermodal is the only family where the bound has room
-to pay — pricing share is the ceiling on anything it can deliver, and only
-intermodal's is high (78–80% under COPT) rather than 0.2–4.3%. This round takes
-that one family and varies the axis round (a) held fixed: **the LP backend**.
+`t_PR` falls in all ten solver×formulation groups, −1.3% to −6.1%. The bound does
+what it claims, everywhere, without exception.
 
-Both arms ran in a single session on a single build, which is the whole point.
-The measurement this round replaces was cross-session, and the effect it appeared
-to show did not survive being measured properly.
+Wall clock follows only where pricing dominates. COPT and MOSEK — 78–85% of the
+clock in the pricer — post **−5.4%**, **−6.0%** and **−2.2%**. HiGHS and cuOpt do
+not, and the reason is not that they price differently: it is that the bound
+shifts the CG trajectory, and where the LP is a large share of the clock (HiGHS,
+42%) or the barrier is GPU-nondeterministic (cuOpt), ±Δiterations swamps a 2–4%
+pricing saving in both directions.
 
-## Headline: the HiGHS penalty is not real
+Round (a) established that intermodal is the only family with pricing share high
+enough for the bound to pay at all. This round takes that one family and varies
+the axis round (a) held fixed: **the LP backend**. Both arms ran in a single
+session on a single build, which is the whole point.
 
-The issue this round was opened to settle reported a **+18–32%** HiGHS penalty
-(rising to +28…+125% after a two-stage offset correction), derived by comparing an
-archived on-arm pass against `results/cg_benchmark.csv` from a different session.
-Measured with both arms in one session, it does not exist:
+## What each backend measured
 
 | solver | form | wall | t_PR | t_LP | PR share |
 |---|---|---|---|---|---|
-| copt-cpu | path | **−8.6%** | −7.4% | −18.0% | 83.7% |
-| copt-cpu | tree | −6.4% | −6.5% | −6.4% | 84.9% |
-| copt-gpu | path | −6.8% | −4.5% | −16.3% | 77.7% |
-| copt-gpu | tree | −2.5% | −3.2% | −0.6% | 80.7% |
-| cuopt | path | +1.6% | −5.9% | +25.2% | 75.7% |
-| cuopt | tree | −4.8% | −9.2% | +9.2% | 75.2% |
-| **highs** | **path** | **−9.8%** | −5.6% | −12.4% | 34.3% |
-| **highs** | **tree** | **+7.7%** | −3.4% | +17.1% | 44.6% |
-| mosek | path | +0.1% | −3.4% | +24.4% | 83.0% |
-| mosek | tree | +2.2% | −2.0% | +27.1% | 83.4% |
+| copt-cpu | path | **−7.5%** | −6.1% | −17.0% | 83.2% |
+| copt-cpu | tree | −3.4% | −4.1% | +1.6% | 85.1% |
+| copt-gpu | path | **−7.5%** | −5.7% | −14.6% | 77.5% |
+| copt-gpu | tree | −4.4% | −4.2% | −5.6% | 79.6% |
+| cuopt | path | +5.0% | −1.3% | +24.6% | 76.3% |
+| cuopt | tree | −0.5% | −4.0% | +11.5% | 76.0% |
+| **highs** | **path** | **+39.0%** | −2.0% | +70.6% | 41.2% |
+| **highs** | **tree** | **−9.3%** | −3.1% | −14.7% | 43.1% |
+| mosek | path | −2.0% | −3.8% | +9.1% | 82.9% |
+| mosek | tree | −2.3% | −3.7% | +6.3% | 82.8% |
 
-HiGHS path is a −9.8% **gain**; HiGHS tree is +7.7%. Nothing here is +18%, let
-alone +125%. The prior figure was the session offset it was corrected for, plus a
-handful of trajectory moves read as a pricing effect.
-
-## What the round actually shows
-
-**`t_PR` falls in all ten groups, −2.0% to −9.2%.** The bound does what it claims,
-on every backend, in both formulations, without exception. That is the one
-unambiguous result here.
-
-**The wall-clock sign is decided by `t_LP`, which swings −18.0% to +27.1%.** The
-bound emits an identical column set (see the exactness check below), but it changes
-*when* columns arrive, and that shifts the CG trajectory — 59 of 100 cells moved.
-Where the shift shortens the run the LP time falls with it; where it lengthens the
-run the LP time rises and swamps the pricing saving. This is the cost model's
-second term, `−LP_share × Δiterations`, and round (a) already flagged it as not
-predictable per instance.
-
-So the flag's effect is **not backend-specific because backends price differently**
-— they don't, `t_PR` moves the same way everywhere. It is backend-specific because
-the trajectory shift lands on an LP that costs a different fraction of the clock.
-HiGHS is the clearest case precisely because its LP share is the outlier (34–45%
-against 75–85% for the others), so the same trajectory noise moves its wall clock
-furthest in both directions.
-
-## On this family, the bound is a net win
-
-The per-cell table above is easy to misread as a wash, because two loud trajectory
-swings sit in it. Rolled up per backend, over all 20 cells each (10 instances ×
-path and tree), it is not a wash:
+Rolled up per backend over its 20 cells (10 instances × path and tree):
 
 | backend | off (s) | on (s) | wall | cells faster |
 |---|---|---|---|---|
-| copt-cpu | 287.5 | 265.9 | **−7.5%** | 17/20 |
-| copt-gpu | 300.7 | 286.7 | **−4.6%** | 15/20 |
-| highs | 604.7 | 591.5 | **−2.2%** | 13/20 |
-| cuopt | 339.3 | 333.8 | **−1.6%** | 15/20 |
-| mosek | 302.2 | 305.6 | **+1.1%** | 14/20 |
-| **all** | **1834.4** | **1783.5** | **−2.8%** | **74/100** |
+| copt-gpu | 288.5 | 271.2 | **−6.0%** | 16/20 |
+| copt-cpu | 269.4 | 254.7 | **−5.4%** | 16/20 |
+| mosek | 290.0 | 283.7 | **−2.2%** | 16/20 |
+| cuopt | 297.1 | 303.8 | +2.2% | 14/20 |
+| highs | 527.1 | 610.1 | +15.7% | 14/20 |
+| **all** | **1672.1** | **1723.6** | **+3.1%** | **76/100** |
 
-Four of five backends gain; only MOSEK loses, by 1.1%. Across all 100 cells the
-bound is **−2.8%** wall clock, faster on **74**, median **−2.4%**.
+Both halves of that last row are true and neither is the whole story: the bound is
+faster on **76 of 100 cells**, median **−1.7%**, and slower in time-weighted total
+because a handful of large HiGHS cells swing by tens of seconds. Quote the
+per-backend rows, not the total.
 
-Two details make this stronger than the headline number:
+## The wall-clock sign is ±Δiterations, and HiGHS shows it uncut
 
-**The losing rows are thinner than their percentages.** MOSEK tree is +2.2% yet 6
-of its 10 instances got faster, and cuopt path is +1.6% with 7 of 10 faster. Those
-aggregates are dragged by one or two cells with large trajectory swings. The copt
-gains, by contrast, are broad-based — 17/20 and 15/20 cells.
+HiGHS is where the mechanism is legible, because its LP share is the outlier and
+its per-iteration LP cost is large. Its 20 cells split cleanly by whether the
+iteration count moved:
 
-**Restricting to the cells where the trajectory did *not* move gives −3.6%**,
-against −1.6% on the 59 cells where it did. The subset where the effect is actually
-attributable is *more* favourable than the average, which is the tell that the
-underlying mechanism is a genuine gain and the trajectory is noise around it.
+| instance | form | iters off→on | wall | t_LP |
+|---|---|---|---|---|
+| BUS-23688-0 | path | 20→44 | **+135.5%** | +160.8% |
+| BUS-18424-0 | path | 20→43 | **+121.6%** | +142.0% |
+| BUS-13160-0 | path | 20→34 | **+63.2%** | +69.7% |
+| BUS-18424-0 | tree | 19→26 | +30.8% | +37.6% |
+| BUS-23688-0 | tree | 38→20 | **−48.7%** | −52.1% |
+| BUS-7896-0 | tree | 15→14 | −5.0% | −5.9% |
+| BUS-13160-0 | tree | 28→27 | −3.0% | −3.3% |
+| *the 13 cells at an unchanged iteration count* | | | **−2.4% … +0.3%** | |
 
-## Disposition: off globally, but not because it loses here
+Every large move is an iteration-count move, in both directions, and the cells
+where the trajectory held still are flat to slightly faster with `t_PR` down. The
+column set is identical throughout — pinned bit-for-bit in C++, see the exactness
+note below — so this is *when* columns arrive, not *which*.
 
-The flag stays **off by default**, and that verdict is about the *global* default,
-not about this family. On intermodal the evidence supports turning it on.
+## The HiGHS wall-clock aggregate does not reproduce across sessions
 
-Everywhere else there is nothing to win. Pricing share is the ceiling on anything
-the bound can deliver, and round (a) measured it at 0.2% on planar, 1.4–3.1% on
-grid, 4.3% on transportation — against 75–85% here. Round (a)'s grid result is the
-decisive one: the bound removed 26% of grid's tree pricing time and moved the clock
-by −0.33%. A pricing optimization cannot be paid for out of 2% of the wall clock.
+This round exists because a cross-session comparison reported a +18–32% HiGHS
+penalty. The first same-session measurement (committed at 7fc24e1, earlier the
+same day, same box, same 100 cells) found no penalty: HiGHS path **−9.8%**, tree
+**+7.7%**. This measurement, also same-session, finds path **+39.0%**, tree
+**−9.3%**.
 
-So the honest summary is **family-dependent, not rejected**: a consistent pricing
-win everywhere, which converts to wall clock only where pricing dominates. The
-natural place to act on that is the `PricerHeavy` preset, which is already what
-intermodal selects — though wiring it there needs its own before/after check, since
-`PricerHeavy` is not intermodal-only.
+Two properly-conducted measurements of the same quantity, disagreeing in sign on
+both formulations. That is the finding, and it is stronger than either number:
+**on HiGHS, intermodal wall clock is not a stable quantity to two significant
+figures.** It is decided by which of three BUS instances happens to take 20
+iterations and which takes 44, and the flag perturbs that lottery without biasing
+it. Nothing in that range — neither the +18–32% the issue reported, nor −9.8%,
+nor +39.0% — should be quoted as the flag's effect on HiGHS.
 
-## Nothing here is quotable per-price
+What *is* stable across both sessions: `t_PR` falls on every backend in every
+group, and the cells whose trajectory does not move are flat in wall clock with
+their pricing time down.
 
-`traj_stable` is blank on all 100 cells, and the analyzer reports
-`quotable per-price (moved=0 and stable=1): none of 10 cells` for every group.
-That is correct and deliberate, not a gap in the data.
+## Per-price: about −2%, and that part is solid
 
-At one rep per arm a stability check is vacuous — a single run agrees with itself
-whatever it holds — so `traj_stable` is left blank below two reps rather than
-reading a free 1. Without that, this round would have printed 100 confidently
-quotable per-price numbers off evidence it never had. Round (a) is where per-price
-numbers come from; this round is wall clock, decomposed.
+Restricting to the 42 cells whose trajectory did not move: wall **−1.6%**, `t_PR`
+**−1.9%**, `t_LP` **+0.4%** — the LP term drops out exactly as it should when the
+iteration count holds, leaving a pricing effect that pays through to the clock.
+The per-price medians, by group:
 
-## Rep structure, and why it is mixed
+| solver | path | tree |
+|---|---|---|
+| copt-cpu | −2.43% | −2.58% |
+| copt-gpu | −1.45% | −1.54% |
+| cuopt | −1.21% | −2.37% |
+| highs | −0.54% | −1.93% |
+| mosek | −2.64% | −2.36% |
 
-HiGHS carries **3 off reps**; the other four backends run 1+1. That is 80 cells at
-`(1,1)` and 20 at `(3,1)`, pinned exactly by `CommittedBackendsAblationTest`.
+Four to five cells per group, median **−2.0%** over all 42. Round (a) measured the
+same family at 3 reps and got −2.4% (copt-cpu) / −2.6% (copt-gpu), so this agrees
+with the better-replicated round.
 
-The reason is that round (a) measured this same family and found `BUS-18424-0`'s
-off arm non-deterministic within its own reps — 42/33/33 iterations against a
-32/32/32 on arm — and that is the cell the old +132% headline rested on. HiGHS is
-the backend this round was opened to adjudicate, so it is the one that needed a
-measured noise floor rather than a single sample.
+**These cells carry no error bar.** Eight of the ten groups ran one repetition per
+arm, where `spread_off_pct` and `spread_per_price_off_pct` are both blank because
+there is no spread to measure, and `traj_stable` is blank because a single run
+agrees with itself. HiGHS, the exception at 3 off reps, measures a baseline
+per-price spread of 1.4–2.1% — the same order as the effect. Read these as
+corroborating round (a), not as independent evidence.
 
-It was worth it. HiGHS's own off-arm rep-to-rep spread reaches **30–46%** on
-several cells (`spread_off_pct` in `summary.csv`), far above the 1.3–6% the issue
-assumed when it argued one rep would suffice. Read any single non-HiGHS cell here
-with that in mind: those four backends are **directional only**.
+## Disposition: off globally, and backend-conditional on this family
 
-## Cross-round check, for free
+The flag stays **off by default**. That verdict is about the global default:
+pricing share is the ceiling on anything the bound can deliver, and round (a)
+measured 1.0–3.2% on grid/planar against 78–85% here.
 
-Twenty of this round's cells (`copt-cpu/tree`, `copt-gpu/tree`, same ten
-instances) were already measured in round (a) at 3 reps. Wall clock across rounds
-is cross-session and not comparable, but **iterations and columns are exact and
-session-independent**, so the overlap calibrates the thing that actually makes one
-rep risky.
+On intermodal the case is real but narrower than the pricing numbers alone
+suggest. Where the LP is not the bottleneck — COPT either executor, MOSEK — it is
+a reliable 2–6% and 16 of 20 cells faster. Where the LP is a large share of the
+clock, the trajectory term is larger than the pricing term and the sign is not
+predictable, so enabling the flag there buys a coin flip. `PricerHeavy` is the
+natural home if you act on this, but it is not intermodal-only and it does not
+know which backend it is running under, so wiring it there needs its own
+before/after check.
 
-**19 of 20 off-arm iteration counts reproduce round (a) exactly**, across a
-different session and a different build. The single miss is `BUS-18424-0` under
-copt-cpu, where this round landed on 42 — one of the values round (a) itself
-observed. The trajectory is reproducible; that instance's instability is a property
-of the instance, not of the session.
+## The exactness claim is not measured here
 
-## Exactness
-
-The two arms agree on the LP optimum on every cell: `d_obj_rel` peaks at
-**2.4e-05**, within the CG gap tolerance. This is the check the ablation data can
-make on its own; the stronger bit-for-bit column identity claim is pinned in C++ by
-`FeatureTests.BoundedPricingShadow*`.
+The column set is identical bit-for-bit with the bound on or off, and this round
+does not test that — it is pinned in C++ by
+`FeatureTests.BoundedPricingShadow{Tree,Path,IntermodalTree}`, which shadow every
+dual vector with a second bounded-on pricer and compare every emitted column field
+by field. What this round checks is weaker and independent: both arms reach the
+same LP optimum on every cell (`d_obj_rel < 1e-3`, asserted by
+`CommittedBackendsAblationTest`).
 
 ## Reproducing
 
@@ -165,7 +151,7 @@ python3 scripts/analyze_bounded_pricing_ablation.py --round backends
 
 An argument-less invocation regenerates every round in `ROUNDS`.
 
-The sweep was 240 runs, 0 failures, ~87 min. **Solver is the outer loop**, so a
+The sweep was 240 runs, 0 failures, ~80 min. **Solver is the outer loop**, so a
 cell's two arms sit one solver-pass apart (~5 min) rather than half an hour —
 round (a) could afford arms-outer because 3 reps average the drift away, and at
 1 rep nothing does. The log-dir tag must be `logs_<solver>_<arm>_<rep>`: the
@@ -199,9 +185,9 @@ run_cell() {  # arm solver rep
 }
 
 for solver in highs copt-cpu copt-gpu cuopt mosek; do
-  # HiGHS gets three OFF reps — it carries this round's one quotable claim, and
-  # round (a) showed the OFF arm is where this family's trajectory wobbles. Three
-  # reps buy `spread_off_pct`, a measured noise floor one rep cannot produce.
+  # HiGHS gets three OFF reps — it is the backend whose OFF arm wobbles most on
+  # this family, and three reps buy `spread_off_pct`, a measured noise floor one
+  # rep cannot produce.
   if [ "$solver" = highs ]; then off_reps="rep1 rep2 rep3"; else off_reps="rep1"; fi
   for rep in $off_reps; do run_cell off "$solver" "$rep"; done
   run_cell on "$solver" rep1
@@ -214,6 +200,10 @@ HiPO rather than silently falling back to dual simplex (`--verbose-solver` must
 print `Running HiPO`). One thing the guards do *not* fix: OFF always precedes ON,
 so a monotone warm-up across a pair biases every cell the same way. Shrinking the
 gap shrinks that drift; only alternating the order removes it.
+
+And one thing this round now demonstrates rather than warns about: a re-run will
+not reproduce these wall-clock aggregates on HiGHS or cuOpt, and that is a
+property of the measurement, not a mistake in it.
 
 ## Files
 

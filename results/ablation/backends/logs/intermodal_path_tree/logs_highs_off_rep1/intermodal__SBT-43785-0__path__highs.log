@@ -1,7 +1,7 @@
-# cmd: /usr/bin/time -o /tmp/mcfcg_mem_yc_r9ge5.txt -f %M build/mcfcg_cli data/intermodal/SBT-43785-0.txt.gz --solver highs --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_5waxdfzu.txt -f %M build/mcfcg_cli data/intermodal/SBT-43785-0.txt.gz --solver highs --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
 # outcome: ok
 # returncode: 0
-# peak_rss_kb: 1837204
+# peak_rss_kb: 1831432
 # peak_rss_source: measured
 # === STDERR (CG iteration log + preamble) ===
 Instance: 238529 vertices, 3741246 arcs, 43757 commodities, 43757 sources
@@ -10,15 +10,15 @@ Pricing threads: 32 (auto)
 Slack mode: CommodityRows (struct=43757, capped_arcs=3494226)
 [lp-config] backend=highs version=1.15.1-04024d701f method=hipo exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
    It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
-    1          inf         -inf   1.1175e+06  87514  43829   745      0      0     72      0   0.907   0.000   0.276   1.185     1.185
-    2          inf         -inf   1.1284e+06  89098  43829  1264   1584      0      0      0   2.143   0.610   0.268   3.025     4.210
-    3          inf         -inf   1.1237e+06  89098  43840     0      0      0     11      0   2.794   0.000   0.263   3.059     7.269
-    4          inf         -inf   1.1238e+06  89246  43840    23    148      0      0      0   2.756   0.264   0.266   3.287    10.555
-    5   1.1237e+06   1.1234e+06   1.1237e+06  89477  43840     0    231      0      0      0   2.885   9.272   0.268  12.425    22.980
-    6   1.1236e+06   1.1235e+06   1.1236e+06  89477  43840     0     *1      0      0      0   2.613   9.200   0.263  12.075    35.055
-CG optimal after 6 iterations. UB=1123600.000430 LB=1123516.985945 gap=8.301e+01 tol=1.124e+02  t_LP=14.098  t_PR=29.040  t_SP=1.603  t_Tot=44.751
-[bounded-pricing] enabled=0 cut=0 priced=133331 rate=0.0%
+    1          inf         -inf   1.1175e+06  87514  43829   745      0      0     72      0   0.875   0.000   0.265   1.142     1.142
+    2          inf         -inf   1.1284e+06  89098  43829  1264   1584      0      0      0   2.116   0.589   0.266   2.975     4.117
+    3          inf         -inf   1.1237e+06  89098  43840     0      0      0     11      0   2.707   0.000   0.259   2.968     7.085
+    4          inf         -inf   1.1238e+06  89246  43840    23    148      0      0      0   2.702   0.256   0.260   3.219    10.305
+    5   1.1237e+06   1.1234e+06   1.1237e+06  89477  43840     0    231      0      0      0   2.738   8.737   0.259  11.735    22.040
+    6   1.1236e+06   1.1235e+06   1.1236e+06  89477  43840     0     *1      0      0      0   2.406   8.828   0.263  11.498    33.538
+CG optimal after 6 iterations. UB=1123600.002356 LB=1123516.979691 gap=8.302e+01 tol=1.124e+02  t_LP=13.545  t_PR=27.327  t_SP=1.574  t_Tot=42.455
+[bounded-pricing] enabled=0 fired=0 priced=133331 rate=0.0%
 
 # === STDOUT (result CSV) ===
 instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
-data/intermodal/SBT-43785-0.txt.gz,path,6,45720,1123600.000430,1123516.985945,1,45.588,14.098,29.040,1.603
+data/intermodal/SBT-43785-0.txt.gz,path,6,45720,1123600.002356,1123516.979691,1,43.265,13.545,27.327,1.574

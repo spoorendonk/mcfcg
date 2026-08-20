@@ -1,7 +1,7 @@
-# cmd: /usr/bin/time -o /tmp/mcfcg_mem_nq02d5as.txt -f %M build/mcfcg_cli data/intermodal/SBT-6255-0.txt.gz --solver copt --copt-gpu-mode 2 --formulation tree --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_v3qqsoxk.txt -f %M build/mcfcg_cli data/intermodal/SBT-6255-0.txt.gz --solver copt --copt-gpu-mode 2 --formulation tree --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
 # outcome: ok
 # returncode: 0
-# peak_rss_kb: 852028
+# peak_rss_kb: 850688
 # peak_rss_source: measured
 # === STDERR (CG iteration log + preamble) ===
 Instance: 163487 vertices, 809375 arcs, 6251 commodities, 6251 sources
@@ -10,16 +10,16 @@ Pricing threads: 32 (auto)
 Slack mode: CommodityRows (struct=6251, capped_arcs=562355)
 [lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
    It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
-    1          inf         -inf   1.5957e+05  12502   6351   120      0      0    100      0   0.264   0.000   0.063   0.328     0.328
-    2          inf         -inf   1.6193e+05  12845   6351   241    343      0      0      0   0.033   0.060   0.059   0.153     0.481
-    3          inf         -inf   1.6080e+05  12845   6369     6      0      0     18      0   0.035   0.000   0.058   0.094     0.574
-    4          inf         -inf   1.6086e+05  12845   6370    13      0      0      1      0   0.034   0.000   0.059   0.093     0.667
-    5          inf         -inf   1.6086e+05  12852   6370    13      7      0      0      0   0.033   0.027   0.058   0.118     0.786
-    6          inf   1.5653e+05   1.6287e+05  12998   6370    12    146      0      0      0   0.033   0.421   0.057   0.511     1.297
-    7          inf   1.5653e+05   1.6061e+05  12998   6377     0      0      0      7      0   0.038   0.000   0.058   0.096     1.393
-    8   1.6061e+05   1.6059e+05   1.6061e+05  12998   6377     0     *1      0      0      0   0.036   0.426   0.060   0.523     1.916
-CG optimal after 8 iterations. UB=160606.000003 LB=160593.921669 gap=1.208e+01 tol=1.606e+01  t_LP=0.506  t_PR=1.369  t_SP=0.473  t_Tot=2.352
-[bounded-pricing] enabled=0 cut=0 priced=19164 rate=0.0%
+    1          inf         -inf   1.5957e+05  12502   6351   120      0      0    100      0   0.259   0.000   0.058   0.318     0.318
+    2          inf         -inf   1.6193e+05  12845   6351   241    343      0      0      0   0.030   0.053   0.058   0.143     0.461
+    3          inf         -inf   1.6080e+05  12845   6369     6      0      0     18      0   0.030   0.000   0.058   0.088     0.549
+    4          inf         -inf   1.6086e+05  12845   6370    13      0      0      1      0   0.032   0.000   0.056   0.088     0.637
+    5          inf         -inf   1.6086e+05  12852   6370    13      7      0      0      0   0.031   0.027   0.057   0.114     0.752
+    6          inf   1.5653e+05   1.6287e+05  12998   6370    12    146      0      0      0   0.031   0.377   0.056   0.465     1.217
+    7          inf   1.5653e+05   1.6061e+05  12998   6377     0      0      0      7      0   0.033   0.000   0.056   0.089     1.306
+    8   1.6061e+05   1.6059e+05   1.6061e+05  12998   6377     0     *1      0      0      0   0.033   0.393   0.057   0.484     1.790
+CG optimal after 8 iterations. UB=160606.000003 LB=160593.921669 gap=1.208e+01 tol=1.606e+01  t_LP=0.480  t_PR=1.271  t_SP=0.456  t_Tot=2.210
+[bounded-pricing] enabled=0 fired=0 priced=19164 rate=0.0%
 
 # === STDOUT (result CSV) ===
 Setting parameter 'LpMethod' to 2
@@ -27,4 +27,4 @@ Setting parameter 'GPUMode' to 2
 Setting parameter 'Presolve' to 0
 Setting parameter 'Crossover' to 0
 instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
-data/intermodal/SBT-6255-0.txt.gz,tree,8,6747,160606.000003,160593.921669,1,2.584,0.506,1.369,0.473
+data/intermodal/SBT-6255-0.txt.gz,tree,8,6747,160606.000003,160593.921669,1,2.430,0.480,1.271,0.456

@@ -1,7 +1,7 @@
-# cmd: /usr/bin/time -o /tmp/mcfcg_mem_y_g3z8oj.txt -f %M build/mcfcg_cli data/intermodal/SBT-6255-0.txt.gz --solver copt --copt-gpu-mode 0 --formulation tree --max-iters 10000 --strategy pricer-heavy --bounded-pricing --time-limit 7200.0
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_iym3_fdb.txt -f %M build/mcfcg_cli data/intermodal/SBT-6255-0.txt.gz --solver copt --copt-gpu-mode 0 --formulation tree --max-iters 10000 --strategy pricer-heavy --bounded-pricing --time-limit 7200.0
 # outcome: ok
 # returncode: 0
-# peak_rss_kb: 670692
+# peak_rss_kb: 669224
 # peak_rss_source: measured
 # === STDERR (CG iteration log + preamble) ===
 Instance: 163487 vertices, 809375 arcs, 6251 commodities, 6251 sources
@@ -10,16 +10,16 @@ Pricing threads: 32 (auto)
 Slack mode: CommodityRows (struct=6251, capped_arcs=562355)
 [lp-config] backend=copt version=8.0.1 method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
    It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
-    1          inf         -inf   1.5957e+05  12502   6351   120      0      0    100      0   0.023   0.000   0.061   0.085     0.085
-    2          inf         -inf   1.6193e+05  12845   6351   241    343      0      0      0   0.009   0.054   0.058   0.123     0.208
-    3          inf         -inf   1.6080e+05  12845   6369     6      0      0     18      0   0.010   0.000   0.060   0.070     0.278
-    4          inf         -inf   1.6086e+05  12845   6370    13      0      0      1      0   0.009   0.000   0.061   0.070     0.348
-    5          inf         -inf   1.6086e+05  12852   6370    13      7      0      0      0   0.009   0.027   0.061   0.097     0.445
-    6          inf   1.5654e+05   1.6287e+05  12998   6370    12    146      0      0      0   0.010   0.399   0.060   0.469     0.913
-    7          inf   1.5654e+05   1.6061e+05  12998   6377     0      0      0      7      0   0.009   0.000   0.059   0.068     0.981
-    8   1.6061e+05   1.6061e+05   1.6061e+05  12998   6377     0     *1      0      0      0   0.009   0.421   0.058   0.488     1.469
-CG optimal after 8 iterations. UB=160606.000003 LB=160605.166572 gap=8.334e-01 tol=1.606e+01  t_LP=0.088  t_PR=1.321  t_SP=0.477  t_Tot=1.889
-[bounded-pricing] enabled=1 cut=12416 priced=19164 rate=64.8%
+    1          inf         -inf   1.5957e+05  12502   6351   120      0      0    100      0   0.024   0.000   0.059   0.083     0.083
+    2          inf         -inf   1.6193e+05  12845   6351   241    343      0      0      0   0.008   0.053   0.057   0.121     0.204
+    3          inf         -inf   1.6080e+05  12845   6369     6      0      0     18      0   0.010   0.000   0.058   0.068     0.272
+    4          inf         -inf   1.6086e+05  12845   6370    13      0      0      1      0   0.009   0.000   0.057   0.067     0.338
+    5          inf         -inf   1.6086e+05  12852   6370    13      7      0      0      0   0.009   0.027   0.057   0.093     0.432
+    6          inf   1.5654e+05   1.6287e+05  12998   6370    12    146      0      0      0   0.008   0.365   0.057   0.431     0.863
+    7          inf   1.5654e+05   1.6061e+05  12998   6377     0      0      0      7      0   0.009   0.000   0.057   0.067     0.929
+    8   1.6061e+05   1.6061e+05   1.6061e+05  12998   6377     0     *1      0      0      0   0.009   0.383   0.057   0.450     1.379
+CG optimal after 8 iterations. UB=160606.000003 LB=160605.166572 gap=8.334e-01 tol=1.606e+01  t_LP=0.087  t_PR=1.256  t_SP=0.460  t_Tot=1.806
+[bounded-pricing] enabled=1 fired=12416 priced=19164 rate=64.8%
 
 # === STDOUT (result CSV) ===
 Setting parameter 'LpMethod' to 2
@@ -27,4 +27,4 @@ Setting parameter 'GPUMode' to 0
 Setting parameter 'Presolve' to 0
 Setting parameter 'Crossover' to 0
 instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
-data/intermodal/SBT-6255-0.txt.gz,tree,8,6747,160606.000003,160605.166572,1,2.125,0.088,1.321,0.477
+data/intermodal/SBT-6255-0.txt.gz,tree,8,6747,160606.000003,160605.166572,1,2.031,0.087,1.256,0.460

@@ -6,7 +6,7 @@ This analyzer is the only consumer of the one tracked log set in the repo, and
 the numbers it derives are the sole evidence for shipping bounded pricing
 disabled. Every way it can be wrong is quiet:
 
-  * `per_price_us` built from the wrong counter -- `cut` instead of `priced`, say
+  * `per_price_us` built from the wrong counter -- `fired` instead of `priced`, say
     -- still produces a plausible column, but it is no longer the
     trajectory-immune metric the whole argument rests on;
   * an off-arm log read as an on-arm one (the `enabled=` field is optional in
@@ -42,16 +42,16 @@ Instance: 119865 vertices, 397362 arcs, 5256 commodities, 2628 sources
     2   1.0000e+00   1.0000e+00   1.0000e+00    120     10     0    {last_col}      0      0      0   0.100   0.200   0.000   0.300     0.600
 CG optimal after 2 iterations. UB=71026.500000 LB=71021.870000 gap=1.0e+00 tol=1.0e+00  \
 t_LP=0.200  t_PR={t_pr}  t_SP=0.000  t_Tot={t_tot}
-[bounded-pricing] enabled={enabled} cut={cut} priced={priced} rate=0.0%
+[bounded-pricing] enabled={enabled} fired={fired} priced={priced} rate=0.0%
 instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
 data/intermodal/BUS-2632-0.txt.gz,tree,2,{columns},71026.500000,71021.870000,1,{t_tot},0.200,{t_pr},0.000
 """
 
 
-def write_log(path, *, t_pr="1.000", t_tot="2.000", enabled=0, cut=0, priced=500,
+def write_log(path, *, t_pr="1.000", t_tot="2.000", enabled=0, fired=0, priced=500,
               columns=120, last_col="*20"):
     with open(path, "w") as fh:
-        fh.write(LOG_TEMPLATE.format(t_pr=t_pr, t_tot=t_tot, enabled=enabled, cut=cut,
+        fh.write(LOG_TEMPLATE.format(t_pr=t_pr, t_tot=t_tot, enabled=enabled, fired=fired,
                                      priced=priced, columns=columns, last_col=last_col))
 
 
@@ -69,12 +69,12 @@ class ParseLogTest(unittest.TestCase):
         write_log(p, **kw)
         return abl.parse_log(p)
 
-    def test_per_price_divides_by_priced_not_by_cut(self):
-        """The metric is t_PR per source PRICED. Dividing by `cut` would track the
+    def test_per_price_divides_by_priced_not_by_fired(self):
+        """The metric is t_PR per source PRICED. Dividing by `fired` would track the
         fire rate instead and silently reward a bound that fires more."""
-        rec = self.parse(t_pr="1.000", priced=500, cut=250)
+        rec = self.parse(t_pr="1.000", priced=500, fired=250)
         self.assertAlmostEqual(rec["per_price_us"], 1e6 * 1.000 / 500)
-        self.assertAlmostEqual(rec["cut_rate_pct"], 50.0)
+        self.assertAlmostEqual(rec["fire_rate_pct"], 50.0)
 
     def test_enabled_field_is_read(self):
         self.assertEqual(self.parse(enabled=0)["bounded_enabled"], 0)
@@ -86,12 +86,12 @@ class ParseLogTest(unittest.TestCase):
         to be absence, not a plausible default -- a record silently carrying
         `priced` from an unrecognised line would feed per_price_us, the metric
         the whole argument rests on."""
-        current = "[bounded-pricing] enabled=1 cut=250 priced=500 rate=0.0%"
-        for stale in ("[some-other-tag] enabled=1 cut=250 priced=500 rate=0.0%",
-                      "[bounded-pricing] cut=250 priced=500 rate=0.0%"):
+        current = "[bounded-pricing] enabled=1 fired=250 priced=500 rate=0.0%"
+        for stale in ("[some-other-tag] enabled=1 fired=250 priced=500 rate=0.0%",
+                      "[bounded-pricing] fired=250 priced=500 rate=0.0%"):
             with self.subTest(stale=stale):
                 path = os.path.join(self.dir, "intermodal__BUS-2632-0__tree__copt-cpu.log")
-                write_log(path, enabled=1, cut=250, priced=500)
+                write_log(path, enabled=1, fired=250, priced=500)
                 with open(path) as fh:
                     text = fh.read()
                 self.assertIn(current, text, "fixture banner drifted from the parser")
@@ -137,6 +137,11 @@ def run(arm, **kw):
                 t_tot=2.0, t_pr=1.0, t_lp=0.5, per_price_us=100.0, iterations=10,
                 columns=1000, priced=500)
     base.update(kw)
+    # Mirror what parse_log derives, so a fixture cannot assert a per-price its
+    # own t_pr/priced contradict -- summarize pools over t_pr and priced, and
+    # only the spread column reads the per-run value.
+    if "per_price_us" not in kw and base["priced"]:
+        base["per_price_us"] = 1e6 * base["t_pr"] / base["priced"]
     return base
 
 
@@ -204,8 +209,8 @@ class SummarizePairingTest(unittest.TestCase):
     """off is the baseline and on is the treatment; every delta is on-vs-off."""
 
     def test_deltas_are_signed_on_minus_off(self):
-        rows = abl.summarize([run("off", t_tot=2.0, t_pr=1.0, per_price_us=100.0),
-                              run("on", t_tot=1.8, t_pr=0.9, per_price_us=90.0)])
+        rows = abl.summarize([run("off", t_tot=2.0, t_pr=1.0),
+                              run("on", t_tot=1.8, t_pr=0.9)])
         self.assertEqual(len(rows), 1)
         r = rows[0]
         self.assertAlmostEqual(r["d_t_tot_pct"], -10.0)
@@ -215,8 +220,10 @@ class SummarizePairingTest(unittest.TestCase):
         self.assertLess(r["d_t_tot_pct"], 0.0)
 
     def test_pricing_share_and_prediction(self):
-        rows = abl.summarize([run("off", t_tot=4.0, t_pr=2.0, per_price_us=100.0),
-                              run("on", t_tot=4.0, t_pr=2.0, per_price_us=90.0)])
+        # 10% cheaper per price at an unchanged source count: the on arm prices
+        # the same 500 sources in 1.8s rather than 2.0s.
+        rows = abl.summarize([run("off", t_tot=4.0, t_pr=2.0, priced=500),
+                              run("on", t_tot=4.0, t_pr=1.8, priced=500)])
         r = rows[0]
         self.assertAlmostEqual(r["pricing_share_pct"], 50.0)
         # 50% of the clock, 10% cheaper per price -> 5% of the clock.
@@ -245,6 +252,39 @@ class SummarizePairingTest(unittest.TestCase):
                          ["sweep", "family", "instance", "formulation", "solver",
                           "per_source", "reps_off"])
 
+    def test_per_price_is_pooled_over_reps_not_a_median_of_ratios(self):
+        """Sum the arm's pricing time, sum the sources it priced, divide once.
+        A median over per-run ratios weights a rep that priced 500 sources the
+        same as one that priced 1000, which is what makes a median-of-ratios
+        estimate wobble when the reps' trajectories differ -- exactly the case
+        this metric has to survive, since `traj_stable=0` no longer excludes a
+        cell."""
+        rows = abl.summarize([run("off", rep="rep1", t_pr=1.0, priced=500),
+                              run("off", rep="rep2", t_pr=3.0, priced=1000),
+                              run("on", t_pr=1.0, priced=500)])
+        # pooled: 1e6 * (1.0 + 3.0) / (500 + 1000)
+        self.assertAlmostEqual(rows[0]["per_price_us_off"], 1e6 * 4.0 / 1500)
+        # a median of the per-run ratios (2000, 3000) would have said 2500
+        self.assertNotAlmostEqual(rows[0]["per_price_us_off"], 2500.0)
+
+    def test_an_unstable_cell_is_still_quotable(self):
+        """`traj_stable=0` is noise in the estimate, not bias: the arms still ran
+        the same configuration, and per_price_us divides by the sources each run
+        actually priced. Only `traj_moved` -- the arms landing on DIFFERENT
+        trajectories, hence a different mix of sources at different duals --
+        excludes a cell. The noise is reported as a spread instead."""
+        rows = abl.summarize([run("off", rep="rep1", iterations=10),
+                              run("off", rep="rep2", iterations=11, t_pr=1.2),
+                              run("off", rep="rep3", iterations=10),
+                              run("on", rep="rep1"), run("on", rep="rep2")])
+        r = rows[0]
+        self.assertEqual(r["traj_stable"], 0)
+        self.assertEqual(r["traj_moved"], 0)      # medians agree
+        self.assertIsNotNone(r["spread_per_price_off_pct"])
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            abl.print_tables(rows)
+        self.assertIn("quotable per-price (moved=0): 1/1", out.getvalue())
+
     def test_traj_moved_flags_iteration_or_column_changes(self):
         same = abl.summarize([run("off"), run("on")])[0]
         self.assertEqual(same["traj_moved"], 0)
@@ -255,14 +295,16 @@ class SummarizePairingTest(unittest.TestCase):
 
     def test_a_single_rep_cell_reports_no_stability_rather_than_a_free_one(self):
         """One run agrees with itself, so `len(shape(recs)) == 1` is vacuous at one
-        rep per arm -- and `spread_off_pct` is absent on exactly those cells, so
-        nothing else would catch it. A free `traj_stable=1` would make every cell
-        of a 1-rep round (gh #44) print as quotable per-price, on evidence it never
-        had. Blank means "not established", and the quotable filter must drop it."""
+        rep per arm. A free `traj_stable=1` would report a reproducibility the
+        cell never demonstrated. Blank means "not established" -- and both spread
+        columns are blank there too, which is what tells a reader the cell's
+        delta carries no error bar."""
         one = abl.summarize([run("off"), run("on")])[0]
         self.assertIsNone(one["traj_stable"])
         self.assertEqual(one["traj_moved"], 0)  # medians still compare fine
         self.assertEqual(abl.cell(one, "traj_stable"), "")
+        self.assertIsNone(one["spread_off_pct"])
+        self.assertIsNone(one["spread_per_price_off_pct"])
 
         # Two reps per arm is the least that can demonstrate it, either way.
         stable = abl.summarize([run("off", rep="rep1"), run("off", rep="rep2"),
@@ -273,14 +315,16 @@ class SummarizePairingTest(unittest.TestCase):
                                 run("on", rep="rep1"), run("on", rep="rep2")])[0]
         self.assertEqual(wobbly["traj_stable"], 0)
 
-    def test_a_single_rep_cell_is_never_quoted_as_per_price(self):
-        """The report side of the same failure: `None` has to be falsy in the
-        quotable filter AND printable in the table, or a 1-rep round either
-        over-claims or dies with a TypeError after all the parse work is done."""
-        rows = abl.summarize([run("off"), run("on", per_price_us=90.0)])
+    def test_a_single_rep_cell_is_quoted_but_flagged_as_having_no_error_bar(self):
+        """The report side: a 1-rep cell is quotable on trajectory grounds, but
+        `None` has to stay printable in the table, and the missing spread has to
+        be said out loud rather than left for the reader to infer from a blank."""
+        rows = abl.summarize([run("off"), run("on", t_pr=0.9)])
         with contextlib.redirect_stdout(io.StringIO()) as out:
             abl.print_tables(rows)
-        self.assertIn("none of 1 cells", out.getvalue())
+        text = out.getvalue()
+        self.assertIn("quotable per-price (moved=0): 1/1", text)
+        self.assertIn("no baseline spread at one rep", text)
 
     def test_unpaired_cell_is_dropped_not_half_reported(self):
         with contextlib.redirect_stderr(io.StringIO()) as err:
@@ -311,7 +355,8 @@ class ReportingTest(unittest.TestCase):
         self.assertIn("none of 1 cells", text)  # nothing quotable without per-price
 
     def test_write_csv_emits_blanks_not_the_string_none(self):
-        rows = abl.summarize([run("off", per_price_us=None), run("on", per_price_us=None)])
+        rows = abl.summarize([run("off", per_price_us=None, priced=0),
+                              run("on", per_price_us=None, priced=0)])
         path = os.path.join(tempfile.mkdtemp(prefix="mcfcg_abl_csv_"), "s.csv")
         try:
             with contextlib.redirect_stdout(io.StringIO()):
@@ -374,15 +419,16 @@ class CommittedRoundMixin:
                             f"{r['sweep']}/{r['instance']} objectives diverged")
 
     def test_off_arms_never_fired_the_bound(self):
-        """The control has to be a control: an off log reporting cuts would mean
-        the arms were mislabelled and every delta in the table is meaningless."""
+        """The control has to be a control: an off log reporting the bound as
+        having fired would mean the arms were mislabelled and every delta in the
+        table is meaningless."""
         for rec in abl.collect(self.sweeps):
             # No .get() defaults: a log MISSING the banner would otherwise pass
             # silently, and per_price_us -- the metric the argument rests on --
             # needs `priced` from that same line.
             self.assertIn("priced", rec, f"{rec['sweep']}/{rec['instance']} has no banner")
             if rec["arm"] == "off":
-                self.assertEqual(rec["cut"], 0,
+                self.assertEqual(rec["fired"], 0,
                                  f"{rec['sweep']}/{rec['instance']} off arm fired the bound")
                 self.assertEqual(rec["bounded_enabled"], 0)
             else:

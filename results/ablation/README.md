@@ -7,11 +7,14 @@ identical bit-for-bit — cost, reduced cost, full arc list / arc-flow vector �
 pinned by `FeatureTests.BoundedPricingShadow{Tree,Path,IntermodalTree}`. So the
 only open question was whether it is *faster*.
 
-The answer is family-dependent. It always saves pricing time, but pricing share
-is the ceiling on converting that into wall clock, and on three of the four
-families that share is 0.2–4.3% — so the saving disappears into the noise. On
-intermodal, where pricing is 75–85% of the clock, it is worth **−2.8%** over 100
-paired cells on five backends (round (b)).
+The answer is family-dependent, and on one family backend-dependent too. It
+always saves pricing time — `t_PR` falls in every group of both rounds — but
+pricing share is the ceiling on converting that into wall clock, and on three of
+the four families that share is 0.2–4.3%, so the saving disappears into the
+noise. On intermodal, where pricing is 75–85% of the clock, it is worth **−2 to
+−6%** on the backends whose LP is not the bottleneck (COPT, MOSEK). On the ones
+whose LP is a large share, the trajectory shift the bound causes is larger than
+the pricing saving and decides the sign in either direction — see round (b).
 
 **The flag ships off by default**, because the default is global and most
 families have nothing to win. That is not the same as the flag being useless, and
@@ -52,11 +55,14 @@ still reachable from the frontier and stops once that bound clears
 - **tree** — the residual convexity budget over the *sum* of the remaining
   demands.
 
-Both add an allowance so the cut need only prove `rc ≥ neg_rc_tol` rather than
-`rc ≥ 0`, and **that allowance is what makes it fire at all**: 65–77% of searches
-cut with it, against 0–32% without. The reason is that at a master optimum every
-structural row has a basic column at reduced cost 0, so the frontier reaches the
-sink at almost exactly the dual — an exact-zero test almost never triggers.
+Both add an allowance so the bound need only prove `rc ≥ neg_rc_tol` rather than
+`rc ≥ 0`, and **that allowance is what makes it fire at all**. The reason is that
+at a master optimum every structural row has a basic column at reduced cost 0, so
+the frontier reaches the sink at almost exactly the dual: an exact-zero test lands
+just short of the proof it needs and almost never triggers, while the same test
+with the tolerance folded in fires on most searches. Measured fire rates across
+round (a)'s tracked logs, median per family: intermodal 72%, grid 61–64%, planar
+23–47%, transportation 35%.
 
 ## The result
 
@@ -74,52 +80,54 @@ What round (a) measured against that:
 
 | family (formulation, backend) | pricing share | Δ pricing time | wall clock |
 |---|---|---|---|
-| intermodal (tree, copt-cpu) | 85.3% | −5.5% | **−4.8%** |
-| intermodal (tree, copt-gpu) | 71.4% | −7.5% | **−6.2%** |
-| transportation (tree, copt-gpu) | 22.6% † | −6.5% | **−4.1%** † |
-| grid (tree) | 1.9% | **−26.0%** | **−0.33%** |
-| grid + planar (path) | 1.0% | −0.5% | **+0.1%** |
-| planar (tree) | 1.2% | −6.2% | **+1.1%** |
+| intermodal (tree, copt-cpu) | 85.1% | −4.5% | **−3.7%** |
+| intermodal (tree, copt-gpu) | 80.5% | −4.5% | **−3.6%** |
+| transportation (tree, copt-gpu) | 26.3% † | −8.7% | **−1.9%** † |
+| grid (tree) | 3.2% | **−22.4%** | **+1.95%** |
+| grid (path) | 1.7% | +0.3% | +0.10% |
+| planar (tree) | 1.6% | −8.9% | −1.50% |
+| planar (path) | 1.0% | −0.8% | +0.09% |
 
-**grid tree is the argument in one row**: the bound removes a quarter of the
-pricing time and the clock does not move, because pricing is 1.9% of it. A
-mechanism that cannot pay at 3% share cannot pay at 4.3% either, which is why
-transportation is settled by grid rather than by its own cells.
+**grid tree is the argument in one row**: the bound removes better than a fifth of
+the pricing time and the clock does not follow — it drifts the *wrong* way,
+because pricing is 3.2% of it and the 0.31 s of real saving sits under 1.13 s of
+LP noise. A mechanism that cannot pay at 3% share cannot pay at 4.3% either, which
+is why transportation is settled by grid rather than by its own cells.
 
 † The transportation row covers 6 of 9 instances — **9% of the family's wall
 clock**. The 3 excluded on cost are the other 91% and price for 2.5%. Family-wide
 the share is **4.3%**; see `families/README.md` before quoting this row.
 
-Intermodal under copt-cpu is the only family where the saving is mechanistically
-attributable: −6.65 s of a −6.79 s wall-clock gain is pricing, with LP flat to
-0.01 s. Its conservative estimate is `85.3% × −2.8% ≈ −2.4%` (the cheaper-per-
-price term alone); the measured −4.8% also includes a trajectory that shortened
-162 → 154 iterations, which is real here but not predictable per instance.
+Intermodal is where the saving is mechanistically attributable, on both
+executors: −5.20 s of a −5.06 s wall-clock gain is pricing under copt-cpu, and
+−5.14 s of −5.11 s under copt-gpu, with LP flat to a twentieth of a second in
+both. The conservative estimate is `85.1% × −2.4% ≈ −2.1%` (the cheaper-per-price
+term alone); the measured −3.7% also includes a trajectory that shortened 159 →
+154 iterations, which is real here but not predictable per instance — round (b)
+shows the same term running the other way on a backend with a larger LP share.
 
 **The wall-clock column is not the effect.** Where the trajectory moves, that
-column is ±Δiterations: intermodal's family total covers cells from −27%
-(SBT-18765-0, 9 → 7 iterations) to +20% (BUS-23688-0, 13 → 20). The effect is
+column is ±Δiterations: intermodal's family total covers cells from −25%
+(SBT-18765-0, 9 → 7 iterations) to +19% (BUS-23688-0, 13 → 20). The effect is
 `pricing_share × per-price`, which on the one family where both are measurable is
-85.4% × −2.8% ≈ **−2.4%**. The copt-gpu per-price column is excluded because that
-executor's off arm carries an inflated `t_PR` baseline — round (a)'s README works
-through the evidence.
+85.1% × −2.4% ≈ **−2.1%**.
 
-A per-price saving is only quotable on a cell where the trajectory held still in
-both senses — `traj_moved=0` (the arms' median iteration and column counts agree)
-**and** `traj_stable=1` (the repetitions *within* each arm agreed too). Intermodal
-has 4 such cells per backend. Transportation has **none**: its only `traj_moved=0`
-cell is ChicagoSketch (14 iterations and 2,722 columns in both arms), and its reps
-disagree *within* an arm, so the medians agree by coincidence rather than because
-nothing moved.
+A per-price saving is quotable on a cell where `traj_moved=0` — the arms' median
+iteration and column counts agree, so both arms priced the same mix of sources.
+That is the only exclusion. `traj_stable` (did the repetitions *within* each arm
+agree?) is reported alongside but does not gate: reps that disagree make the
+estimate noisier, not biased, and the estimate is pooled over an arm's reps
+(Σ`t_PR` over Σ`priced`) precisely so that noise stays an error bar. Read
+`spread_per_price_off_pct` — the baseline arm's own rep-to-rep spread — next to
+every per-price number. On intermodal it is 1.1–1.3% against a ~2.4% effect; on
+grid and planar it is 5–21%, which is why those cells are quotable and useless.
 
-For grid/planar the entry is a range rather than a median because 39 of those 48
-cells price for under 0.1 s in total, where the log's 3-digit timing is pure
-quantization — the all-cell path median is exactly +0.0%. The range covers the 9
-cells whose pricing time is large enough to measure, and those 9 are where the
-mechanism shows: **tree** saves 3.6–29.9% per price (median −22.3%) because its
-bound tightens on every settle, while **path** ranges −2.9 to +5.6% because its
-`max pi` bound waits on the most expensive remaining commodity, which settles
-last.
+The mechanism does show on the 9 grid/planar cells whose pricing time is large
+enough to measure at all (the other 39 price for under 0.1 s total, where the
+log's 3-digit timing is pure quantization): **tree** saves a median 24.5% per
+price (range −27.1 to −6.1%) because its bound tightens on every settle, while
+**path** reads +1.1 to +3.4% because its `max π` bound waits on the most expensive
+remaining commodity, which settles last.
 
 The gain is bounded by
 
@@ -130,8 +138,8 @@ The bound prunes the tail of a multi-target search, so its per-price saving
 grows with commodities per source: grid/planar tree, at 1.2–26 commodities per
 source, saves up to 30% on every price. But those families spend **1.0–1.5%** of
 wall clock pricing, so none of it reaches the clock. Intermodal is the mirror
-image — exactly **one commodity per source**, so −2.8% per price, but **71–85%** of
-wall clock spent pricing. The product never exceeds ~2.4% on any family, and it is
+image — exactly **one commodity per source**, so −2.4% per price, but **80–85%** of
+wall clock spent pricing. The product never exceeds ~2.1% on any family, and it is
 that only on instances that finish in under a minute: across the committed
 benchmark the pricing share collapses as instances get harder (planar2500 0.1%,
 Philadelphia 1.1%, Birmingham 1.6%, Austin 4.3%), while one extra CG iteration
@@ -146,23 +154,23 @@ Two caveats that the raw wall-clock column will mislead you about:
   a correctness bug), so an arm can price fewer sources and post a lower `t_PR`
   with every individual price costing the same. The `per_price_us` column
   (`t_PR / priced_sources`) is the trajectory-immune metric — computable from
-  each run's `[bounded-pricing] cut=… priced=…` log line — and the
+  each run's `[bounded-pricing] fired=… priced=…` log line — and the
   `traj_moved` / `traj_stable` pair flags the cells where it can be read.
-- **Family totals inside the noise floor are noise.** transportation's −5.2% is
-  not a gain: 5 of its 6 cells moved the trajectory, ChicagoRegional's −8.1%
-  arrives with 50 → 48 iterations, and Barcelona posts +2.3% wall clock on 0.7%
+- **Family totals inside the noise floor are noise.** transportation's −1.9% is
+  not a gain: 5 of its 6 cells moved the trajectory, ChicagoRegional posts +1.2%
+  wall clock while its pricing time falls, and Barcelona posts +6.9% on 1.7%
   pricing share — a number the pricer cannot have caused in either direction. The
   `spread_off_pct` column carries the rep-to-rep noise floor per cell.
 
-Where the model holds still it is accurate. On the four qualifying copt-cpu
-intermodal cells (SBT-31275-0, SBT-43785-0, SBT-56295-0, SBT-6255-0), predicted
-−3.3/−2.3/−2.8/−0.7% vs measured −3.4/−2.3/−2.9/−1.0% — within 0.26pp everywhere
-(compare the `pred_wall_pct` and `d_t_tot_pct` columns). **Quote the copt-cpu
-arm.** The same four cells under copt-gpu run identical trajectories and price
-identical source counts, yet report more than twice the per-price saving
-(−5.59% ± 1.99 pp vs −2.53% ± 1.08 pp) and miss the model by up to 1.59pp: that
-executor's *off* arm carries an inflated, poorly repeatable `t_PR` baseline.
-[`families/README.md`](families/README.md) works through the evidence.
+Where the trajectory holds still the model is accurate. On the four qualifying
+copt-cpu intermodal cells (SBT-31275-0, SBT-43785-0, SBT-56295-0, SBT-6255-0),
+predicted −2.46/−1.97/−1.77/−2.14% vs measured −2.02/−2.11/−2.14/−2.37% — within
+0.44pp everywhere (compare the `pred_wall_pct` and `d_t_tot_pct` columns).
+**Quote the copt-cpu arm**, whose per-price spread is half copt-gpu's (± 0.51 pp
+against ± 1.10 pp) on a ~2.4% effect. The two executors run identical
+trajectories, so they are a control on the measurement rather than two results;
+[`families/README.md`](families/README.md) works through what that control caught
+in one session and not the other.
 
 The second term is why a single-backend measurement of this flag is worthless.
 Intermodal LP/pricing split by backend, computed from `results/cg_benchmark.csv`
@@ -177,11 +185,13 @@ Intermodal LP/pricing split by backend, computed from `results/cg_benchmark.csv`
 | **highs (HiPO)** | **49–53%** | **40–43%** |
 
 Where the LP is 3% of runtime the trajectory shift is nearly free; where it is
-half the clock it dominates. (These shares are of the whole family; per instance
-HiGHS ranges wider still. Round (a)'s own sweeps show slightly different
-shares — 85.4% for copt-cpu, 71.8% for copt-gpu — because they cover tree only
-and a different session; the table above is the one an outside reader can
-recompute from the release.)
+half the clock it dominates. Round (b) measures exactly that: on HiGHS three BUS
+path cells move from 20 iterations to 34, 43 and 44, and the family total swings
++39% on a pricing time that fell 2%. (These shares are of the whole family; per
+instance HiGHS ranges wider still. Round (a)'s own sweeps show slightly different
+shares — 85.1% for copt-cpu, 80.5% for copt-gpu — because they cover tree only and
+a different session; the table above is the one an outside reader can recompute
+from the release.)
 
 ## Implementation traps
 
@@ -194,7 +204,7 @@ All three are pinned by `FeatureTests.BoundedPricing*` in
   above it means **dead ends**, not a dual proof. Cutting there salvages ~4.6e9
   into `best_lb` and suppresses the tree's partial column.
 - **Zero-demand commodities.** One drives the tree's remaining demand to 0 with
-  budget left; cutting there suppresses a strictly improving column on every
+  budget left; stopping there suppresses a strictly improving column on every
   iteration and CG reports the result as optimal. CommaLab keeps zero-demand
   rows — only TNTP filters them — so this is reachable on real instances.
 - **The tree budget must stay `+inf` through the warm start's `+inf` duals.** It
@@ -216,7 +226,7 @@ expected and is not a dropped column. Two channels cause it, neither a
 correctness bug — and note the pricing-exhausted `final_round` re-prices every
 source regardless of postponement:
 
-- **Stale arc sets.** A cut search does not refresh `_source_arcs[s]`
+- **Stale arc sets.** A bounded search does not refresh `_source_arcs[s]`
   (`should_record_arcs`: a partial set would understate the routing and postpone
   a source that a new capacity row does affect), so `filter_for_new_caps` decides
   postponement from the routing that source had at its last *complete* price.
@@ -224,7 +234,8 @@ source regardless of postponement:
   a different lazily separated capacity set. Live only when the filter is on
   (`pricer_heavy || pricing_filter`).
 
-  Do **not** "fix" this by treating a cut source as affected — `_source_cut[s]`
+  Do **not** "fix" this by treating a bounded source as affected —
+  `_source_bound_fired[s]`
   is already that flag. Measured **+31% wall clock** on intermodal, because a
   65–77% fire rate makes nearly every source affected and the filter stops
   filtering; SBT-56295 alone paid **+68%** at an unchanged iteration count. The
@@ -246,7 +257,7 @@ Each round owns its artifacts; nothing sits at this level but this file.
 | `families/runs.csv` | one row per run log: timings, iterations, columns, bound fire counts, `per_price_us` |
 | `families/summary.csv` | one row per cell, off and on arms paired and reduced to medians, with deltas |
 | `families/logs/<sweep>/logs_<executor>_<off\|on>_<rep>/` | the raw run logs both CSVs are derived from |
-| `backends/README.md` | round (b): the five-backend result, and why the reported HiGHS penalty was not real |
+| `backends/README.md` | round (b): the five-backend result, and why HiGHS's wall-clock total is not a stable quantity |
 | `backends/runs.csv` | as above, for round (b): 240 runs |
 | `backends/summary.csv` | as above, for round (b): 100 cells, wall clock decomposed into `t_pr`/`t_lp` |
 | `backends/logs/intermodal_path_tree/logs_<solver>_<off\|on>_<rep>/` | round (b)'s raw run logs |
@@ -273,31 +284,34 @@ repetition.
 ## Two things not to redo
 
 - **Do not read per-instance cells off a copt-gpu grid/planar or transportation
-  sweep.** Re-running the *same* config differs on **26 of 48** grid/planar cells
+  sweep.** Re-running the *same* config differs on **25 of 48** grid/planar cells
   and on **all 6** transportation cells (`traj_stable=0`), because the GPU
   barrier's interior point shifts and lazy separation then picks a different
   violated-capacity set. Concretely: grid10 tree diverges at iteration 13 on
   `#row` 1032 vs 1033, with identical `#col` and `LP_obj`. That is why 5 of 6
-  transportation cells read `traj_moved=1` and none is quotable per-price. Read
-  those sweeps' family totals, not their per-instance cells. Intermodal is
-  near-deterministic on *both* executors — 7 of 10 cells repeat their iteration
-  and column counts across reps in both arms, and the same three fail on each —
-  so the instability there is the instance, not the backend. But see round (a)'s
-  README before quoting a copt-gpu per-price number even on those cells.
+  transportation cells read `traj_moved=1`. Those cells are not excluded from the
+  per-price table any more — instability is noise, not bias — but their baseline
+  spread is 5–21%, which is the same statement in a column: read the family
+  totals, not the per-instance cells. Intermodal is near-deterministic on *both*
+  executors — 15 of its 20 cells repeat their iteration and column counts across
+  reps in both arms, and the failures are the same three instances on each — so
+  the instability there is the instance, not the backend.
 - **Do not compare an arm against `results/cg_benchmark.csv`.** Those cells are a
   valid unbounded configuration — no log behind them carries the flag, and the
-  feature postdates them entirely — but they are from other sessions. On cells
-  where the bound provably changed nothing (identical iterations *and* columns),
-  wall clock still moved by −5.5% to **+15.3%** between sessions across the 39
-  such cells. The worst is HiGHS on SBT-43785-0 tree — 6 iterations and 45,733
-  columns in both arms, yet `t_LP` up **10.7%** on a byte-identical LP sequence.
-  Both arms must come from one session. The sharpest case is the **+18…+32%
-  HiGHS penalty** an earlier cross-session comparison reported, which is the
-  result round (b) was opened to settle: re-running both arms in one session
-  found no penalty at all — HiGHS path **−9.8%**, tree **+7.7%**, with `t_PR`
-  down on both. The cross-session figure was not merely uncitable in magnitude,
-  its sign was wrong on one of the two formulations, and the effect it named
-  does not exist.
+  feature postdates them entirely — but they are from other sessions, and on
+  cells where the bound provably changed nothing (identical iterations *and*
+  columns) wall clock still moves several percent between sessions. The
+  **+18…+32% HiGHS penalty** that opened round (b) was exactly this: an on arm
+  compared against those committed cells.
+
+  Round (b) has since put a number on how bad it is. That round has been measured
+  twice, each time with both arms in one session, on the same box: HiGHS read
+  path **−9.8%** / tree **+7.7%** the first time and path **+39.0%** / tree
+  **−9.3%** the second. Same 100 cells, same build recipe, opposite signs. Where
+  the LP is a large share of the clock, a family wall-clock total is not a stable
+  quantity at all — not merely uncomparable across sessions. What is stable is
+  `t_PR`, which fell on every backend in both measurements, and the cells whose
+  iteration count did not move, which are flat in wall clock in both.
 
 ## Backends
 
@@ -325,14 +339,14 @@ because the code it justifies is still in the tree and the run directory is not
 (gh #45). It measured a **reverted** change, so no log of the shipped build could
 carry it; reproducing it means re-applying the change below.
 
-A cut source does not refresh `_source_arcs[s]`, so `filter_for_new_caps` decides
-postponement from that source's last *complete* price. `_source_cut[s]` is
+A bounded source does not refresh `_source_arcs[s]`, so `filter_for_new_caps` decides
+postponement from that source's last *complete* price. `_source_bound_fired[s]` is
 already a sticky "this arc set is stale" flag, so making the filter respect it is
 a one-line change:
 
 ```cpp
 // in filter_for_new_caps — measured, rejected, NOT in the tree
-affected = _source_cut[s] || std::any_of(...);
+affected = _source_bound_fired[s] || std::any_of(...);
 ```
 
 Collected 2026-08-14 on the section 3 host: intermodal, tree, `PricerHeavy`,

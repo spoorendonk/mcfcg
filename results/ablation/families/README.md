@@ -22,7 +22,7 @@ build.**
 | `transportation_tree` | transportation | tree | copt-gpu | 6 of 9 | 3 |
 | `intermodal_tree` | intermodal, `--strategy pricer-heavy` | tree | copt-gpu **and** copt-cpu | 10 | 3 |
 
-444 logs, 74 paired cells, 1 h 46 min on COPT 8.0.1. Every run passed against its
+444 logs, 74 paired cells, 1 h 06 min on COPT 8.0.1. Every run passed against its
 reference optimum; no cell hit the 1800 s limit.
 
 ## Why these families, in this order
@@ -39,8 +39,9 @@ front from the committed benchmark. Family pricing shares under COPT:
 | intermodal | **78–80%** | 162 s | the one family where the ceiling is high — test it |
 
 Each rung decides the next. planar returns the null it should. **grid is the
-decisive rung**: the bound works there — pricing time drops **26.0%** on tree —
-and the clock does not move (**−0.33%**), because 1.9% of nothing is nothing. A
+decisive rung**: the bound works there — pricing time drops **22.4%** on tree —
+and the clock does not follow (**+1.95%**, i.e. it got slower), because 3.2% of
+nothing is nothing and the LP noise is larger than the whole pricing term. A
 mechanism that cannot pay at 3% pricing share cannot pay at 4.3% either, so
 transportation is settled by grid rather than by its own numbers.
 
@@ -76,17 +77,25 @@ Per family, medians of 3 reps, off arm as the baseline:
 
 | family (formulation, executor) | pricing share | Δ pricing time | **Δ wall clock** |
 |---|---|---|---|
-| intermodal (tree, **copt-cpu**) | 85.3% | −5.5% | **−4.8%** |
-| intermodal (tree, copt-gpu) | 71.4% | −7.5% | **−6.2%** |
-| transportation (tree, copt-gpu) | 22.6% † | −6.5% | **−4.1%** † |
-| grid (tree) | 1.9% | **−26.0%** | **−0.33%** |
-| grid (path) | 1.2% | −4.1% | −1.30% |
-| planar (tree) | 1.2% | −6.2% | +1.06% |
-| planar (path) | 0.8% | +2.8% | −0.03% |
+| intermodal (tree, **copt-cpu**) | 85.1% | −4.5% | **−3.7%** |
+| intermodal (tree, copt-gpu) | 80.5% | −4.5% | **−3.6%** |
+| transportation (tree, copt-gpu) | 26.3% † | −8.7% | **−1.9%** † |
+| grid (tree) | 3.2% | **−22.4%** | **+1.95%** |
+| grid (path) | 1.7% | +0.3% | +0.10% |
+| planar (tree) | 1.6% | −8.9% | −1.50% |
+| planar (path) | 1.0% | −0.8% | +0.09% |
 
 **grid tree is the whole argument in one row.** The bound does exactly what it
-claims — a quarter of the pricing time, gone — and the clock does not notice,
-because pricing is 1.9% of it.
+claims — better than a fifth of the pricing time, gone — and the clock does not
+notice; it drifts the *wrong* way, because pricing is 3.2% of it and 0.31 s of
+real pricing saving is sitting under 1.13 s of LP noise.
+
+**The path bound is a separate mechanism and it barely fires usefully.** grid
+path moves pricing by +0.3% and planar path by −0.8%, against −22.4% and −8.9%
+for the same instances under tree. That asymmetry is inherent: the tree bound is
+the residual convexity budget over the *sum* of remaining demands and tightens on
+every settle, while the path bound is `max π` over unsettled sinks and is hostage
+to the single most expensive remaining commodity, which usually settles last.
 
 † **Do not read the transportation row as a family figure.** It covers the 6
 instances this round ran, which are **9% of the family's wall clock**. The 3
@@ -101,30 +110,27 @@ Absolute seconds, so the terms add up:
 
 | group | Δ wall | from pricing | from LP | iters off→on |
 |---|---|---|---|---|
-| intermodal copt-cpu | −6.79 s | **−6.65 s** | +0.01 s | 162 → 154 |
-| intermodal copt-gpu | −10.66 s | −9.32 s | −1.24 s | 162 → 154 |
-| transportation copt-gpu | −7.93 s | −2.80 s | **−3.35 s** | 190.7 → 190.3 |
-| grid + planar tree | +0.80 s | −0.45 s | +1.44 s | 521.7 → 525.0 |
-| grid + planar path | −0.05 s | −0.02 s | +0.03 s | 276.3 → 274.3 |
+| intermodal copt-cpu | −5.06 s | **−5.20 s** | +0.05 s | 159 → 154 |
+| intermodal copt-gpu | −5.11 s | **−5.14 s** | −0.09 s | 159 → 154 |
+| transportation copt-gpu | −3.03 s | **−3.71 s** | +0.04 s | 194 → 192 |
+| grid + planar tree | +0.05 s | −0.39 s | +0.50 s | 514 → 516 |
+| grid + planar path | +0.07 s | +0.00 s | +0.05 s | 275 → 275 |
 
-Intermodal under copt-cpu is the only clean row: **essentially the entire saving
-is pricing**, with LP flat to 0.01 s. Transportation's gain is majority-LP at an
-unchanged iteration count — a different separated capacity set, not a pricing
-effect, and copt-gpu-only (the same trajectories move LP by −3.86% on copt-gpu
-and +0.34% on copt-cpu, so that executor's LP timings drift between arms).
-grid/planar's real pricing saving is 0.45 s against 1.44 s of LP noise.
-
-The family wall-clock deltas are robust in sign — across all nine off×on rep
-pairings, intermodal spans [−3.9%, −8.8%] and never touches zero, while
-grid/planar spans [−1.1%, +2.7%] and straddles it.
+The three families with a pricing share worth anything are all clean rows here:
+**the wall saving is the pricing saving**, with LP flat to a twentieth of a
+second. That includes both executors — under COPT the LP is a few percent of an
+intermodal run either way, so there is nothing for the trajectory term to move.
+grid/planar is the mirror image: the pricing saving is real but 0.39 s, and the
+LP noise it sits under is larger than it.
 
 **Verdict: intermodal is the only family worth investigating further**, and that
 is what round (b) (gh #44) takes up. The conservative, mechanistic estimate of
-its gain is `85.3% × −2.8% ≈ −2.4%` — the cheaper-per-price term alone. The
-measured −4.8% includes a trajectory that also shortened, 162 → 154 iterations,
-which is real here but not predictable per instance.
+its gain is `85.1% × −2.4% ≈ −2.1%` — the cheaper-per-price term alone. The
+measured −3.7% includes a trajectory that also shortened, 159 → 154 iterations,
+which is real here but not predictable per instance, and which round (b) shows
+running the other way just as easily on a backend with a larger LP share.
 
-**The flag still ships off.** −2.4% to −4.8% on one family, on instances that
+**The flag still ships off.** −2.1% to −3.7% on one family, on instances that
 finish in under a minute, is not worth a per-family default — and whether it
 survives on a backend with a larger LP share is exactly what round (b) asks.
 
@@ -133,60 +139,77 @@ The two arms agree on the LP optimum everywhere: worst `d_obj_rel` is 6.95e-05
 can make on its own; the bit-for-bit column identity is a stronger statement and
 is pinned in C++ by `FeatureTests.BoundedPricingShadow{Tree,Path,IntermodalTree}`.
 
-## Quote copt-cpu, not copt-gpu
+## Two executors, and why the round carries both
 
-copt-gpu reports more than twice copt-cpu's per-price saving on the same four
-cells — −5.59% ± 1.99 pp against −2.53% ± 1.08 pp — on a metric that should be
-executor-independent. It is not a bigger saving. It is a noisier baseline:
+copt-cpu and copt-gpu are one library exercised two ways, so on a metric that
+should be executor-independent they are a control on the measurement itself. On
+the four intermodal cells whose trajectory holds still they agree:
 
-- `priced` is **identical** between the two executors on all 10 cells, in both
-  arms. The trajectory is executor-independent — the same medians for iterations
-  and columns, cell for cell — so the whole divergence is in measured `t_PR`.
-- The two executors' **on** arms agree to within 1%. It is the **off** arms that
-  differ, copt-gpu's running 0–7% higher.
-- copt-gpu's off arm is also far less repeatable than its own on arm: on
-  SBT-43785-0 the three off reps span 9.2% (28.32/28.78/30.93 s) against 0.4% for
-  the on reps (27.78/27.84/27.89 s). Under copt-cpu both arms sit near 5%.
+| executor | per-price | quotable cells | baseline per-price spread |
+|---|---|---|---|
+| copt-cpu | **−2.43% ± 0.51 pp** | 4/10 | 1.1% |
+| copt-gpu | −2.12% ± 1.10 pp | 4/10 | 1.3% |
 
-An inflated, noisy off arm inflates the saving. The cost model says so
-independently: on those four cells it predicts copt-cpu's wall delta to within
-**0.26 pp** (−3.3/−2.3/−2.8/−0.7 predicted vs −3.4/−2.3/−2.9/−1.0 measured) and
-misses copt-gpu's by up to **1.59 pp**. A model that tracks one executor and not
-the other, on cells where the trajectory is identical, is pointing at the
-measurement rather than at the mechanism.
+They also agree on the trajectory itself — identical median iteration and column
+counts on all 10 cells, and identical `priced` counts on 8 of 10 — which is what
+makes the comparison meaningful: the same runs, timed twice.
 
-The likely cause is host-side contention while the GPU barrier is resident —
-the off arm's full A* sweeps are the longest, most memory-hungry pricing windows
-in the round, so they absorb the most of it — but this data cannot prove that,
-and it does not need to: the copt-cpu arm is clean, agrees with the model, and is
-the one the round quotes.
+**Quote copt-cpu.** Not because copt-gpu is wrong here, but because its spread is
+twice as wide (± 1.10 pp against ± 0.51 pp) on an effect of ~2%, and because a
+GPU barrier's timings are the ones exposed to host-side contention during the
+long A* sweeps of the off arm. An earlier session of this same round measured
+copt-gpu's per-price at more than *twice* copt-cpu's on these four cells, off an
+inflated off-arm baseline; that divergence did not reproduce here. Which is
+itself the lesson: check the two executors against each other before quoting
+either, rather than assuming last session's relationship still holds.
 
-Its **−2.53% ± 1.08 pp reproduces the deleted round's −2.45% ± 0.56 pp**, which
-is the strongest thing this re-run says: the number survived a flag rename, a
-different session and a different rep count.
+## Quotable is not the same as useful
 
-## Against the issue's acceptance criteria
+38 of the 74 cells have `traj_moved=0` and so carry a per-price number; the
+median over all of them is **−2.02%**. Do not read that as a family-independent
+result — read `spread_per_price_off_pct` next to it:
 
-Two of the five predictions held and three did not; recording which, because they
-were written to be falsifiable and two of them were falsified.
+| group | quotable | per-price median | baseline spread |
+|---|---|---|---|
+| intermodal copt-cpu tree | 4/10 | −2.37% | **1.1%** |
+| intermodal copt-gpu tree | 4/10 | −2.63% | **1.3%** |
+| transportation tree | 1/6 | −11.32% | 2.0% |
+| grid tree | 6/15 | +0.00% | 7.1% |
+| grid path | 9/15 | +2.13% | 6.3% |
+| planar tree | 6/9 | −8.00% | **20.8%** |
+| planar path | 8/9 | +0.00% | 5.0% |
 
-| criterion | outcome |
-|---|---|
-| all 10 intermodal cells reproduce iterations and columns across all 3 reps, both arms | **7/10**, on *both* executors, failing on the same three (BUS-13160-0, BUS-18424-0, BUS-23688-0) |
-| SBT-6255-0's `d_per_price_pct` turns negative | **yes** — −7.99% copt-gpu, −1.04% copt-cpu (it read +0.20% on the deleted 2-rep arm) |
-| …and its \|pred − measured\| drops toward ≤0.16 pp | **no** — 1.59 pp on copt-gpu, 0.26 pp on copt-cpu |
-| pooled copt-gpu per-price lands near copt-cpu's −2.45% ± 0.56 pp | **no** — −5.59% ± 1.99 pp |
-| the analyzer re-derives both CSVs from the tracked logs, rerun byte-identical | yes |
+On grid and planar the per-price estimate is admissible and worthless: the
+baseline arm's own repetitions disagree by 5–21% on a quantity whose effect is a
+few percent, because those runs price for milliseconds. Only intermodal's spread
+is small against the effect, which is why intermodal is the only family this
+round quotes per-price. The one transportation cell is a single cell, not a
+family figure.
 
-The three unstable BUS cells are intrinsic to those instances, not to the
-executor: copt-gpu and copt-cpu produce the *same* median iteration and column
-counts on all 10 cells and are unstable on the same three. That matches what the
-gh #41 handoff recorded — intermodal is near-deterministic, not deterministic —
-so the criterion was simply written a notch stronger than the family supports.
+## What reproduces, and what does not
 
-The last two failures are one finding, not two: they are the copt-gpu baseline
-above, and the issue's own instruction for that case was that "the copt-gpu arm
-should not be quoted per-price". It is not.
+This round has now been measured twice, in two sessions on the same box, and the
+comparison is worth recording because it is the best available statement of what
+a reader can rely on.
+
+**Reproduces.** The direction and rough size of every pricing number: grid tree
+loses a fifth to a quarter of its pricing time and its clock does not follow;
+intermodal's per-price saving lands near −2.4% on copt-cpu both times (−2.43% ±
+0.51 pp here, −2.53% ± 1.08 pp before); the two arms agree on the LP optimum, with
+the worst `d_obj_rel` identical at 6.95e-05 on grid3 path; and 7 of 10 intermodal
+cells reproduce their iteration and column counts across all 3 reps, failing on
+the same three instances (BUS-13160-0, BUS-18424-0, BUS-23688-0) as before.
+Intermodal is near-deterministic, not deterministic.
+
+**Does not reproduce.** Family wall-clock totals to better than a couple of
+percentage points — intermodal read −4.8%/−6.2% before and −3.7%/−3.6% here — and
+the sign on the families where pricing share is small: grid tree was −0.33% and
+is now +1.95%. Both are the same statement: below a few percent of pricing share,
+the wall-clock delta is LP noise with a pricing signal buried in it, and its sign
+is not a property of the flag. Also gone is the earlier session's copt-gpu
+baseline inflation, discussed above.
+
+The conclusion did not move either time.
 
 ## Reproducing
 
@@ -237,7 +260,7 @@ python3 scripts/analyze_bounded_pricing_ablation.py
 | path | what |
 |---|---|
 | `runs.csv` | one row per run log (444): timings, iterations, columns, bound fire counts, `per_price_us` |
-| `summary.csv` | one row per cell (74): the arms paired and reduced to medians, with deltas, `traj_moved` / `traj_stable`, and the cost model's `pred_wall_pct` |
+| `summary.csv` | one row per cell (74): the arms paired and reduced to medians, with deltas, `traj_moved` / `traj_stable`, both baseline spread columns, and the cost model's `pred_wall_pct` |
 | `logs/<sweep>/logs_<executor>_<off\|on>_<rep>/` | the 444 raw run logs both CSVs are derived from |
 
 The logs are **tracked**, unlike everything else a benchmark writes. This round

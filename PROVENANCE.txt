@@ -367,10 +367,11 @@ means re-running it, not re-parsing a log.
 
 `results/ablation/` holds the A/B measurement behind the decision to ship bounded
 single-source pricing (manuscript section 3.3, gh #41) DISABLED BY DEFAULT. The
-default is global, and outside intermodal pricing is 0.2–4.3% of wall clock, so
-there is nothing to win there (round (a)); on intermodal, where pricing is
-75–85%, the bound is worth −2.8% and the evidence supports enabling it (round
-(b)). Both halves of that are measured here. This is the one tracked log set in
+default is global, and outside intermodal pricing is 1–4% of wall clock, so there
+is nothing to win there (round (a)); on intermodal, where pricing is 80–85%, the
+bound is worth −2 to −6% on the backends whose LP is not the bottleneck, and is
+swamped by the trajectory shift on the ones whose LP is (round (b)). Both halves
+of that are measured here. This is the one tracked log set in
 this repo, committed because the ablation settles a design question rather than
 feeding a tabulated result: the logs are the primary artifact and the CSVs are
 derived from them.
@@ -379,8 +380,10 @@ It is organised into rounds, each a directory named for the axis it varies.
 
     round (a)  results/ablation/families/   gh #43   four families, one backend
 
-    Collected  2026-08-19, in a single 1 h 46 min session on the section 3 host
-    Build      the commit that adds this section, cmake -DMCFCG_USE_COPT=ON,
+    Collected  2026-08-20, in a single 1 h 06 min pass on the section 3 host,
+               back to back with round (b) below and on the same build
+    Build      the commit that adds this section, cmake with all five backends
+               (-DMCFCG_USE_COPT=ON -DMCFCG_USE_MOSEK=ON -DMCFCG_USE_CUOPT=ON),
                otherwise the documented recipe (Release, -march=native)
     Backend    COPT 8.0.1, GPUMode 2 (copt-gpu) on all four families; GPUMode 0
                (copt-cpu) additionally on intermodal, as a second executor on the
@@ -397,8 +400,9 @@ It is organised into rounds, each a directory named for the axis it varies.
 
     round (b)  results/ablation/backends/   gh #44   one family, five backends
 
-    Collected  2026-08-20, in a single ~87 min session on the section 3 host
-    Build      commit 7fc24e1's tree, cmake -DMCFCG_USE_COPT=ON
+    Collected  2026-08-20, in a single ~80 min pass on the section 3 host,
+               immediately after round (a) and on the same build
+    Build      the commit that adds this section, cmake -DMCFCG_USE_COPT=ON
                -DMCFCG_USE_MOSEK=ON -DMCFCG_USE_CUOPT=ON, otherwise the
                documented recipe (Release, -march=native). All five backends must
                be linked; the sweep guards this, because a push resets the build
@@ -449,11 +453,29 @@ tree/PricerHeavy on copt-cpu, 2 reps per arm). It measured a change that was the
 reverted, so it is not reproducible from any commit in this repo; its table is
 transcribed in that file's appendix, which is the record.
 
+Both rounds were re-measured on 2026-08-20 when the pricing bound's log banner
+was renamed (the counter field `cut=` became `fired=`): the analyzer accepts one
+banner spelling and no other, so the previous logs could not be re-parsed, and
+re-running was preferred to teaching the parser two spellings. The same commit
+loosened the per-price quotability rule to `traj_moved=0` alone and made
+`per_price_us` pooled over an arm's repetitions, with the baseline spread
+reported in a new `spread_per_price_off_pct` column.
+
+What moved in that re-measurement, beyond the schema: every wall-clock aggregate,
+by a couple of percentage points, and the SIGN of the small-share families (grid
+tree −0.33% -> +1.95%) and of HiGHS in round (b) (path −9.8% -> +39.0%, tree
++7.7% -> −9.3%). What did not: the direction and rough size of every pricing
+number, intermodal's per-price saving (−2.53% -> −2.43% on copt-cpu), the worst
+d_obj_rel (6.95e-05 on grid3 path, identical), and both rounds' conclusions. The
+round READMEs record the comparison; the superseded CSVs and logs are in git
+history at b096b17.
+
 Commits that move a number in these CSVs: 2b04a0c and 8f26247 (2026-08-19)
-collected and documented round (a), 7fc24e1 and b096b17 (2026-08-20) round (b).
-Both rounds' numbers are otherwise frozen — re-deriving re-parses the tracked
-logs and never re-solves, so nothing outside a change to the analyzer or to the
-logs themselves can move them.
+collected and documented round (a), 7fc24e1 and b096b17 (2026-08-20) round (b),
+and the commit that adds this paragraph re-measured both. Between such commits the
+numbers are frozen — re-deriving re-parses the tracked logs and never re-solves,
+so nothing outside a change to the analyzer or to the logs themselves can move
+them.
 
 `scripts/analyze_bounded_pricing_ablation.py` re-derives both CSVs from the
 tracked logs and never re-solves, the same relationship `consolidate_cg_logs.py`

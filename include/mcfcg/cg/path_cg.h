@@ -103,39 +103,35 @@ struct CGParams {
     // as soon as the frontier proves no negative-reduced-cost column remains
     // for it, instead of running until every sink of the source is settled.
     //
-    // Off by default.  Measured on intermodal (gh #41, the only family where
-    // pricing is a large enough share of runtime to matter): a modest but
-    // reproducible win — pricing −4.3%/−4.7% and wall clock −3.6%/−3.7% under
-    // copt-cpu/copt-gpu, against a ~1.3% noise floor, with the Lagrangian bound
-    // at termination *improving* and every run still exiting on the gap test.
+    // Off by default.  The full argument, with the logs behind every number, is
+    // results/ablation/README.md; read it before changing this default.  In
+    // short, from the two committed rounds:
     //
-    // Do not expect more than that on intermodal.  The cut fires 65−77% of the
-    // time yet buys only ~2−3% on the instances whose CG trajectory is
-    // unchanged, because at a master optimum every structural row is served by
-    // a basic column of reduced cost 0: the A* frontier reaches the sink at
-    // almost exactly the dual, so the cut lands just short of where the search
-    // would have stopped anyway.  What makes it fire at all is the _neg_rc_tol
-    // allowance folded into both bounds — the criterion needs only prove
-    // rc ≥ _neg_rc_tol, not rc ≥ 0.
+    //  * It always saves pricing time — t_PR fell in every measured group of
+    //    both rounds — and pricing share is the ceiling on turning that into
+    //    wall clock.  On intermodal (tree, PricerHeavy) pricing is 80−85% of the
+    //    clock and the bound is worth −3.6%/−3.7% under copt-gpu/copt-cpu, where
+    //    essentially the whole saving is pricing and the LP is flat.
+    //  * Everywhere else pricing is 1−4% of the clock, so nothing reaches it:
+    //    grid tree loses 22% of its pricing time and the wall clock moves
+    //    +1.95%, LP noise being larger than the entire pricing term.
+    //  * On a backend whose LP is a large share (HiGHS, ~42% on intermodal) the
+    //    trajectory shift the bound causes is larger than the pricing saving and
+    //    decides the sign in either direction; that total is not reproducible
+    //    between sessions even when each session measures both arms.
     //
-    // Where it does real work is a *multi-target* search, and there the two
-    // formulations diverge sharply.  Measured on grid + planar≤1000 under
-    // copt-gpu (288 runs): tree pricing −16.3%, path pricing −0.9%.  The tree
-    // bound (residual budget over the sum of remaining demands) tightens on
-    // every settle; the path bound (max π over unsettled sinks) is hostage to
-    // the single most expensive remaining commodity, which is usually the
-    // farthest and settles last — so the path search runs nearly to completion
-    // regardless.  That asymmetry is inherent to per-commodity duals, not an
-    // implementation detail.  Tree savings hold at ~14−22% across every
-    // commodities-per-source bucket even as the fire rate falls 75%→16%: with
-    // more targets a cut is harder to earn but prunes proportionally more.
-    //
-    // None of that reaches the wall clock on those families, because pricing is
-    // only 1.0−1.5% of their runtime (−1.3% tree, +0.3% path, both inside
-    // noise).  The two properties that would make this pay off — pricing-bound
-    // AND several commodities per source — do not co-occur anywhere in the
-    // shipped suite.  A family with both should see roughly the 16% pricing cut
-    // translate into real time.
+    // Two mechanism notes that are properties of the code rather than of a
+    // measurement.  The bound fires on most searches only because of the
+    // _neg_rc_tol allowance folded into both bounds — at a master optimum every
+    // structural row is served by a basic column of reduced cost 0, so the A*
+    // frontier reaches the sink at almost exactly the dual and an exact-zero
+    // test would almost never trigger.  And the two formulations differ
+    // sharply: the tree bound (residual budget over the sum of remaining
+    // demands) tightens on every settle, while the path bound (max π over
+    // unsettled sinks) is hostage to the single most expensive remaining
+    // commodity, which usually settles last — so a path search runs nearly to
+    // completion regardless.  Measured on the grid/planar cells whose pricing
+    // time is large enough to read: tree −24.5% per price, path +1.1 to +3.4%.
     //
     // Caveat if you do enable it: on an instance with unreachable sinks the
     // bound can stop a search while an unreachable target is still pending

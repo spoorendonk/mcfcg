@@ -35,7 +35,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             // Budget consumed by the sinks settled so far: every remaining term
             // is non-negative, so no tree here can price out.  Negated
             // comparison so a NaN budget (never expected, but cheap to survive)
-            // cuts rather than runs unbounded.
+            // stops rather than runs unbounded.
             if (!(_budget > 0.0)) {
                 _bound = -1;  // frontier >= 0 > -1
                 return;
@@ -43,12 +43,12 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             // Budget left but no remaining demand: the unsettled sinks all
             // belong to zero-demand commodities (CommaLab keeps those verbatim;
             // only the TNTP reader drops demand <= 0).  They add 0 to the tree
-            // reduced cost, so the budget is NOT proven consumed — cutting here
+            // reduced cost, so the budget is NOT proven consumed — stopping here
             // would suppress a strictly improving tree on every iteration,
             // including the final_round retry, and the CG loop would report
             // that as optimal.
             if (!(_rem_demand > 0.0)) {
-                _bound = MAX_BOUND;  // price_source_astar never cuts at/above it
+                _bound = MAX_BOUND;  // price_source_astar never stops at/above it
                 return;
             }
             double raw = _budget / _rem_demand;
@@ -93,10 +93,10 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         std::ranges::sort(scratch, [](const BoundEntry& lhs, const BoundEntry& rhs) {
             return lhs.sink < rhs.sink;
         });
-        // Budget = SCALE·π_s, plus an allowance that makes the cut provably no
+        // Budget = SCALE·π_s, plus an allowance that makes the bound provably no
         // more aggressive than _neg_rc_tol.  The search compares integer-scaled
         // distances, which overstate SCALE·(true cost) by at most
-        // _round_slack_per_demand·SCALE per unit of demand, so cutting on
+        // _round_slack_per_demand·SCALE per unit of demand, so stopping on
         //     frontier·rem_demand > SCALE·π_s − Σ_settled d·g + allowance
         // with allowance = SCALE·(D·_round_slack_per_demand + _neg_rc_tol)
         // gives true_tree_rc ≥ _neg_rc_tol, where D is the source's total
@@ -109,10 +109,10 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         // Computed in raw double rather than through scale_dual so the warm
         // start's +inf survives: scale_dual saturates it at MAX_BOUND, which
         // recompute() then divides by rem_demand back into the range of real
-        // frontier values, letting the seeding pass cut and leave a source with
+        // frontier values, letting the seeding pass stop and leave a source with
         // no column at all (fatal in EdgeRows slack mode, whose feasibility
         // rests on warm start seeding every structural row).  NaN still lands
-        // in the !(_budget > 0) branch and cuts, as documented there.
+        // in the !(_budget > 0) branch and stops, as documented there.
         double budget = (pi_s[s_idx] + rem_demand * _round_slack_per_demand + _neg_rc_tol) * SCALE;
         return {scratch, budget, rem_demand};
     }
@@ -164,7 +164,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
             // Bounded pricing also leaves sinks unsettled, but those are
             // merely proven unattractive, not unreachable — salvage their
             // Lagrangian term from the frontier the search stopped at.  That
-            // only feeds the lower bound: a cut source emits no column at all
+            // only feeds the lower bound: a bounded source emits no column at all
             // (see below), precisely so the bound never manufactures a partial
             // tree.
             if (!dijk.visited(sink)) {
@@ -209,7 +209,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         _source_rc_error[s_idx] = source_rc_error;
         _source_lagr_sum[s_idx] = source_lagr_sum;
 
-        // A cut search settled only part of the source's sinks, so tree_rc
+        // A bounded search settled only part of the source's sinks, so tree_rc
         // above is missing those commodities' (non-negative) contributions and
         // reads more negative than the true tree reduced cost.  The bound
         // already proved the true value is non-negative, so the source is

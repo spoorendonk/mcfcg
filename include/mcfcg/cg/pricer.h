@@ -42,7 +42,7 @@ class PathPricer : public PricerBase<PathPricer, Column> {
                 ++_head;
             }
             // Only reachable once every target is settled, when the driver
-            // loop is about to stop anyway; cut rather than run unbounded.
+            // loop is about to stop anyway; stop rather than run unbounded.
             _bound = _head < entries.size() ? entries[_head].key : -MAX_BOUND;
         }
     };
@@ -51,10 +51,10 @@ class PathPricer : public PricerBase<PathPricer, Column> {
                             std::vector<BoundEntry>& scratch) const {
         scratch.clear();
         scratch.reserve(src.commodity_indices.size());
-        // Key = SCALE·π_k plus an allowance that makes the cut provably no more
+        // Key = SCALE·π_k plus an allowance that makes the bound provably no more
         // aggressive than _neg_rc_tol.  A* compares integer-scaled distances,
         // which overstate SCALE·(true cost) by at most
-        // _round_slack_per_demand·SCALE, so cutting on
+        // _round_slack_per_demand·SCALE, so stopping on
         //     frontier > SCALE·(π_k + _round_slack_per_demand + _neg_rc_tol)
         // gives true_rc_k ≥ _neg_rc_tol.  Folding it in before scale_dual keeps
         // the warm start's +inf saturating to MAX_BOUND.  The _neg_rc_tol term

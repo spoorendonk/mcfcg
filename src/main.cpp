@@ -402,7 +402,7 @@ int run_cli(int argc, char* argv[]) {
                            ? 100.0 * static_cast<double>(result.bounded_sources) /
                                  static_cast<double>(result.priced_sources)
                            : 0.0;
-    std::fprintf(stderr, "[bounded-pricing] enabled=%d cut=%llu priced=%llu rate=%.1f%%\n",
+    std::fprintf(stderr, "[bounded-pricing] enabled=%d fired=%llu priced=%llu rate=%.1f%%\n",
                  params.bounded_pricing ? 1 : 0,
                  static_cast<unsigned long long>(result.bounded_sources),
                  static_cast<unsigned long long>(result.priced_sources), fire_rate);

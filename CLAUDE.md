@@ -191,54 +191,60 @@ Runtime signal that the ceiling is too low: the (valid) `best_lb` exceeds the cu
 
 Unreachable sinks (A* heap exhausts without settling the sink) are skipped: path emits columns for reachable commodities only, tree emits a partial tree covering reachable sinks only. Graceful **only** in `CommodityRows` mode, where demand-row slacks absorb unmet demand; in `EdgeRows` there is no demand slack and a disconnected source→sink surfaces as LP infeasibility. The tree's partial column is genuinely lossy — its master counts trees, not demand, so nothing notices the under-served commodities — tolerable only because a disconnected commodity makes the MCF infeasible anyway. Preprocess disconnected instances with `mcfcg_clean`.
 
-#### Bounded single-source pricing — off by default, but a win on intermodal
+#### Bounded single-source pricing — off by default, a win where pricing dominates
 
 `CGParams::bounded_pricing` / CLI `--bounded-pricing` (manuscript §3.3) stops a
 source's A* once the frontier proves no negative-RC column remains, instead of
 settling every sink. It is **exact** — the column set is identical bit-for-bit —
-and it always saves pricing time; what it does not do is convert that into wall
-clock on most families. **Pricing share is the ceiling**, and under COPT it is
-planar 0.2%, grid 1.4–3.1%, transportation 4.3%, intermodal 75–85%. grid is the
-decisive test: the bound removes **26%** of its tree pricing time and moves the
-clock by **−0.33%**. Only intermodal has room, and there it delivers — **−2.8%**
-over 100 paired cells on five backends (round (b) below).
-**Off by default everywhere, including the benchmark driver** — the default is
-global, and outside intermodal there is nothing to win. Measure it with
-`--extra-args=--bounded-pricing`.
+and it always saves pricing time: `t_PR` fell in every group of both measurement
+rounds. What it does not do is convert that into wall clock on most families.
+**Pricing share is the ceiling**, and under COPT it is planar 1.0–1.6%, grid
+1.7–3.2%, transportation 4.3% family-wide, intermodal 80–85%. grid is the decisive
+test: the bound removes **22%** of its tree pricing time and the clock moves
+**+1.95%** — the wrong way, because 0.31 s of real saving sits under 1.13 s of LP
+noise. **Off by default everywhere, including the benchmark driver.** Measure it
+with `--extra-args=--bounded-pricing`.
 
 A family's raw wall-clock delta is **not** the effect: where the trajectory moves
-it is ±Δiterations, running −27% to +20% across intermodal cells. Decompose it —
-intermodal/copt-cpu is the only group whose gain is essentially all pricing
-(−6.65 s of −6.79 s, LP flat). Quote `per_price_us` on cells with
-`traj_moved=0 AND traj_stable=1`, and quote them from **copt-cpu**: copt-gpu runs
-identical trajectories and prices identical source counts yet reports twice the
-saving, off an inflated `t_PR` baseline in its OFF arm. **Never quote a family
-aggregate over an instance subset** — transportation's 22.6% pricing share covers
-9% of that family's wall clock; family-wide it is 4.3%.
+it is ±Δiterations, running −25% to +19% across intermodal cells. Decompose it —
+on intermodal under COPT the wall saving *is* the pricing saving (−5.20 s of
+−5.06 s on copt-cpu, LP flat to 0.05 s). Quote `per_price_us` on cells with
+`traj_moved=0` — that is the only exclusion, since the metric is pooled over an
+arm's reps (Σt_PR over Σpriced) and so divides by the sources each run actually
+priced. `traj_stable` is reported, not gated: reps that disagree add noise, which
+`spread_per_price_off_pct` carries explicitly — 1.1–1.3% on intermodal against a
+~2.4% effect, but **5–21% on grid/planar**, where the per-price number is
+admissible and useless. **Never quote a family aggregate over an instance
+subset** — transportation's 26.3% pricing share covers 9% of that family's wall
+clock; family-wide it is 4.3%.
 
 It is a *bound*, not a cutoff: no incumbent is involved, and "cutoff" in this
 codebase already means the reduced-cost acceptance threshold `NEG_RC_TOL` and the
 LP backends' objective-cutoff parameters. Call it the bound in code, comments and
 logs; the analyzer accepts one banner spelling and no other.
 
-**Round (b) (`backends/`, gh #44) killed the reported HiGHS penalty and showed
-the bound wins on intermodal.** Five backends, both arms in one session: `t_PR`
-falls in all ten solver×formulation groups (−2.0% to −9.2%) — the bound works
-everywhere — while `t_LP` swings −18.0% to +27.1% and decides the wall-clock
-sign. The +18–32% HiGHS penalty a cross-session comparison had reported does not
-exist (path is −9.8%, tree +7.7%).
+**On intermodal the gain is real but backend-conditional (round (b)).** `t_PR`
+falls in all ten solver×formulation groups (−1.3% to −6.1%) — the bound works
+everywhere — while `t_LP` swings −17% to +71% and decides the wall-clock sign.
+Rolled up per backend: copt-gpu **−6.0%**, copt-cpu **−5.4%**, mosek **−2.2%**,
+cuopt **+2.2%**, highs **+15.7%**; faster on 76 of 100 cells, median −1.7%, and
++3.1% in time-weighted total because a few large HiGHS cells swing by tens of
+seconds. Quote the per-backend rows, never that total.
 
-Rolled up per backend on intermodal: copt-cpu **−7.5%**, copt-gpu **−4.6%**,
-highs **−2.2%**, cuopt **−1.6%**, mosek **+1.1%** — **−2.8%** overall, faster on
-74 of 100 cells. Restricting to cells whose trajectory did not move gives
-**−3.6%**, i.e. the attributable subset is better than the average.
+**The wall-clock total on a high-LP-share backend is not a stable quantity.**
+Round (b) has been measured twice, both times with both arms in one session on
+this box: HiGHS read path −9.8% / tree +7.7% the first time and path +39.0% /
+tree −9.3% the second. On HiGHS the sign is decided by whether three BUS path
+cells take 20 iterations or 44, and the flag perturbs that without biasing it.
+Stable across both: `t_PR` down everywhere, and cells whose iteration count did
+not move being flat in wall clock.
 
-**So "rejected" is about the global default, not this family.** Pricing share is
-the ceiling and it is 0.2–4.3% everywhere else (round (a): grid loses 26% of its
-tree pricing time and moves the clock −0.33%), so the flag stays off by default —
-but on intermodal the evidence supports enabling it, and `PricerHeavy` is the
-natural home if you do. Wiring it there needs its own before/after check;
-`PricerHeavy` is not intermodal-only.
+**So "off by default" is about the global default.** Pricing share is 1–4%
+outside intermodal, so the flag stays off — but where pricing dominates *and* the
+LP does not (COPT, MOSEK on intermodal) it is a reliable 2–6%, and `PricerHeavy`
+is the natural home if you act on it. Wiring it there needs its own before/after
+check per backend; `PricerHeavy` is not intermodal-only and does not know which
+backend it is running under.
 
 The evidence lives in `results/ablation/`, split into rounds named for the axis
 each varies: round (a) (`families/`, gh #43) is 444 tracked logs / 74 paired
@@ -248,10 +254,10 @@ reps by design (HiGHS 3 off reps, the rest 1+1). Both re-derive with
 by `CommittedRoundMixin` subclasses.
 
 **Never pair arms across sessions.** It is the trap this whole ablation keeps
-re-learning: it is what made the HiGHS penalty look real, and round (b) had to
-re-run an existing 100-cell on-arm pass rather than reuse it. Round (b)'s 1-rep
-cells are wall clock only — `traj_stable` is blank at one rep, so nothing there is
-quotable per-price, and HiGHS's own off-arm spread reaches 30–46% on some cells.
+re-learning: it is what made the HiGHS penalty look real. Round (b)'s 1-rep cells
+are quotable per-price but carry **no error bar** — both spread columns are blank
+at one rep, and HiGHS's own off-arm per-price spread is 1.4–2.1%, the same order
+as the effect.
 
 **Read `results/ablation/README.md` before re-opening the question or touching
 the bounded-pricing code**, and the round README — `families/` or `backends/` —
@@ -259,8 +265,7 @@ before citing a number from it. Together they carry the gain model and why it
 loses, the three correctness traps the implementation must respect
 (`FeatureTests.BoundedPricing*`), the two channels by which the flag shifts the
 CG trajectory without changing columns, and which backends the measurement is
-valid on — a single-backend result is worthless, copt-gpu cannot reproduce itself
-on grid/planar or transportation, and its per-price numbers are not quotable.
+valid on — a single-backend result is worthless.
 
 ### 3. LP backend
 

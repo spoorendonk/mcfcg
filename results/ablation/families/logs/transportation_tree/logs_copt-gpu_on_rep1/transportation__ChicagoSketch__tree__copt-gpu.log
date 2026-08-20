@@ -1,7 +1,7 @@
-# cmd: /usr/bin/time -o /tmp/mcfcg_mem_4ir2c5a6.txt -f %M build/mcfcg_cli data/transportation/ChicagoSketch_net.tntp.gz --solver copt --copt-gpu-mode 2 --formulation tree --max-iters 10000 --bounded-pricing --time-limit 1800.0
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_8ifano1c.txt -f %M build/mcfcg_cli data/transportation/ChicagoSketch_net.tntp.gz --solver copt --copt-gpu-mode 2 --formulation tree --max-iters 10000 --bounded-pricing --time-limit 1800.0
 # outcome: ok
 # returncode: 0
-# peak_rss_kb: 561920
+# peak_rss_kb: 522472
 # peak_rss_source: measured
 # === STDERR (CG iteration log + preamble) ===
 TNTP: net=data/transportation/ChicagoSketch_net.tntp.gz trips=data/transportation/ChicagoSketch_trips.tntp.gz coef=2.4
@@ -11,23 +11,23 @@ Pricing threads: 32 (auto)
 Slack mode: CommodityRows (struct=386, capped_arcs=2950)
 [lp-config] backend=copt version=8.0.1 method=barrier exec=GPU presolve=off crossover=off tol=0.0001 threads=n/a(GPU)
    It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
-    1          inf   1.7040e+06   9.6191e+03    772    386   386      0      0      0      0   0.352   0.000   0.000   0.352     0.352
-    2          inf   1.7059e+06   9.6191e+04    772    386   386      0      0      0      0   0.160   0.000   0.000   0.161     0.513
-    3          inf   1.9538e+06   9.1394e+05    772    386   339      0      0      0      0   0.150   0.002   0.000   0.152     0.665
-    4          inf   5.2474e+06   5.1857e+06    772    396    99      0      0     10      0   0.149   0.007   0.000   0.157     0.822
-    5          inf   5.2474e+06   1.1395e+07   1119    408   109    347      0     12      0   0.164   0.005   0.000   0.173     0.995
-    6          inf   5.2474e+06   7.7027e+06   1446    425    25    339     12     17      0   0.178   0.005   0.001   0.188     1.182
-    7          inf   5.2474e+06   8.2942e+06   1826    429    37    380      0      4      0   0.195   0.005   0.001   0.205     1.387
-    8          inf   5.2474e+06   8.0027e+06   2204    434     6    378      0      5      0   0.202   0.005   0.001   0.212     1.598
-    9   6.7167e+06   6.6683e+06   6.7167e+06   2581    434     0    377      0      0      0   0.209   0.005   0.001   0.218     1.816
-   10   6.7167e+06   6.6977e+06   6.7108e+06   2903    434     0    374     52      1      1   0.205   0.005   0.002   0.218     2.035
-   11   6.7073e+06   6.7041e+06   6.7073e+06   3111    433     0    357    149      0      1   0.203   0.005   0.001   0.216     2.251
-   12   6.7064e+06   6.7047e+06   6.7064e+06   3143    431     0    319    287      0      2   0.210   0.005   0.001   0.223     2.474
-   13   6.7064e+06   6.7055e+06   6.7061e+06   3053    428     0    291    381      1      4   0.203   0.005   0.002   0.216     2.690
-   14   6.7064e+06   6.7055e+06   6.7059e+06   2918    427     0    210    345      1      2   0.217   0.004   0.001   0.228     2.918
-   15   6.7059e+06   6.7055e+06   6.7059e+06   2918    427     0   *167      0      0      0   0.202   0.003   0.001   0.207     3.125
-CG optimal after 15 iterations. UB=6705868.864438 LB=6705450.895762 gap=4.180e+02 tol=6.706e+02  t_LP=3.000  t_PR=0.079  t_SP=0.014  t_Tot=3.142
-[bounded-pricing] enabled=1 cut=3680 priced=7720 rate=47.7%
+    1          inf   1.7040e+06   9.6191e+03    772    386   386      0      0      0      0   0.241   0.000   0.000   0.241     0.241
+    2          inf   1.7059e+06   9.6191e+04    772    386   386      0      0      0      0   0.026   0.000   0.000   0.027     0.268
+    3          inf   1.9538e+06   9.1394e+05    772    386   339      0      0      0      0   0.026   0.001   0.000   0.028     0.296
+    4          inf   5.2474e+06   5.1857e+06    772    396    99      0      0     10      0   0.029   0.006   0.000   0.036     0.332
+    5          inf   5.2474e+06   1.1395e+07   1119    408   109    347      0     12      0   0.038   0.005   0.000   0.047     0.379
+    6          inf   5.2474e+06   7.7027e+06   1446    425    25    339     12     17      0   0.049   0.005   0.001   0.059     0.438
+    7          inf   5.2474e+06   8.2942e+06   1826    429    37    380      0      4      0   0.063   0.005   0.001   0.074     0.513
+    8          inf   5.2474e+06   8.0027e+06   2204    434     6    378      0      5      0   0.070   0.005   0.001   0.080     0.593
+    9   6.7167e+06   6.6683e+06   6.7167e+06   2581    434     0    377      0      0      0   0.077   0.005   0.001   0.087     0.680
+   10   6.7167e+06   6.6977e+06   6.7108e+06   2903    434     0    374     52      1      1   0.075   0.005   0.001   0.088     0.768
+   11   6.7073e+06   6.7041e+06   6.7073e+06   3111    433     0    357    149      0      1   0.074   0.005   0.001   0.088     0.856
+   12   6.7064e+06   6.7047e+06   6.7064e+06   3143    431     0    319    287      0      2   0.077   0.005   0.001   0.090     0.946
+   13   6.7064e+06   6.7055e+06   6.7061e+06   3053    428     0    291    381      1      4   0.075   0.005   0.001   0.087     1.033
+   14   6.7064e+06   6.7055e+06   6.7059e+06   2918    427     0    210    345      1      2   0.084   0.005   0.001   0.096     1.129
+   15   6.7059e+06   6.7055e+06   6.7059e+06   2918    427     0   *167      0      0      0   0.073   0.005   0.001   0.079     1.208
+CG optimal after 15 iterations. UB=6705868.864438 LB=6705450.895762 gap=4.180e+02 tol=6.706e+02  t_LP=1.078  t_PR=0.071  t_SP=0.012  t_Tot=1.218
+[bounded-pricing] enabled=1 fired=3680 priced=7720 rate=47.7%
 
 # === STDOUT (result CSV) ===
 Setting parameter 'LpMethod' to 2
@@ -35,4 +35,4 @@ Setting parameter 'GPUMode' to 2
 Setting parameter 'Presolve' to 0
 Setting parameter 'Crossover' to 0
 instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
-data/transportation/ChicagoSketch_net.tntp.gz,tree,15,2532,6705868.864438,6705450.895762,1,3.170,3.000,0.079,0.014
+data/transportation/ChicagoSketch_net.tntp.gz,tree,15,2532,6705868.864438,6705450.895762,1,1.235,1.078,0.071,0.012

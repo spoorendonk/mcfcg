@@ -137,7 +137,7 @@ public:
     // heuristic, so a frontier at or above it means every frontier vertex is a
     // dead end and the search is effectively exhausted.  A* keys therefore CAN
     // exceed it (f = g + h saturates only at semiring::INFTY) — which is why
-    // price_source_astar refuses to cut there.
+    // price_source_astar refuses to stop there.
     static constexpr int64_t MAX_BOUND = UNREACHED_BOUND;
 
 protected:
@@ -160,7 +160,7 @@ protected:
     // count.  Used twice, in opposite directions — subtracted in
     // salvage_lagr_term so a salvaged Lagrangian term stays a valid lower
     // bound, and added to each pricing bound (see the derivations in
-    // PathPricer::make_bound and TreePricer::make_bound) so the cut is
+    // PathPricer::make_bound and TreePricer::make_bound) so the bound is
     // provably no more aggressive than _neg_rc_tol.
     double _round_slack_per_demand = 0.0;
 
@@ -199,11 +199,11 @@ protected:
     double _last_lagr_path_sum = 0.0;
     bool _last_priced_all = false;
 
-    // _source_cut[s] is 1 when the pricing bound stopped the most recent A*
-    // run for source s.  Written only when s is actually priced; the per-call
+    // _source_bound_fired[s] is 1 when the pricing bound stopped the most
+    // recent A* run for source s.  Written only when s is actually priced; the per-call
     // counters below are accumulated over the priced batches.  All zeros
     // whenever bounded pricing is off.
-    std::vector<uint8_t> _source_cut;
+    std::vector<uint8_t> _source_bound_fired;
     uint64_t _last_bounded_count = 0;
     uint64_t _last_priced_count = 0;
 
@@ -241,7 +241,7 @@ public:
         _last_source_idx = 0;
         _bounded_pricing = bounded_pricing;
         _round_slack_per_demand = 0.5 * static_cast<double>(inst.graph.num_vertices()) / SCALE;
-        _source_cut.assign(inst.sources.size(), 0);
+        _source_bound_fired.assign(inst.sources.size(), 0);
         _last_bounded_count = 0;
         _last_priced_count = 0;
 
@@ -303,7 +303,7 @@ public:
         uint32_t start = final_round ? 0 : _last_source_idx;
         uint32_t sources_scanned = 0;
         uint32_t priced_count = 0;
-        uint64_t cut_count = 0;
+        uint64_t fire_count = 0;
 
         std::vector<ColumnT> all_columns;
         std::vector<uint32_t> batch;
@@ -331,7 +331,7 @@ public:
             all_columns.insert(all_columns.end(), std::make_move_iterator(batch_cols.begin()),
                                std::make_move_iterator(batch_cols.end()));
             for (uint32_t s_idx : batch) {
-                cut_count += _source_cut[s_idx];
+                fire_count += _source_bound_fired[s_idx];
             }
 
             if (max_cols > 0 && all_columns.size() >= max_cols) {
@@ -356,7 +356,7 @@ public:
         // end of the sweep.
         _last_priced_all = (priced_count == n_sources);
         _last_priced_count = priced_count;
-        _last_bounded_count = cut_count;
+        _last_bounded_count = fire_count;
         return all_columns;
     }
 
@@ -394,7 +394,7 @@ public:
         auto body = [&](uint32_t s) {
             // Deliberately reads _source_arcs even when a bounded search left
             // it describing an older routing (see should_record_arcs): re-pricing
-            // every cut source instead costs more than the stale evidence does.
+            // every bounded source instead costs more than stale evidence does.
             bool affected = std::any_of(_source_arcs[s].begin(), _source_arcs[s].end(),
                                         [&](uint32_t a) { return cap_set.contains(a); });
             _source_postponed[s] = affected ? 0 : 1;
@@ -567,7 +567,7 @@ protected:
         } else {
             dijk.run_until_targets(is_target, num_targets);
         }
-        _source_cut[s_idx] = bound_f.has_value() ? 1 : 0;
+        _source_bound_fired[s_idx] = bound_f.has_value() ? 1 : 0;
 
         self().process_source(s_idx, src, duals, mu, dijk, new_columns, thread_id, bound_f);
 
@@ -577,7 +577,7 @@ protected:
         }
     }
 
-    // Whether this call should refresh _source_arcs[s_idx].  A cut search
+    // Whether this call should refresh _source_arcs[s_idx].  A bounded search
     // covers only the sinks it settled, so its arc set is not the evidence
     // filter_for_new_caps needs.  Leave the previous complete set standing
     // rather than overwrite it with a partial one: possibly stale arcs still
@@ -585,22 +585,23 @@ protected:
     // and postpone a source a new capacity row does affect.
     //
     // The consequence is that filter_for_new_caps decides postponement from an
-    // older routing for every cut source, so switching the bound on changes
+    // older routing for every bounded source, so switching the bound on changes
     // which sources the loop prices — and hence the CG trajectory — even though
     // the columns the pricer emits are identical (pinned bit-for-bit by the
     // FeatureTests.BoundedPricingShadow* tests).  That is a convergence-speed
     // effect only: the pricing-exhausted final_round re-prices every source
     // regardless of postponement.
     //
-    // Do NOT "fix" it by treating a cut source as affected (_source_cut[s] is
-    // exactly that flag, sticky until the source is priced uncut).  Measured on
+    // Do NOT "fix" it by treating a bounded source as affected
+    // (_source_bound_fired[s] is exactly that flag, sticky until the source is
+    // priced unbounded).  Measured on
     // intermodal tree/PricerHeavy under COPT: +31% wall clock, because the 65-77%
     // fire rate makes almost every source affected and the filter stops
     // filtering — SBT-56295 alone paid +68% at an unchanged iteration count.
     // The per-instance table is the appendix of results/ablation/README.md; it
     // measured a reverted change, so no tracked log carries it.
-    // (With warm_start=false a source cut on its very first price keeps an
-    // *empty* set, which reads as "unaffected"; same convergence-speed caveat.)
+    // (With warm_start=false a source the bound stops on its very first price
+    // keeps an *empty* set, which reads as "unaffected"; same caveat.)
     [[nodiscard]] bool should_record_arcs(std::optional<int64_t> bound_f) const noexcept {
         return _track_arcs && !bound_f.has_value();
     }

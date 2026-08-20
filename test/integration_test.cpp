@@ -622,7 +622,7 @@ static mcfcg::Instance build_deadend() {
 // reproduces precisely what the `_rem_demand > 0` guard does — so the test
 // passes with that guard deleted and pins nothing.  Fractional demands (the norm
 // on TNTP) leave a small NEGATIVE residue instead, the division yields -inf, and
-// its int64_t cast is UB (INT64_MIN in practice), so every frontier cuts and the
+// its int64_t cast is UB (INT64_MIN in practice), so every frontier stops and the
 // improving column is lost.  That is the bug the guard exists for.
 static mcfcg::Instance build_zero_demand() {
     mcfcg::static_digraph_builder<double, double> builder(4);
@@ -684,29 +684,29 @@ inline uint64_t column_key(const mcfcg::TreeColumn& col) { return col.source_idx
 // and accumulate the same floats in the same order.  Anything but bit-equality
 // means the bound changed the answer.  Returns "" when the columns agree,
 // otherwise a description of the first field that differs.
-inline std::string column_diff(const mcfcg::Column& base, const mcfcg::Column& cut) {
+inline std::string column_diff(const mcfcg::Column& base, const mcfcg::Column& bounded) {
     std::ostringstream os;
     os.precision(17);
-    if (base.cost != cut.cost) {
-        os << " cost " << base.cost << " vs " << cut.cost;
+    if (base.cost != bounded.cost) {
+        os << " cost " << base.cost << " vs " << bounded.cost;
     }
-    if (base.reduced_cost != cut.reduced_cost) {
-        os << " rc " << base.reduced_cost << " vs " << cut.reduced_cost;
+    if (base.reduced_cost != bounded.reduced_cost) {
+        os << " rc " << base.reduced_cost << " vs " << bounded.reduced_cost;
     }
-    if (base.arcs != cut.arcs) {
-        os << " arcs differ (" << base.arcs.size() << " vs " << cut.arcs.size() << ")";
+    if (base.arcs != bounded.arcs) {
+        os << " arcs differ (" << base.arcs.size() << " vs " << bounded.arcs.size() << ")";
     }
     return os.str();
 }
 
-inline std::string column_diff(const mcfcg::TreeColumn& base, const mcfcg::TreeColumn& cut) {
+inline std::string column_diff(const mcfcg::TreeColumn& base, const mcfcg::TreeColumn& bounded) {
     std::ostringstream os;
     os.precision(17);
-    if (base.cost != cut.cost) {
-        os << " cost " << base.cost << " vs " << cut.cost;
+    if (base.cost != bounded.cost) {
+        os << " cost " << base.cost << " vs " << bounded.cost;
     }
-    if (base.reduced_cost != cut.reduced_cost) {
-        os << " rc " << base.reduced_cost << " vs " << cut.reduced_cost;
+    if (base.reduced_cost != bounded.reduced_cost) {
+        os << " rc " << base.reduced_cost << " vs " << bounded.reduced_cost;
     }
     // arc_flows is dumped from an unordered_map, so its order is not part of
     // the contract even though both pricers build the map identically.
@@ -716,15 +716,16 @@ inline std::string column_diff(const mcfcg::TreeColumn& base, const mcfcg::TreeC
         return flows;
     };
     auto base_flows = by_arc(base.arc_flows);
-    auto cut_flows = by_arc(cut.arc_flows);
-    if (base_flows.size() != cut_flows.size()) {
-        os << " arc_flows " << base_flows.size() << " vs " << cut_flows.size();
+    auto bounded_flows = by_arc(bounded.arc_flows);
+    if (base_flows.size() != bounded_flows.size()) {
+        os << " arc_flows " << base_flows.size() << " vs " << bounded_flows.size();
         return os.str();
     }
     for (size_t i = 0; i < base_flows.size(); ++i) {
-        if (base_flows[i].arc != cut_flows[i].arc || base_flows[i].flow != cut_flows[i].flow) {
+        if (base_flows[i].arc != bounded_flows[i].arc ||
+            base_flows[i].flow != bounded_flows[i].flow) {
             os << " arc_flow[" << i << "] " << base_flows[i].arc << ":" << base_flows[i].flow
-               << " vs " << cut_flows[i].arc << ":" << cut_flows[i].flow;
+               << " vs " << bounded_flows[i].arc << ":" << bounded_flows[i].flow;
             break;
         }
     }
@@ -742,19 +743,19 @@ inline std::string column_diff(const mcfcg::TreeColumn& base, const mcfcg::TreeC
 TEST(FeatureTests, BoundedPricingIgnoresDeadEndFrontier) {
     auto inst = bounded_pricing_test::build_deadend();
     mcfcg::TreePricer base_pricer;
-    mcfcg::TreePricer cut_pricer;
+    mcfcg::TreePricer bounded_pricer;
     base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/false);
-    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/true);
+    bounded_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/true);
 
     std::vector<double> pi_s(inst.sources.size(), 50.0);
     auto mu = inst.graph.create_arc_map<double>(0.0);
     auto base_cols = base_pricer.price(pi_s, mu, true);
-    auto cut_cols = cut_pricer.price(pi_s, mu, true);
+    auto bounded_cols = bounded_pricer.price(pi_s, mu, true);
 
-    EXPECT_EQ(cut_pricer.last_bounded_count(), 0U)
+    EXPECT_EQ(bounded_pricer.last_bounded_count(), 0U)
         << "a dead-end frontier must not be recorded as a bound hit";
-    ASSERT_EQ(base_cols.size(), cut_cols.size()) << "partial tree suppressed by the bound";
-    EXPECT_NEAR(base_pricer.lagrangian_path_sum(), cut_pricer.lagrangian_path_sum(), 1e-9)
+    ASSERT_EQ(base_cols.size(), bounded_cols.size()) << "partial tree suppressed by the bound";
+    EXPECT_NEAR(base_pricer.lagrangian_path_sum(), bounded_pricer.lagrangian_path_sum(), 1e-9)
         << "unreachable sink salvaged a saturated pseudo-distance into the LB";
 }
 
@@ -766,27 +767,27 @@ TEST(FeatureTests, BoundedPricingIgnoresDeadEndFrontier) {
 TEST(FeatureTests, BoundedPricingKeepsColumnWithZeroDemandCommodity) {
     auto inst = bounded_pricing_test::build_zero_demand();
     mcfcg::TreePricer base_pricer;
-    mcfcg::TreePricer cut_pricer;
+    mcfcg::TreePricer bounded_pricer;
     base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/false);
-    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/true);
+    bounded_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/true);
 
     std::vector<double> pi_s(inst.sources.size(), 1e6);
     auto mu = inst.graph.create_arc_map<double>(0.0);
     auto base_cols = base_pricer.price(pi_s, mu, true);
-    auto cut_cols = cut_pricer.price(pi_s, mu, true);
+    auto bounded_cols = bounded_pricer.price(pi_s, mu, true);
 
     ASSERT_EQ(base_cols.size(), 1U) << "baseline must find this obviously attractive tree";
-    ASSERT_EQ(cut_cols.size(), base_cols.size()) << "the bound dropped an improving column";
-    EXPECT_NEAR(base_cols[0].reduced_cost, cut_cols[0].reduced_cost, 1e-9);
+    ASSERT_EQ(bounded_cols.size(), base_cols.size()) << "the bound dropped an improving column";
+    EXPECT_NEAR(base_cols[0].reduced_cost, bounded_cols[0].reduced_cost, 1e-9);
 }
 
-// A cut source keeps the arc set from its last complete price, so the source
+// A bounded source keeps the arc set from its last complete price, so the source
 // pricing filter answers "was any arc I route over just capacitated?" from an
 // older routing.  Pinned rather than fixed: this is why switching the bound on
 // moves the CG trajectory (see the Shadow tests for the invariant that DOES
-// hold), and treating a cut source as affected instead costs +31% wall clock on
+// hold), and treating a bounded source as affected instead costs +31% wall clock on
 // intermodal — see should_record_arcs.
-TEST(FeatureTests, BoundedPricingFilterUsesStaleArcsForCutSources) {
+TEST(FeatureTests, BoundedPricingFilterUsesStaleArcsForBoundedSources) {
     auto inst = bounded_pricing_test::build_two_sources_and_spare_arc();
     ASSERT_EQ(inst.sources.size(), 2U);
     // The spare arc lies on no source's routing; the first arc out of vertex 0
@@ -815,20 +816,20 @@ TEST(FeatureTests, BoundedPricingFilterUsesStaleArcsForCutSources) {
     ASSERT_EQ(pricer.last_bounded_count(), 0U);
 
     // Source 0's convexity dual of 0 spends its budget before anything is
-    // settled, so it is cut and never refreshes its arcs.  Source 1's budget is
+    // settled, so the bound fires and it never refreshes its arcs.  Source 1's budget is
     // large enough to run to completion.
     std::vector<double> pi_s = {0.0, 1e6};
     (void)pricer.price(pi_s, mu, true);
-    ASSERT_EQ(pricer.last_bounded_count(), 1U) << "test setup did not cut exactly one source";
+    ASSERT_EQ(pricer.last_bounded_count(), 1U) << "test setup did not bound exactly one source";
 
-    // Capacitating an arc on nobody's routing postpones everyone, the cut
+    // Capacitating an arc on nobody's routing postpones everyone, the bounded
     // source included: its stale set is consulted exactly like a fresh one.
     pricer.filter_for_new_caps({spare});
     (void)pricer.price(pi_s, mu, false);
     EXPECT_EQ(pricer.last_priced_count(), 0U) << "a stale arc set still postpones";
 
     // And the stale set is the *seed* routing, not an empty or partial one:
-    // capacitating an arc it contains brings the cut source back.
+    // capacitating an arc it contains brings the bounded source back.
     pricer.filter_for_new_caps({routed});
     (void)pricer.price(pi_s, mu, false);
     EXPECT_EQ(pricer.last_priced_count(), 1U) << "the retained arc set is the complete one";
@@ -847,21 +848,21 @@ TEST(FeatureTests, BoundedPricingEmitsSameColumns) {
     mcfcg::TreeMaster master;
     master.init(inst);
     mcfcg::TreePricer base_pricer;
-    mcfcg::TreePricer cut_pricer;
+    mcfcg::TreePricer bounded_pricer;
     base_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/false);
-    cut_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/true);
+    bounded_pricer.init(inst, nullptr, 0, mcfcg::NEG_RC_TOL, /*bounded_pricing=*/true);
 
     std::vector<double> big_pi(inst.sources.size(), std::numeric_limits<double>::infinity());
     auto empty_mu = inst.graph.create_arc_map<double>(0.0);
     auto init_cols = base_pricer.price(big_pi, empty_mu, true);
     // The warm start's +inf duals must leave the bound inert, otherwise the
     // seeding pass would explore less than the full reachable graph.
-    (void)cut_pricer.price(big_pi, empty_mu, true);
-    EXPECT_EQ(cut_pricer.last_bounded_count(), 0U) << "+inf duals must disable the bound";
+    (void)bounded_pricer.price(big_pi, empty_mu, true);
+    EXPECT_EQ(bounded_pricer.last_bounded_count(), 0U) << "+inf duals must disable the bound";
     ASSERT_FALSE(init_cols.empty());
     master.add_columns(std::move(init_cols));
 
-    uint64_t total_cut = 0;
+    uint64_t total_fires = 0;
     for (uint32_t iter = 0; iter < 25; ++iter) {
         ASSERT_EQ(master.solve(), mcfcg::LPStatus::Optimal) << "LP not optimal at iter " << iter;
         auto primals = master.get_primals();
@@ -872,13 +873,13 @@ TEST(FeatureTests, BoundedPricingEmitsSameColumns) {
         // final_round on both so postponement can never make the two pricers
         // visit different sources — the comparison is about the bound alone.
         auto base_cols = base_pricer.price(pi_s, mu, true);
-        auto cut_cols = cut_pricer.price(pi_s, mu, true);
-        total_cut += cut_pricer.last_bounded_count();
+        auto bounded_cols = bounded_pricer.price(pi_s, mu, true);
+        total_fires += bounded_pricer.last_bounded_count();
 
-        ASSERT_EQ(base_cols.size(), cut_cols.size()) << "column count differs at iter " << iter;
+        ASSERT_EQ(base_cols.size(), bounded_cols.size()) << "column count differs at iter " << iter;
         for (size_t i = 0; i < base_cols.size(); ++i) {
-            ASSERT_EQ(base_cols[i].source_idx, cut_cols[i].source_idx) << "at iter " << iter;
-            EXPECT_EQ(bounded_pricing_test::column_diff(base_cols[i], cut_cols[i]), "")
+            ASSERT_EQ(base_cols[i].source_idx, bounded_cols[i].source_idx) << "at iter " << iter;
+            EXPECT_EQ(bounded_pricing_test::column_diff(base_cols[i], bounded_cols[i]), "")
                 << "at iter " << iter;
         }
 
@@ -890,7 +891,7 @@ TEST(FeatureTests, BoundedPricingEmitsSameColumns) {
     }
     // A pass where the bound never fired would satisfy every assertion above
     // vacuously.
-    EXPECT_GT(total_cut, 0U) << "the bound never fired; the comparison proved nothing";
+    EXPECT_GT(total_fires, 0U) << "the bound never fired; the comparison proved nothing";
 }
 
 // The ablation in results/ablation/ concluded "ship it off", but nothing pinned
@@ -908,7 +909,7 @@ TEST(FeatureTests, BoundedPricingIsOffByDefault) {
 
 // End-to-end: the bound must not move the optimum or cost optimality, on both
 // formulations and on the family it is actually meant for (intermodal, tree +
-// PricerHeavy — where a cut source must suppress its whole tree column rather
+// PricerHeavy — where a bounded source must suppress its whole tree column rather
 // than emit a partial one).
 TEST(FeatureTests, BoundedPricingPathMatchesReference) {
     auto opt = load_optimal(data_dir("commalab/planar"));
@@ -975,7 +976,7 @@ namespace bounded_pricing_test {
 // The shadow always prices final_round=true with no column cap, so its sweep
 // covers every source; whatever the baseline emits — possibly truncated by
 // max_cols or thinned by postponement — is a subset of that same sweep.  That
-// is what lets the two be compared without synchronizing postponement: a cut
+// is what lets the two be compared without synchronizing postponement: a bounded
 // source does not refresh its _source_arcs (see should_record_arcs), so
 // filter_for_new_caps would otherwise postpone different sources in the two
 // pricers and the comparison would be between different source sets.
@@ -1005,20 +1006,20 @@ public:
         // passing vacuously.
         EXPECT_FALSE(bounded_pricing) << "ShadowPricer drives both arms; leave the flag off";
         _base.init(inst, pool, batch_size, neg_rc_tol, /*bounded_pricing=*/false);
-        _cut.init(inst, pool, batch_size, neg_rc_tol, /*bounded_pricing=*/true);
+        _bounded.init(inst, pool, batch_size, neg_rc_tol, /*bounded_pricing=*/true);
     }
 
     void set_track_arcs(bool enabled) {
         _base.set_track_arcs(enabled);
-        _cut.set_track_arcs(enabled);
+        _bounded.set_track_arcs(enabled);
     }
 
     auto price(const std::vector<double>& duals, const mcfcg::static_map<uint32_t, double>& mu,
                bool final_round = false, uint32_t max_cols = 0) {
         auto base_cols = _base.price(duals, mu, final_round, max_cols);
-        auto cut_cols = _cut.price(duals, mu, /*final_round=*/true, /*max_cols=*/0);
-        fired += _cut.last_bounded_count();
-        check(base_cols, cut_cols);
+        auto bounded_cols = _bounded.price(duals, mu, /*final_round=*/true, /*max_cols=*/0);
+        fired += _bounded.last_bounded_count();
+        check(base_cols, bounded_cols);
         return base_cols;
     }
 
@@ -1029,20 +1030,24 @@ public:
         return _base.lagrangian_path_sum();
     }
     [[nodiscard]] double lb_error_bound() const noexcept { return _base.lb_error_bound(); }
-    [[nodiscard]] uint64_t last_bounded_count() const noexcept { return _cut.last_bounded_count(); }
-    [[nodiscard]] uint64_t last_priced_count() const noexcept { return _cut.last_priced_count(); }
+    [[nodiscard]] uint64_t last_bounded_count() const noexcept {
+        return _bounded.last_bounded_count();
+    }
+    [[nodiscard]] uint64_t last_priced_count() const noexcept {
+        return _bounded.last_priced_count();
+    }
 
     void filter_for_new_caps(const std::vector<uint32_t>& new_cap_arcs) {
         _base.filter_for_new_caps(new_cap_arcs);
-        _cut.filter_for_new_caps(new_cap_arcs);
+        _bounded.filter_for_new_caps(new_cap_arcs);
     }
     void clear_postponed() {
         _base.clear_postponed();
-        _cut.clear_postponed();
+        _bounded.clear_postponed();
     }
     void reset_postponed() {
         _base.reset_postponed();
-        _cut.reset_postponed();
+        _bounded.reset_postponed();
     }
 
 private:
@@ -1050,13 +1055,14 @@ private:
     // at the first mismatch: the loop runs for tens of iterations and a real
     // divergence would otherwise bury the first (and only diagnostic) one.
     template <typename ColumnT>
-    static void check(const std::vector<ColumnT>& base_cols, const std::vector<ColumnT>& cut_cols) {
+    static void check(const std::vector<ColumnT>& base_cols,
+                      const std::vector<ColumnT>& bounded_cols) {
         if (!failure.empty()) {
             return;
         }
         std::unordered_map<uint64_t, const ColumnT*> by_key;
-        by_key.reserve(cut_cols.size());
-        for (const auto& col : cut_cols) {
+        by_key.reserve(bounded_cols.size());
+        for (const auto& col : bounded_cols) {
             by_key.emplace(column_key(col), &col);
         }
         for (const auto& col : base_cols) {
@@ -1076,7 +1082,7 @@ private:
     }
 
     Inner _base;
-    Inner _cut;
+    Inner _bounded;
 };
 
 template <typename Shadow>
@@ -1120,7 +1126,7 @@ TEST(FeatureTests, BoundedPricingShadowPath) {
 
 // The family the bound is meant for, and the one where switching it on
 // measurably moves the trajectory.  PricerHeavy so the source pricing
-// filter — the mechanism that makes a cut source's stale _source_arcs matter —
+// filter — the mechanism that makes a bounded source's stale _source_arcs matter —
 // is live, and long paths so the integer-scaling allowance is under real load.
 TEST(FeatureTests, BoundedPricingShadowIntermodalTree) {
     auto path = data_dir("intermodal") + "/BUS-2632-0.txt.gz";

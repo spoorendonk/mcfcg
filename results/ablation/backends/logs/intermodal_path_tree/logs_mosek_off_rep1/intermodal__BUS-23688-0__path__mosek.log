@@ -1,7 +1,7 @@
-# cmd: /usr/bin/time -o /tmp/mcfcg_mem_0sqhgv1d.txt -f %M build/mcfcg_cli data/intermodal/BUS-23688-0.txt.gz --solver mosek --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
+# cmd: /usr/bin/time -o /tmp/mcfcg_mem_omtwy7ll.txt -f %M build/mcfcg_cli data/intermodal/BUS-23688-0.txt.gz --solver mosek --formulation path --max-iters 10000 --strategy pricer-heavy --time-limit 7200.0
 # outcome: ok
 # returncode: 0
-# peak_rss_kb: 1216396
+# peak_rss_kb: 1203856
 # peak_rss_source: measured
 # === STDERR (CG iteration log + preamble) ===
 Instance: 161993 vertices, 1653437 arcs, 23643 commodities, 23643 sources
@@ -10,22 +10,25 @@ Pricing threads: 32 (auto)
 Slack mode: CommodityRows (struct=23643, capped_arcs=1466539)
 [lp-config] backend=mosek version=11.0.30 method=barrier exec=CPU presolve=off crossover=off tol=0.0001 threads=auto(32)
    It           UB           LB       LP_obj   #col   #row  #slk   +col   -col   +cut   -cut    t_LP    t_PR    t_SP   t_Tot     t_acc
-    1          inf         -inf   6.0693e+05  47286  23709  1421      0      0     66      0   0.030   0.000   0.114   0.145     0.145
-    2          inf         -inf   6.1290e+05  48446  23709  1888   1160      0      0      0   0.068   0.245   0.113   0.430     0.575
-    3          inf         -inf   6.2623e+05  48446  23763   111      0      0     54      0   0.104   0.000   0.114   0.219     0.793
-    4          inf         -inf   6.2856e+05  49444  23763   308    998      0      0      0   0.134   0.237   0.113   0.487     1.280
-    5          inf         -inf   6.2726e+05  49444  23778    86      0      0     15      0   0.144   0.000   0.117   0.262     1.542
-    6          inf         -inf   6.2732e+05  49444  23790    97      0      0     12      0   0.169   0.000   0.115   0.285     1.827
-    7          inf         -inf   6.2737e+05  49523  23774    99     79      0      0     16   0.166   0.065   0.112   0.345     2.172
-    8          inf   5.3689e+05   6.3741e+05  50773  23770    81   1250      0      0      4   0.167   1.284   0.113   1.568     3.739
-    9          inf   5.3689e+05   6.2493e+05  50773  23778     5      0      0      8      0   0.176   0.000   0.119   0.296     4.036
-   10          inf   5.3689e+05   6.2496e+05  50815  23757     4     42      0      0     21   0.203   0.099   0.113   0.416     4.452
-   11          inf   6.2449e+05   6.2494e+05  51027  23754     1    212      0      0      3   0.194   1.203   0.114   1.513     5.965
-   12          inf   6.2449e+05   6.2488e+05  51027  23755     0      0      0      1      0   0.193   0.000   0.114   0.308     6.273
-   13   6.2488e+05   6.2483e+05   6.2488e+05  51027  23755     0    *12      0      0      0   0.198   1.276   0.116   1.590     7.863
-CG optimal after 13 iterations. UB=624882.000186 LB=624834.725789 gap=4.727e+01 tol=6.249e+01  t_LP=1.947  t_PR=5.586  t_SP=1.486  t_Tot=9.040
-[bounded-pricing] enabled=0 cut=0 priced=98274 rate=0.0%
+    1          inf         -inf   6.0693e+05  47286  23709  1421      0      0     66      0   0.025   0.000   0.108   0.134     0.134
+    2          inf         -inf   6.1290e+05  48446  23709  1888   1160      0      0      0   0.066   0.221   0.108   0.398     0.532
+    3          inf         -inf   6.2623e+05  48446  23764   112      0      0     55      0   0.101   0.000   0.109   0.212     0.744
+    4          inf         -inf   6.2856e+05  49443  23764   308    997      0      0      0   0.122   0.217   0.108   0.449     1.193
+    5          inf         -inf   6.2726e+05  49443  23778    82      0      0     14      0   0.142   0.000   0.108   0.252     1.444
+    6          inf         -inf   6.2733e+05  49443  23784    96      0      0      6      0   0.166   0.000   0.108   0.275     1.719
+    7          inf         -inf   6.2737e+05  49522  23764    99     79      0      0     20   0.146   0.062   0.108   0.318     2.038
+    8          inf   5.3668e+05   6.3741e+05  50778  23760    82   1256      0      0      4   0.156   1.140   0.114   1.412     3.450
+    9          inf   5.3668e+05   6.2493e+05  50778  23768     5      0      0      8      0   0.164   0.000   0.109   0.274     3.724
+   10          inf   5.3668e+05   6.2496e+05  50816  23737     4     38      0      0     31   0.195   0.093   0.107   0.397     4.121
+   11          inf   5.3668e+05   6.2495e+05  50816  23738     1      0      0      1      0   0.169   0.000   0.108   0.278     4.399
+   12          inf   6.2449e+05   6.2495e+05  51024  23734     1    208      0      0      4   0.175   1.186   0.110   1.473     5.872
+   13          inf   6.2449e+05   6.2488e+05  51024  23736     1      0      0      2      0   0.181   0.000   0.111   0.293     6.165
+   14   6.2488e+05   6.2449e+05   6.2488e+05  51026  23721     0      2      0      0     15   0.178   0.051   0.109   0.339     6.504
+   15   6.2488e+05   6.2449e+05   6.2488e+05  51026  23723     1      0      0      2      0   0.175   0.000   0.108   0.284     6.789
+   16   6.2488e+05   6.2483e+05   6.2488e+05  51026  23723     0    *11      0      0      0   0.183   1.185   0.108   1.476     8.265
+CG optimal after 16 iterations. UB=624882.000113 LB=624834.895113 gap=4.711e+01 tol=6.249e+01  t_LP=2.346  t_PR=5.257  t_SP=1.742  t_Tot=9.368
+[bounded-pricing] enabled=0 fired=0 priced=98414 rate=0.0%
 
 # === STDOUT (result CSV) ===
 instance,formulation,iterations,columns,objective,lower_bound,optimal,time,time_lp,time_pricing,time_separation
-data/intermodal/BUS-23688-0.txt.gz,path,13,27384,624882.000186,624834.725789,1,9.390,1.947,5.586,1.486
+data/intermodal/BUS-23688-0.txt.gz,path,16,27383,624882.000113,624834.895113,1,9.700,2.346,5.257,1.742
