@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -126,6 +127,31 @@ TEST(TransportationCorrectness, Winnipeg) {
     auto opt = load_optimal(data_dir("transportation"));
     auto inst = mcfcg::read_tntp(net, trips, 2000.0);
     solve_and_check(inst, opt.at("Winnipeg"));
+}
+
+// The trips reader counts tokens it could not parse and warns on stderr, so a
+// truncated OD matrix cannot silently shrink the instance into a different
+// problem.  The trap is that a bare ';' is the pair SEPARATOR, not a token:
+// counting it marks one phantom "malformed" entry per OD pair and fires the
+// warning on every clean file in data/, which would train a reader to ignore
+// it.  Assert a shipped, known-good file reads silently and in full.
+TEST(TransportationCorrectness, CleanTripsFileParsesWithoutWarning) {
+    auto net = data_dir("transportation") + "/Winnipeg_net.tntp.gz";
+    auto trips = data_dir("transportation") + "/Winnipeg_trips.tntp.gz";
+    if (!fs::exists(net)) {
+        GTEST_SKIP() << "data/transportation not found";
+    }
+
+    struct CerrCapture {
+        std::ostringstream buf;
+        std::streambuf* prev = std::cerr.rdbuf(buf.rdbuf());
+        ~CerrCapture() { std::cerr.rdbuf(prev); }
+    } capture;
+
+    auto inst = mcfcg::read_tntp(net, trips, 2000.0);
+
+    EXPECT_EQ(capture.buf.str(), "") << "a clean TNTP read must not warn";
+    EXPECT_EQ(inst.commodities.size(), 4345U);
 }
 
 // Winnipeg is the one shipped instance that triggers EdgeRows on path

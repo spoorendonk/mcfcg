@@ -1,4 +1,5 @@
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -82,9 +83,64 @@ static void parse_net(std::istream& file, const std::string& path, uint32_t& num
     }
 }
 
+// Outcome of reading one entry from an Origin block's token stream.
+// `Separator` is a bare ';' or an empty remainder — well-formed filler that
+// carries no pair; `Malformed` is input that does not fit the grammar at all.
+// The distinction is the whole point of the counter: conflating the two made
+// every clean trips file report one "malformed" token per OD pair.
+enum class PairParse : uint8_t { Pair, Separator, Malformed };
+
+// The format writes a ';' after every pair, sometimes glued to the number.
+static void strip_trailing_semicolons(std::string& token) {
+    while (!token.empty() && token.back() == ';') {
+        token.pop_back();
+    }
+}
+
+// Parse "<dest> : <demand>" starting from the already-read `token`, consuming
+// the two following tokens from `iss`.  Split out of parse_trips because the
+// two are independent responsibilities — this one owns the pair grammar, the
+// caller owns the file's block structure (metadata, Origin headers).
+static PairParse parse_od_pair(std::istringstream& iss, std::string& token, uint32_t& dest,
+                               double& demand) {
+    strip_trailing_semicolons(token);
+    if (token.empty()) {
+        return PairParse::Separator;
+    }
+    try {
+        dest = static_cast<uint32_t>(std::stoul(token));
+    } catch (...) {
+        return PairParse::Malformed;
+    }
+    if (!(iss >> token) || token != ":") {
+        return PairParse::Malformed;
+    }
+    if (!(iss >> token)) {
+        return PairParse::Malformed;
+    }
+    strip_trailing_semicolons(token);
+    if (token.empty()) {
+        return PairParse::Malformed;
+    }
+    try {
+        demand = std::stod(token);
+    } catch (...) {
+        return PairParse::Malformed;
+    }
+    return PairParse::Pair;
+}
+
 // Parse *_trips.tntp: skip metadata, read Origin blocks with dest:demand pairs.
-static void parse_trips(std::istream& file, double demand_coef,
-                        std::vector<Commodity>& commodities) {
+//
+// `malformed` counts tokens inside an Origin block that did not parse as a
+// `dest : demand` pair.  A truncated or corrupt trips file otherwise yields a
+// silently SMALLER instance rather than an error, which for a reproducibility
+// artifact is the wrong failure mode: the run succeeds and reports an optimum
+// for a problem nobody asked for.  read_tntp turns a non-zero count into a
+// warning naming the file, so the discrepancy is visible in the run log.
+static void parse_trips(std::istream& file, double demand_coef, std::vector<Commodity>& commodities,
+                        uint32_t& malformed) {
+    malformed = 0;
     std::string line;
     bool past_metadata = false;
     uint32_t current_origin = 0;
@@ -113,45 +169,24 @@ static void parse_trips(std::istream& file, double demand_coef,
         std::istringstream iss(line);
         std::string token;
         while (iss >> token) {
-            // token should be the destination number
             uint32_t dest = 0;
-            try {
-                dest = static_cast<uint32_t>(std::stoul(token));
-            } catch (...) {
-                continue;
-            }
-
-            // Next should be ":"
-            if (!(iss >> token) || token != ":") {
-                continue;
-            }
-
-            // Next is the demand value (possibly with trailing ;)
-            if (!(iss >> token)) {
-                continue;
-            }
-
-            // Remove trailing semicolons
-            while (!token.empty() && token.back() == ';') {
-                token.pop_back();
-            }
-            if (token.empty()) {
-                continue;
-            }
-
             double demand = 0.0;
-            try {
-                demand = std::stod(token);
-            } catch (...) {
+            auto outcome = parse_od_pair(iss, token, dest, demand);
+            if (outcome == PairParse::Separator) {
+                continue;
+            }
+            if (outcome == PairParse::Malformed) {
+                ++malformed;
                 continue;
             }
 
-            if (demand <= 0.0) {
-                continue;
+            // A zero (or negative) demand is a well-formed TNTP entry, not a
+            // parse failure — most trips files list every OD pair — so it is
+            // dropped without counting against `malformed`.
+            if (demand > 0.0) {
+                // 1-indexed -> 0-indexed, apply coefficient
+                commodities.push_back({current_origin - 1, dest - 1, demand / demand_coef});
             }
-
-            // 1-indexed -> 0-indexed, apply coefficient
-            commodities.push_back({current_origin - 1, dest - 1, demand / demand_coef});
         }
     }
 }
@@ -182,10 +217,16 @@ Instance read_tntp(const std::string& net_path, const std::string& trips_path, d
     }
 
     std::vector<Commodity> commodities;
+    uint32_t malformed_trips = 0;
     {
         std::string buf;
         auto stream = open_tntp(trips_path, buf);
-        parse_trips(*stream, demand_coef, commodities);
+        parse_trips(*stream, demand_coef, commodities, malformed_trips);
+    }
+    if (malformed_trips > 0) {
+        std::cerr << "WARNING: " << trips_path << ": skipped " << malformed_trips
+                  << " unparseable token(s) in the OD matrix; the instance is SMALLER than "
+                     "the file describes and results are not comparable to a clean read\n";
     }
 
     if (src.empty()) {

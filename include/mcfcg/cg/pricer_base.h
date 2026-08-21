@@ -26,6 +26,27 @@ namespace mcfcg {
 // keeps `g + h` addable without overflow.
 inline constexpr int64_t UNREACHED_BOUND = shortest_path_semiring<int64_t>::INFTY / 2;
 
+// Convert an already-scaled non-negative cost to integer distance units,
+// saturating at UNREACHED_BOUND instead of overflowing.
+//
+// A double->int64_t cast is undefined behaviour once the value leaves
+// int64_t's range, which `cost * SCALE` reaches for a scaled cost above
+// ~9.2e9.  Real arc costs are far below that, but the pricing cost is
+// `c_a - mu_a` and a capacity dual can in principle be pinned near the slack
+// cost ceiling, which MasterBase::init allows to reach 1e9 on the MOSEK/COPT
+// barriers — leaving ~9x of headroom rather than a guarantee.  Saturating
+// costs nothing and matches PricerBase::scale_dual, which already caps at this
+// same bound; a cost that large is semantically "as good as unreachable",
+// which is exactly what UNREACHED_BOUND means to the A*.
+//
+// Branch-free (select + min, no control flow) so the dense compute_rc loop
+// still auto-vectorizes under -march=native.
+inline int64_t scale_cost_saturating(double scaled) noexcept {
+    constexpr auto max_scaled = static_cast<double>(UNREACHED_BOUND);
+    return (scaled <= 0.0) ? int64_t{0}
+                           : static_cast<int64_t>(std::round(std::min(scaled, max_scaled)));
+}
+
 // Compute lower bounds from every vertex to the nearest sink using original
 // (unscaled) arc costs on the reverse graph.  All unique sink vertices across
 // all commodities are seeded with distance 0 and a single multi-source reverse
@@ -44,8 +65,7 @@ inline static_map<uint32_t, int64_t> compute_lower_bounds_to_targets(const Insta
     // Scale original costs to int64_t (same scale as pricing arc costs).
     auto orig_cost_scaled = g.create_arc_map<int64_t>();
     for (auto a : g.arcs()) {
-        double c = inst.cost[a];
-        orig_cost_scaled[a] = (c <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(c * scale));
+        orig_cost_scaled[a] = scale_cost_saturating(inst.cost[a] * scale);
     }
 
     // Collect all unique sink vertices.
@@ -442,7 +462,7 @@ protected:
         uint32_t n_arcs = _inst->graph.num_arcs();
         auto body = [&](uint32_t a) {
             double val = _inst->cost[a] - mu[a];
-            _rc[a] = (val <= 0.0) ? int64_t{0} : static_cast<int64_t>(std::round(val * SCALE));
+            _rc[a] = scale_cost_saturating(val * SCALE);
         };
         if (_pool != nullptr && n_arcs >= PAR_ARC_THRESHOLD) {
             _pool->parallel_for(n_arcs, [&](uint32_t a, uint32_t /*tid*/) { body(a); });
