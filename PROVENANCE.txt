@@ -354,6 +354,26 @@ every row. Everything else in the window is tooling and docs; the last commit to
 touch solver behaviour before the sweep began is 4a4f4b6 (2026-06-22), so v0.1.0
 reproduces every committed cell.
 
+One commit touches solver or reader code AFTER the last sweep and before v0.1.0.
+It is hardening, verified inert, and listed here because `git log` between the
+sweep and the tag would otherwise raise the question:
+
+    ab7a801 (2026-08-21)  saturate the double->int64_t scaled-cost casts
+                          in the pricer, and count rather than silently skip
+                          unparseable tokens in a TNTP trips file. Neither path
+                          is reachable on any shipped instance: the saturation
+                          cap sits ~900x above the largest scaled cost these
+                          instances produce (max_arc_cost 2.0e5 against a 1e7
+                          slack ceiling), and every committed TNTP file parses
+                          with zero malformed tokens. Verified two ways rather
+                          than argued: re-solving grid1-3 in both formulations
+                          at --threads 1 (the pricer is thread-order sensitive
+                          at the last few ulps, so serial is the deterministic
+                          comparison) gives bit-identical iterations, columns
+                          and objective before and after; and re-reading
+                          Winnipeg gives 4345 commodities / 135 sources /
+                          32.392 total demand either way.
+
 What the archive does NOT contain: `bench_runs/` is gitignored — bulky (583 CG run
 logs plus 165 baseline-solve logs) and fully regenerable — so the logs named in
 `source` are not part of this release or of the Zenodo archive. The consolidated
