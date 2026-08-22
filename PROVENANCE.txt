@@ -18,8 +18,33 @@ Code
     Archive      https://doi.org/10.5281/zenodo.22058614   (this version)
                  https://doi.org/10.5281/zenodo.22058613   (all versions)
                  Zenodo record 22058614, deposited 2026-08-22 from the v0.1.0
-                 GitHub release. Cite the version DOI for reproducibility; it
-                 pins the same tree this file describes.
+                 GitHub release.
+
+ERRATA for the v0.1.0 archive
+    The deposit at 10.5281/zenodo.22058614 carries two documentation errors,
+    corrected in the repository afterwards. No code, instance, or result table
+    is affected — only prose — and no v0.1.1 was cut, so read these two items
+    from the repository rather than from the archive.
+
+    1. The archived PROVENANCE.txt CONTRADICTS ITSELF about the benchmark
+       configuration. Section 1 is right: intermodal is the only family run
+       with --bounded-pricing, and the archived cg_benchmark.csv confirms it
+       (its intermodal rows name bench_runs/intermodal_rerun). Section 5.1 is
+       wrong: it says "no log behind that table carries the flag", "the
+       committed benchmark is uniformly an unbounded-pricing configuration",
+       and "the flag stays off in benchmark_solvers.py's per-family defaults".
+       All three are false of that same archive. Section 1 is the correct
+       account; 5.1 has been rewritten here.
+
+    2. The archived CLAUDE.md quotes intermodal pricing share as 73-83% under
+       COPT/MOSEK/cuOpt and 40-43% under HiGHS. Recomputed from the archived
+       table itself, those are 70-82% and 36%. The figures predate the
+       2026-08-22 re-run that the same archive contains.
+
+    Both are stale-prose artifacts of the re-run landing one commit before the
+    tag while the prose describing it landed after. Everything the tables
+    themselves assert is unaffected, and check_reproduction.py gates the
+    archive's objectives exactly as documented.
 
 Result tables pinned by this record
     results/cg_benchmark.csv        440 cells = 44 instances (grid 15, planar
