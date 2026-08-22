@@ -12,7 +12,7 @@ before quoting anything here.
 | file | rows | what it is | provenance | regenerate with |
 |---|---|---|---|---|
 | `cg_benchmark.csv` | 440 | The headline column-generation table: one row per (instance × formulation × backend) cell. | `PROVENANCE.txt` §1, §1.1 | `scripts/consolidate_cg_logs.py` |
-| `cg_iterations.csv` | 9601 | Per-iteration CG trace for 439 of those 440 cells (the one `killed SIGKILL` row has no trace). | `PROVENANCE.txt` §1 | `scripts/extract_iterations.py` |
+| `cg_iterations.csv` | 9626 | Per-iteration CG trace for 439 of those 440 cells (the one `killed SIGKILL` row has no trace). | `PROVENANCE.txt` §1 | `scripts/extract_iterations.py` |
 | `mps_compact_baseline.csv` | 175 | Direct barrier solves of the compact arc-flow LP, for comparison against CG. | `PROVENANCE.txt` §2, §2.2, §2.3 | `scripts/consolidate_mps_logs.py` |
 | `mps_compact_memory.csv` | 165 | Iteration-capped memory probe feeding the baseline table's `mem_gb`. | `PROVENANCE.txt` §2.1 | `scripts/consolidate_mps_logs.py` |
 | `ablation/families/` | 444 logs + 2 CSVs | Round (a) of the gh#41 bounded-pricing A/B: four families at one backend, 3 reps. Settled why the flag stays **off** by default — pricing share is 1–4% outside intermodal, so a 22% pricing saving moves the clock by nothing. | `ablation/README.md`, `ablation/families/README.md`, `PROVENANCE.txt` §5.1 | `scripts/analyze_bounded_pricing_ablation.py --round families` |
@@ -30,12 +30,21 @@ bulky, regenerable, and gitignored.
 full-sweep drivers (`benchmark_solvers.py`, `benchmark_mps.py`) that produce the
 logs in the first place.
 
-## Two caveats a reader needs
+## Three caveats a reader needs
+
+**The intermodal rows use a different CG configuration from the rest of the
+table.** `benchmark_solvers.py` sets per-family options, and intermodal is the
+only family run with `--bounded-pricing` (on top of `--strategy pricer-heavy`).
+The bound is exact — identical columns, pinned by
+`FeatureTests.BoundedPricingShadow*` — so it moves those rows' `time` and
+`iterations`, never their `objective`. Comparisons *within* intermodal are
+like-for-like; a cross-family timing comparison is not. `PROVENANCE.txt` §1 says
+why, and `ablation/` is the measurement behind it.
 
 **The `source` and `mem_source` columns name directories that are not in this
 archive.** They record *which local run* produced each row — a provenance
 breadcrumb, not a path you can open. `PROVENANCE.txt` §5 states this explicitly
-and lists the six log directories the table is consolidated from.
+and lists the seven log directories the table is consolidated from.
 
 **Objectives, not timings, are the reproducible quantity.** Wall-clock numbers
 measure the host pinned in `PROVENANCE.txt` §3. Use `scripts/check_reproduction.py`

@@ -16,9 +16,14 @@ noise. On intermodal, where pricing is 75–85% of the clock, it is worth **−2
 whose LP is a large share, the trajectory shift the bound causes is larger than
 the pricing saving and decides the sign in either direction — see round (b).
 
-**The flag ships off by default**, because the default is global and most
-families have nothing to win. That is not the same as the flag being useless, and
-this file is the argument for both halves.
+**The flag ships off as the library default**, because that default is global and
+most families have nothing to win. That is not the same as the flag being
+useless, and this file is the argument for both halves — so the benchmark driver
+acts on the other half: `scripts/benchmark_solvers.py` enables `--bounded-pricing`
+for **intermodal and no other family**, which is why the intermodal rows of
+`results/cg_benchmark.csv` are not configuration-identical to the rest of that
+table. `PROVENANCE.txt` section 1 records the split. The bound is exact, so this
+changes those rows' timings and iteration counts, never their optima.
 
 The measurement is split into rounds, each a directory named for the axis it
 varies. This file carries the argument — mechanism, gain model, traps — and each

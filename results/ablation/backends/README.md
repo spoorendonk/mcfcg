@@ -118,9 +118,11 @@ corroborating round (a), not as independent evidence.
 
 ## Disposition: off globally, and backend-conditional on this family
 
-The flag stays **off by default**. That verdict is about the global default:
-pricing share is the ceiling on anything the bound can deliver, and round (a)
-measured 1.0–3.2% on grid/planar against 78–85% here.
+The flag stays **off as the library default**. That verdict is about the global
+default: pricing share is the ceiling on anything the bound can deliver, and round
+(a) measured 1.0–3.2% on grid/planar against 78–85% here. It is turned on for
+intermodal alone in `scripts/benchmark_solvers.py`, on the strength of the numbers
+below.
 
 On intermodal the case is real but narrower than the pricing numbers alone
 suggest. Where the LP is not the bottleneck — COPT either executor, MOSEK — it is

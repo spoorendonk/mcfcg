@@ -63,16 +63,23 @@ class ExtraArgsReachChildTest(unittest.TestCase):
     def test_no_extra_args_leaves_command_unchanged(self):
         self.assertNotIn("--bounded-pricing", self.build_cmd([]))
 
-    def test_no_family_default_enables_bounded_pricing(self):
-        """gh #41 shipped bounded pricing off (see results/ablation/), and
-        results/cg_benchmark.csv has no extra_args column -- so a family default
-        that quietly turned it on would be both unrecorded and unnoticed."""
-        checked = 0
+    def test_bounded_pricing_is_an_intermodal_only_family_default(self):
+        """Intermodal is benchmarked WITH bounded pricing and the other three
+        families without it (see results/ablation/ and PROVENANCE section 1).
+        results/cg_benchmark.csv has no extra_args column, so the split is
+        recorded only in prose and here -- a family that silently drifted onto
+        the other side of it would go unnoticed in the published table."""
+        seen = {}
         for family in bs.FAMILY_OPTIMAL:
             for _inst, key, _form, extra in bs.enumerate_family(family):
-                self.assertNotIn("--bounded-pricing", extra, f"{family}/{key}")
-                checked += 1
-        self.assertGreater(checked, 0, "enumerate_family yielded nothing to check")
+                on = "--bounded-pricing" in extra
+                seen.setdefault(family, set()).add(on)
+                self.assertEqual(on, family == "intermodal", f"{family}/{key}")
+        self.assertEqual(set(seen), set(bs.FAMILY_OPTIMAL),
+                         "a family enumerated nothing, so its default went unchecked")
+        for family, flags in seen.items():
+            self.assertEqual(len(flags), 1,
+                             f"{family} is inconsistent about --bounded-pricing")
 
 
 class ExtraArgsQuotingTest(unittest.TestCase):

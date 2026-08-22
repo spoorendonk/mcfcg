@@ -56,6 +56,30 @@ Barrier regime: presolve off, crossover off, convergence tolerance 1e-4
 like. Crossover is re-enabled for a single solve when the CG loop stalls and
 requests a certified (vertex) solution; see README.md.
 
+CG configuration is NOT identical across families, and one difference matters
+when reading the table. `scripts/benchmark_solvers.py` sets per-family CLI
+options, and intermodal is the only family run with `--bounded-pricing`
+(alongside `--strategy pricer-heavy`, which it has always used):
+
+    grid, planar, transportation   library defaults
+    intermodal                     --strategy pricer-heavy --bounded-pricing
+
+Bounded single-source pricing (manuscript section 3.3) is EXACT — the emitted
+column set is identical bit-for-bit, pinned by FeatureTests.BoundedPricingShadow*
+— so it cannot move an optimum, only the time and the iteration count taken to
+reach it. It is enabled here because intermodal is the one family where pricing
+is 71-85% of wall clock and the bound is therefore worth something (gh #41 round
+(b): -6.0% copt-gpu, -5.4% copt-cpu, -2.2% mosek); on the other three, pricing is
+1-4% of the clock and the bound is lost in LP noise. The library default
+(CGParams::bounded_pricing) stays OFF, because that default is global.
+
+The consequence for a reader: intermodal wall-clock and iteration figures are
+this family's recommended configuration, not the same configuration as the other
+three families' rows. Comparisons WITHIN intermodal (path vs tree, backend vs
+backend) are like-for-like; a cross-family timing comparison is not. Drop the
+flag from the intermodal branch of benchmark_solvers.py to get the other side.
+results/ablation/ carries the measurement behind the choice.
+
 Every run since v0.1.0 self-reports its backend version in the one-line
 `[lp-config]` banner written to stderr at solver construction and captured in
 the run log:
@@ -88,16 +112,21 @@ CSV under the gitignored bench_runs/ tree — and the committed table is rebuilt
 from the logs. The gap was closed without re-solving, by moving each number into
 the matching run's log. Per-row provenance, `mem_source`:
 
-    backfilled:<csv>        410  relocated; the tag names the sweep CSV it came
+    backfilled:<csv>        310  relocated; the tag names the sweep CSV it came
                                  from and the row's `source` column names the log
                                  it went into, so the pairing is readable off the
                                  committed table
-    measured                 29  written live by the run itself (24
-                                 transportation re-runs, 5 issue-#40 re-runs)
+    measured                129  written live by the run itself (100 intermodal
+                                 re-runs, 24 transportation re-runs, 5 issue-#40
+                                 re-runs)
     backfilled-untimed:<csv>  1  transportation/Sydney/path/mosek, which errored
                                  with no result row and so could not be
                                  time-matched. Admitted deliberately: its
                                  95.8 GB peak is itself a headline datum
+
+The 2026-08-22 intermodal re-run (section 5) is why `measured` covers all 100
+intermodal cells: that sweep wrote the header live, so none of the family's
+memory figures are relocated any more.
 
 Unlike 2.2 this moves the SAME execution's measurement — CSV row and log are two
 records of one run — so it was gated on the two agreeing about wall time and
@@ -318,10 +347,11 @@ cuOpt — delta-API fork, CG benchmark ONLY (the compact baseline uses stock 26.
 5. Repository state during the benchmark runs
 ---------------------------------------------
 
-The 440 CG cells were collected between 2026-06-22 and 2026-08-07 and
-consolidated from six log directories by `scripts/consolidate_cg_logs.py`, which
+The 440 CG cells were collected between 2026-06-22 and 2026-08-22 and
+consolidated from seven log directories by `scripts/consolidate_cg_logs.py`, which
 re-parses logs and never re-solves; the `source` column names the log behind every
-row. The six, in the order the consolidator takes them:
+row. The seven, in the order the consolidator takes them (a later directory
+overrides an earlier one for the same cell):
 
     bench_runs/logs                     the main grid/planar/intermodal sweep
     bench_runs/intermodal_logs          intermodal
@@ -329,6 +359,16 @@ row. The six, in the order the consolidator takes them:
     bench_runs/transportation_logs_v2   transportation, re-run cells
     bench_runs/highs_hipo_ablation/logs all 88 HiGHS cells
     bench_runs/issue40_rerun/logs       the five cells re-run for issue #40 below
+    bench_runs/intermodal_rerun/logs    all 100 intermodal cells, re-run
+                                        2026-08-22 with --bounded-pricing (see 1)
+
+The last of those supersedes every intermodal row from the first two directories.
+It is a single-session sweep of the whole family on one build, so intermodal is
+internally comparable; it is also LATER than the other three families' sweeps, so
+a cross-family wall-clock comparison spans sessions as well as spanning the
+configuration difference of section 1. Objectives are unaffected either way — the
+bound is exact, and the re-run's optima agree with the superseded rows to 2.6e-05
+relative, well inside the 1e-3 reproduction gate.
 
 Four commits inside that window could affect a number:
 

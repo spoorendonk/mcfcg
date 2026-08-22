@@ -80,7 +80,18 @@ python3 scripts/benchmark_solvers.py
 | `--solvers` | `highs,mosek,cuopt,copt-cpu,copt-gpu` (the full {CPU,GPU}×{OSS,commercial} matrix + COPT GPU-off control) |
 | `--families` | `grid,planar,transportation,intermodal` |
 | `--time-limit` | `7200` (2 h CG wall-clock per run, enforced at iteration boundaries) |
-| formulation | per-family default: **tree** everywhere (intermodal additionally uses `--strategy pricer-heavy`) |
+| formulation | per-family default: **tree** everywhere |
+| per-family CLI | intermodal adds `--strategy pricer-heavy --bounded-pricing`; the other three families run library defaults |
+
+**Intermodal is the one family benchmarked with `--bounded-pricing`.** The bound
+is exact (identical columns, pinned by `FeatureTests.BoundedPricingShadow*`), so
+it changes intermodal's `time` and `iterations` but never its `objective`. It is
+on there because pricing is 71–85% of that family's wall clock and the bound is
+worth 2–6% under COPT/MOSEK; on the other three, pricing is 1–4% and the saving
+disappears into LP noise, which is also why the *library* default
+(`CGParams::bounded_pricing`) stays off. Consequence: intermodal rows are not
+configuration-identical to the rest of `results/cg_benchmark.csv`, so compare
+within the family, not across. See `PROVENANCE.txt` §1 and `results/ablation/`.
 
 Each run emits one CSV row (`instance,formulation,iterations,columns,objective,
 lower_bound,optimal,time,…`) to `--out` (default `bench_runs/cg/results.csv`) and

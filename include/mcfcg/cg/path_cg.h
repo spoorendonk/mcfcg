@@ -103,7 +103,11 @@ struct CGParams {
     // as soon as the frontier proves no negative-reduced-cost column remains
     // for it, instead of running until every sink of the source is settled.
     //
-    // Off by default.  The full argument, with the logs behind every number, is
+    // Off by default HERE, because this default is global and three of the four
+    // benchmark families have nothing to win.  Callers that know their instance
+    // is pricing-bound should set it: scripts/benchmark_solvers.py does exactly
+    // that for intermodal and no other family, so the published intermodal cells
+    // run with it on.  The full argument, with the logs behind every number, is
     // results/ablation/README.md; read it before changing this default.  In
     // short, from the two committed rounds:
     //

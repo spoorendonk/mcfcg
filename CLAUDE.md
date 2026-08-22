@@ -202,8 +202,13 @@ rounds. What it does not do is convert that into wall clock on most families.
 1.7–3.2%, transportation 4.3% family-wide, intermodal 80–85%. grid is the decisive
 test: the bound removes **22%** of its tree pricing time and the clock moves
 **+1.95%** — the wrong way, because 0.31 s of real saving sits under 1.13 s of LP
-noise. **Off by default everywhere, including the benchmark driver.** Measure it
-with `--extra-args=--bounded-pricing`.
+noise. **Off as the library default; on in the benchmark driver for intermodal
+only.** The library default is global and three of four families have nothing to
+win, so `CGParams::bounded_pricing` stays false. `benchmark_solvers.py` sets it
+per family, and intermodal — the one family where pricing is 71–85% of the clock —
+is benchmarked with it. On the other three, measure it with
+`--extra-args=--bounded-pricing`; the split is pinned by
+`extra_args_test.py::test_bounded_pricing_is_an_intermodal_only_family_default`.
 
 A family's raw wall-clock delta is **not** the effect: where the trajectory moves
 it is ±Δiterations, running −25% to +19% across intermodal cells. Decompose it —
@@ -240,11 +245,15 @@ Stable across both: `t_PR` down everywhere, and cells whose iteration count did
 not move being flat in wall clock.
 
 **So "off by default" is about the global default.** Pricing share is 1–4%
-outside intermodal, so the flag stays off — but where pricing dominates *and* the
-LP does not (COPT, MOSEK on intermodal) it is a reliable 2–6%, and `PricerHeavy`
-is the natural home if you act on it. Wiring it there needs its own before/after
-check per backend; `PricerHeavy` is not intermodal-only and does not know which
-backend it is running under.
+outside intermodal, so the library default stays off — but where pricing
+dominates *and* the LP does not (COPT, MOSEK on intermodal) it is a reliable
+2–6%. That is now acted on at the benchmark layer rather than in `CGParams`:
+`benchmark_solvers.py` turns the flag on for intermodal and nothing else, so the
+published intermodal cells are the family's recommended configuration while every
+other family stays at the library default. `PricerHeavy` would be the natural
+home for a code-level version, but it is not intermodal-only and does not know
+which backend it is running under, so wiring it there still needs its own
+before/after check per backend.
 
 The evidence lives in `results/ablation/`, split into rounds named for the axis
 each varies: round (a) (`families/`, gh #43) is 444 tracked logs / 74 paired

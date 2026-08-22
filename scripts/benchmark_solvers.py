@@ -145,14 +145,26 @@ def enumerate_family(family):
                        glob.glob(os.path.join(d, "intermodal", "SBT-*.txt.gz")))
         for inst in insts:
             key = os.path.basename(inst)[: -len(".txt.gz")]
-            # Tree is the default everywhere; intermodal additionally needs PricerHeavy.
-            # Deliberately NOT --bounded-pricing, even though this is the family
-            # with the highest pricing share (71-85%) and so the flag's best case
-            # on the suite: gh #41 measured it at -3.6% wall clock here and a wash
-            # or a loss everywhere else, which is not worth a per-family flag in
-            # the benchmark default. Pass --extra-args=--bounded-pricing to measure
-            # it; see results/ablation/README.md for what that already showed.
-            yield inst, key, "tree", ["--strategy", "pricer-heavy"]
+            # Tree is the default everywhere; intermodal additionally needs
+            # PricerHeavy, and is the ONE family benchmarked with
+            # --bounded-pricing.
+            #
+            # This is a per-family choice, not a change to the library default,
+            # which stays off (CGParams::bounded_pricing) because the default is
+            # global and pricing is 1-4% of wall clock on the other three
+            # families. Intermodal is the case the flag was built for: pricing is
+            # 71-85% of the clock here, and gh #41 round (b) measured -6.0%
+            # (copt-gpu) / -5.4% (copt-cpu) / -2.2% (mosek) wall clock, with
+            # pricing time down on all five backends. The bound is exact -- the
+            # emitted column set is identical bit-for-bit, pinned by
+            # FeatureTests.BoundedPricingShadow* -- so it moves timings and the CG
+            # trajectory, never the optimum. Benchmarking the family in its
+            # recommended configuration is the point.
+            #
+            # The cost is that intermodal rows are no longer configuration-identical
+            # to the other three families' rows; PROVENANCE section 1 records that.
+            # Drop the flag here to reproduce the pre-v0.1.0 intermodal numbers.
+            yield inst, key, "tree", ["--strategy", "pricer-heavy", "--bounded-pricing"]
         return
     raise ValueError(f"unknown family '{family}'")
 
