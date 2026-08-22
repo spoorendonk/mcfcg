@@ -11,8 +11,15 @@ Companion paper
 
 Code
     Repository   https://github.com/spoorendonk/mcfcg  (public, MIT)
-    Release tag  v0.1.0
-    Commit       `git rev-parse v0.1.0` at the tag that carries this file.
+    Release tag  v0.1.0  (2026-08-22)
+    Commit       db4326e — `git rev-parse v0.1.0^{commit}`. Note the ^{commit}:
+                 v0.1.0 is an annotated tag, so a bare `git rev-parse v0.1.0`
+                 returns the tag object, not the commit.
+    Archive      https://doi.org/10.5281/zenodo.22058614   (this version)
+                 https://doi.org/10.5281/zenodo.22058613   (all versions)
+                 Zenodo record 22058614, deposited 2026-08-22 from the v0.1.0
+                 GitHub release. Cite the version DOI for reproducibility; it
+                 pins the same tree this file describes.
 
 Result tables pinned by this record
     results/cg_benchmark.csv        440 cells = 44 instances (grid 15, planar

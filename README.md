@@ -458,8 +458,25 @@ The paper is **arXiv:2509.24656**, <https://arxiv.org/abs/2509.24656>:
 }
 ```
 
-Cite a tag, never `main`: the result tables under `results/` move with the code,
-and `PROVENANCE.txt` pins the solver stack only as of the tag that carries it.
+The archived code is on Zenodo. **v0.1.0 is [10.5281/zenodo.22058614](https://doi.org/10.5281/zenodo.22058614)**; the
+concept DOI [10.5281/zenodo.22058613](https://doi.org/10.5281/zenodo.22058613) always resolves to the latest version.
+Cite the version DOI when reproducibility matters — it pins one tree, one
+`PROVENANCE.txt`, one set of result tables:
+
+```bibtex
+@software{spoorendonk2026mcfcg,
+  title     = {mcfcg: column generation for minimum-cost multicommodity flow},
+  author    = {Spoorendonk, Simon and Petersen, Bj{\o}rn},
+  year      = {2026},
+  version   = {0.1.0},
+  doi       = {10.5281/zenodo.22058614},
+  url       = {https://doi.org/10.5281/zenodo.22058614}
+}
+```
+
+Cite a tag or a DOI, never `main`: the result tables under `results/` move with
+the code, and `PROVENANCE.txt` pins the solver stack only as of the tag that
+carries it.
 
 ## License
 

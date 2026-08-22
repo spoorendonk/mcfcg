@@ -16,7 +16,16 @@ authors:
 repository-code: "https://github.com/spoorendonk/mcfcg"
 license: MIT
 version: 0.1.0
-date-released: 2026-08-21
+date-released: 2026-08-22
+# Version DOI: this exact release. Matches `version:` above, so it is the one to
+# cite for reproducibility.
+doi: 10.5281/zenodo.22058614
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.22058613
+    description: >-
+      Concept DOI, resolving to the latest version of the software. Cite this
+      when you mean "mcfcg" rather than one specific release.
 abstract: >-
   A column generation solver for the minimum-cost multicommodity flow problem,
   supporting both path-based and tree-based Dantzig-Wolfe decompositions over a
