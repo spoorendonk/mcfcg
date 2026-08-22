@@ -270,7 +270,7 @@ the primary artifact and the CSVs are derived from them.
 Sanitisation is exactly one substitution: the absolute repo prefix, wherever it
 appears — the `# cmd:` header, the embedded result-CSV `instance` field, and
 transportation's `TNTP: net=/trips=` line. Nothing else is altered, so each
-tracked log is byte-identical to its original once that one string is removed.
+log is byte-identical to its original once that one string is removed.
 
 ```sh
 sed "s|$PWD/||g" bench_runs/.../run.log > results/ablation/families/logs/.../run.log

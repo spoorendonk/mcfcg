@@ -15,16 +15,23 @@ before quoting anything here.
 | `cg_iterations.csv` | 9626 | Per-iteration CG trace for 439 of those 440 cells (the one `killed SIGKILL` row has no trace). | `PROVENANCE.txt` §1 | `scripts/extract_iterations.py` |
 | `mps_compact_baseline.csv` | 175 | Direct barrier solves of the compact arc-flow LP, for comparison against CG. | `PROVENANCE.txt` §2, §2.2, §2.3 | `scripts/consolidate_mps_logs.py` |
 | `mps_compact_memory.csv` | 165 | Iteration-capped memory probe feeding the baseline table's `mem_gb`. | `PROVENANCE.txt` §2.1 | `scripts/consolidate_mps_logs.py` |
-| `ablation/families/` | 444 logs + 2 CSVs | Round (a) of the gh#41 bounded-pricing A/B: four families at one backend, 3 reps. Settled why the flag stays **off** by default — pricing share is 1–4% outside intermodal, so a 22% pricing saving moves the clock by nothing. | `ablation/README.md`, `ablation/families/README.md`, `PROVENANCE.txt` §5.1 | `scripts/analyze_bounded_pricing_ablation.py --round families` |
-| `ablation/backends/` | 240 logs + 2 CSVs | Round (b) of the same A/B: one family (intermodal) across five backends, mixed reps. Settled that the gain is backend-conditional: pricing time falls on all five, wall clock follows only where the LP is not the bottleneck (COPT/MOSEK **−2 to −6%**). | `ablation/README.md`, `ablation/backends/README.md`, `PROVENANCE.txt` §5.1 | `scripts/analyze_bounded_pricing_ablation.py --round backends` |
+| `ablation/families/` | 2 CSVs (from 444 local logs) | Round (a) of the gh#41 bounded-pricing A/B: four families at one backend, 3 reps. Settled why the flag stays **off** by default — pricing share is 1–4% outside intermodal, so a 22% pricing saving moves the clock by nothing. | `ablation/README.md`, `ablation/families/README.md`, `PROVENANCE.txt` §5.1 | `scripts/analyze_bounded_pricing_ablation.py --round families` |
+| `ablation/backends/` | 2 CSVs (from 240 local logs) | Round (b) of the same A/B: one family (intermodal) across five backends, mixed reps. Settled that the gain is backend-conditional: pricing time falls on all five, wall clock follows only where the LP is not the bottleneck (COPT/MOSEK **−2 to −6%**). | `ablation/README.md`, `ablation/backends/README.md`, `PROVENANCE.txt` §5.1 | `scripts/analyze_bounded_pricing_ablation.py --round backends` |
 
-`ablation/` is the one place raw logs are tracked — it settles a design question
-rather than feeding a results table, so the logs are the primary artifact and the
-CSVs are derived from them. It is split into rounds named for the axis each
-varies: `families/` is round (a), `backends/` is round (b). Read
-`ablation/README.md` for the argument the two rounds jointly make, and the round
-README before quoting any number from it. Everywhere else, per-run logs are
-bulky, regenerable, and gitignored.
+**No raw per-run logs are in this repository** — the artifact carries
+consolidated CSVs and documentation only. That includes the ablation's, which
+were tracked up to v0.1.0 and are now gitignored alongside every other log; they
+are kept on disk in a working checkout so
+`scripts/analyze_bounded_pricing_ablation.py` still re-derives
+`ablation/*/{runs,summary}.csv` locally, and they remain in git history for
+anyone who needs the raw runs. A fresh clone has the CSVs, not the logs, so the
+analyzer's committed-round tests skip there rather than fail.
+
+`ablation/` is split into rounds named for the axis each varies: `families/` is
+round (a), `backends/` is round (b). Read `ablation/README.md` for the argument
+the two rounds jointly make, and the round README before quoting any number from
+it — its wall-clock claims are **not** reproducible by re-running, which is why
+the derived CSVs are the record.
 
 `scripts/README.md` documents each consolidator's `--logdir` conventions and the
 full-sweep drivers (`benchmark_solvers.py`, `benchmark_mps.py`) that produce the

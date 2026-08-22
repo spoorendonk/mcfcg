@@ -256,7 +256,7 @@ which backend it is running under, so wiring it there still needs its own
 before/after check per backend.
 
 The evidence lives in `results/ablation/`, split into rounds named for the axis
-each varies: round (a) (`families/`, gh #43) is 444 tracked logs / 74 paired
+each varies: round (a) (`families/`, gh #43) is 444 logs / 74 paired
 cells at 3 reps; round (b) (`backends/`, gh #44) is 240 logs / 100 cells, mixed
 reps by design (HiGHS 3 off reps, the rest 1+1). Both re-derive with
 `scripts/analyze_bounded_pricing_ablation.py` (`--round` for one) and are pinned

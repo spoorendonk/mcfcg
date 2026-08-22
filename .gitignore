@@ -12,16 +12,18 @@ data/intermodal/raw/
 *.mps.gz
 *.mps
 # Benchmark outputs (scripts/benchmark_solvers.py).
-# Per-run CG logs are bulky and regenerable — never tracked. The gh#41
-# bounded-pricing A/B is the exception: it settles a design question rather than
-# feeding a results table, so its logs ARE the artifact. They are tracked under
-# results/ablation/<round>/logs/, which no rule here ignores; a sweep's raw
-# output still lands under bench_runs/ and is copied across sanitised. See
-# results/ablation/README.md.
+# Per-run logs are never tracked, anywhere — only the consolidated CSVs under
+# results/ are. That includes the gh#41 bounded-pricing ablation logs, which
+# were tracked until v0.1.0 and are now local-only: keep them on disk so
+# scripts/analyze_bounded_pricing_ablation.py can still re-derive
+# results/ablation/*/{runs,summary}.csv here, but they are not part of the
+# published artifact. `git log -- results/ablation/*/logs` recovers them if a
+# reviewer ever needs the raw runs. See results/ablation/README.md.
 bench-logs/
 bench_runs/
 bench-*.log
 Highs.log
+results/ablation/*/logs/
 # Intermediate/ad-hoc result CSVs stay local (scripts default under bench_runs/);
 # the canonical full-suite "one truth" results are committed under results/.
 bench-*.csv

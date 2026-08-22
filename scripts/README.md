@@ -241,12 +241,16 @@ python3 scripts/extract_iterations.py                        # same --logdir set
 python3 scripts/consolidate_mps_logs.py
 ```
 
-The bounded-pricing ablation is the one exception to "logs are never tracked":
-it settles a design question rather than feeding a results table, so its raw logs
-are the primary artifact and ship under `results/ablation/`. It is split into
-rounds, each a directory named for the axis it varies — round (a),
-`families/`, is one backend across four families. Its analyzer re-parses those
-tracked logs and never re-solves:
+Logs are never tracked, the bounded-pricing ablation included: `results/ablation/`
+ships its four consolidated CSVs and its READMEs, not the 684 runs behind them.
+Those logs were tracked until v0.1.0 and are now gitignored, kept on disk in a
+working checkout so the analyzer still re-derives the CSVs locally, and
+recoverable from git history if the raw runs are ever needed. A fresh clone has
+the CSVs only, so the analyzer's committed-round tests skip there.
+
+The ablation is split into rounds, each a directory named for the axis it
+varies — round (a), `families/`, is one backend across four families. Its
+analyzer re-parses those logs and never re-solves:
 
 ```
 # ablation logs -> results/ablation/families/{runs,summary}.csv

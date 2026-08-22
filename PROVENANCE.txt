@@ -422,7 +422,7 @@ produced each row, not a file you can open from the archive. Reproducing a row
 means re-running it, not re-parsing a log.
 
 
-5.1 Bounded-pricing ablation — the one tracked log set
+5.1 Bounded-pricing ablation — CSVs archived, logs local-only
 -----------------------------------------------------------
 
 `results/ablation/` holds the A/B measurement behind the decision to ship bounded
@@ -431,10 +431,23 @@ default is global, and outside intermodal pricing is 1–4% of wall clock, so th
 is nothing to win there (round (a)); on intermodal, where pricing is 80–85%, the
 bound is worth −2 to −6% on the backends whose LP is not the bottleneck, and is
 swamped by the trajectory shift on the ones whose LP is (round (b)). Both halves
-of that are measured here. This is the one tracked log set in
-this repo, committed because the ablation settles a design question rather than
-feeding a tabulated result: the logs are the primary artifact and the CSVs are
-derived from them.
+of that are measured here.
+
+The four CSVs are archived; the 684 raw logs behind them are NOT. They were
+tracked until v0.1.0 and are now gitignored like every other per-run log, so this
+artifact carries consolidated results and documentation only. They are kept on
+disk in the authors' checkout, where
+`scripts/analyze_bounded_pricing_ablation.py` still re-derives both rounds'
+CSVs byte-identically, and they remain retrievable from git history before the
+removal commit.
+
+Read the CSVs accordingly. For the main tables, re-running IS the reproduction
+path and the logs are merely a breadcrumb. Here it is the reverse: the ablation's
+claims are wall-clock deltas, and section 5.1's own warning below — the same
+comparison measured twice gave opposite signs on HiGHS — means re-running does
+not regenerate them. The CSVs are therefore the terminal record of what was
+measured, not a checkpoint on a path a third party can re-walk. A reviewer who
+needs the raw runs should ask the authors or recover them from history.
 
 It is organised into rounds, each a directory named for the axis it varies.
 
@@ -507,7 +520,7 @@ deleted in gh #45, along with every other pre-round artifact of this feature —
 the earlier implementation variants and their one-off analysis scripts. Nothing
 in `results/` cites any of them.
 
-One measurement cited in `results/ablation/README.md` has no tracked logs and
+One measurement cited in `results/ablation/README.md` has no logs behind it and
 never could: the rejected stale-arc fix (+31% wall clock, 2026-08-14, intermodal
 tree/PricerHeavy on copt-cpu, 2 reps per arm). It measured a change that was then
 reverted, so it is not reproducible from any commit in this repo; its table is
@@ -533,12 +546,12 @@ history at b096b17.
 Commits that move a number in these CSVs: 2b04a0c and 8f26247 (2026-08-19)
 collected and documented round (a), 7fc24e1 and b096b17 (2026-08-20) round (b),
 and the commit that adds this paragraph re-measured both. Between such commits the
-numbers are frozen — re-deriving re-parses the tracked logs and never re-solves,
+numbers are frozen — re-deriving re-parses the local logs and never re-solves,
 so nothing outside a change to the analyzer or to the logs themselves can move
 them.
 
 `scripts/analyze_bounded_pricing_ablation.py` re-derives both CSVs from the
-tracked logs and never re-solves, the same relationship `consolidate_cg_logs.py`
+local logs and never re-solves, the same relationship `consolidate_cg_logs.py`
 has to the main table; rerunning it is byte-identical to what is committed. Add
 `--round families|backends` for one round.
 

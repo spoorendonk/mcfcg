@@ -145,7 +145,7 @@ same LP optimum on every cell (`d_obj_rel < 1e-3`, asserted by
 
 ## Reproducing
 
-The CSVs re-derive from the tracked logs with no re-solve, byte-identically:
+The CSVs re-derive from the logs with no re-solve, byte-identically:
 
 ```
 python3 scripts/analyze_bounded_pricing_ablation.py --round backends

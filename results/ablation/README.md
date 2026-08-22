@@ -36,12 +36,12 @@ quotable:
 | (b) | [`backends/`](backends/README.md) | five backends on one family, HiGHS at 3 off reps | landed (gh #44) |
 
 Every number below comes from round (a) unless it says otherwise, and every one
-of them is re-derivable from that round's tracked logs.
+of them is re-derivable from that round's logs.
 
 Scope: every number in this file and in the two round READMEs derives from those
-rounds' tracked logs, with one exception — the rejected stale-arc fix, whose
+rounds' logs, with one exception — the rejected stale-arc fix, whose
 measurement is transcribed in full in the appendix below. That one measured a
-code change that was then reverted, so no tracked log can carry it and
+code change that was then reverted, so no log can carry it and
 re-deriving it means re-applying the change; the table is the record.
 
 Nothing from the flag's development survives as an artifact: the pre-rename
@@ -66,7 +66,7 @@ at a master optimum every structural row has a basic column at reduced cost 0, s
 the frontier reaches the sink at almost exactly the dual: an exact-zero test lands
 just short of the proof it needs and almost never triggers, while the same test
 with the tolerance folded in fires on most searches. Measured fire rates across
-round (a)'s tracked logs, median per family: intermodal 72%, grid 61–64%, planar
+round (a)'s logs, median per family: intermodal 72%, grid 61–64%, planar
 23–47%, transportation 35%.
 
 ## The result
@@ -245,7 +245,7 @@ source regardless of postponement:
   65–77% fire rate makes nearly every source affected and the filter stops
   filtering; SBT-56295 alone paid **+68%** at an unchanged iteration count. The
   full table is in the appendix below — it is the one measurement here with no
-  tracked logs behind it.
+  logs behind it.
 - **A weaker lower bound.** `salvage_lagr_term` substitutes
   `d_k·(bound_f/SCALE − margin)` for the `sp_k` a truncated search never
   computed. Valid but weaker, so `best_lb` differs and the gap exit fires on a
@@ -267,20 +267,33 @@ Each round owns its artifacts; nothing sits at this level but this file.
 | `backends/summary.csv` | as above, for round (b): 100 cells, wall clock decomposed into `t_pr`/`t_lp` |
 | `backends/logs/intermodal_path_tree/logs_<solver>_<off\|on>_<rep>/` | round (b)'s raw run logs |
 
-Derive every round's CSVs from its tracked logs — this re-parses and never
+Derive every round's CSVs from its logs — this re-parses and never
 re-solves. Add `--round families|backends` to do just one:
 
     python3 scripts/analyze_bounded_pricing_ablation.py
 
-Unlike the main benchmark — whose logs live in the gitignored `bench_runs/` and
-are regenerable by re-running `benchmark_solvers.py` — these logs are **tracked**.
-The ablation settles a design question rather than feeding a results table, so
-the logs are the primary artifact and the CSVs are derived from them.
+**These logs are not in the repository.** They were tracked up to v0.1.0 and are
+now gitignored like every other per-run log: the published artifact carries
+consolidated CSVs and documentation, not raw runs. They are kept on disk in a
+working checkout so the analyzer above still re-derives both rounds' CSVs
+locally, byte-identically, with no re-solve.
+
+Two consequences worth stating plainly. A fresh clone does **not** have them, so
+the analyzer has nothing to read and
+`analyze_bounded_pricing_ablation_test.py`'s committed-round tests skip rather
+than fail. And unlike the main benchmark — whose `bench_runs/` logs are
+regenerable by re-running `benchmark_solvers.py` — these are **not** regenerable
+in the sense that matters: the ablation's claims are wall-clock deltas, and
+re-running produces different ones (see "Two things not to redo"). For anyone who
+needs the raw runs, they remain in git history:
+
+    git log --diff-filter=D -- 'results/ablation/*/logs' | head
+    git checkout <commit-before-removal> -- results/ablation
 
 Sanitisation is exactly one substitution: the absolute repo prefix, wherever it
 appears — the `# cmd:` header, the instance field of the embedded result-CSV row,
 and transportation's `TNTP: net=/trips=` line. Nothing else is altered, so each
-tracked log is byte-identical to its original once that one string is removed.
+log is byte-identical to its original once that one string is removed.
 
 See each round's README for its sweep commands. Both arms of a comparison must
 run in the same session on the same build, alternating `off` and `on` per
@@ -339,7 +352,7 @@ no `features unavailable` line. The benchmark runs themselves were not made with
 
 ## Appendix: the rejected stale-arc fix
 
-The one measurement cited here with no tracked logs behind it, transcribed
+The one measurement cited here with no logs behind it, transcribed
 because the code it justifies is still in the tree and the run directory is not
 (gh #45). It measured a **reverted** change, so no log of the shipped build could
 carry it; reproducing it means re-applying the change below.
