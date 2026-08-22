@@ -153,7 +153,8 @@ def enumerate_family(family):
             # which stays off (CGParams::bounded_pricing) because the default is
             # global and pricing is 1-4% of wall clock on the other three
             # families. Intermodal is the case the flag was built for: pricing is
-            # 71-85% of the clock here, and gh #41 round (b) measured -6.0%
+            # 70-82% of the clock here under COPT/MOSEK/cuOpt (36% under HiGHS,
+            # whose LP dominates), and gh #41 round (b) measured -6.0%
             # (copt-gpu) / -5.4% (copt-cpu) / -2.2% (mosek) wall clock, with
             # pricing time down on all five backends. The bound is exact -- the
             # emitted column set is identical bit-for-bit, pinned by

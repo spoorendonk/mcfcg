@@ -75,10 +75,15 @@ Bounded single-source pricing (manuscript section 3.3) is EXACT — the emitted
 column set is identical bit-for-bit, pinned by FeatureTests.BoundedPricingShadow*
 — so it cannot move an optimum, only the time and the iteration count taken to
 reach it. It is enabled here because intermodal is the one family where pricing
-is 71-85% of wall clock and the bound is therefore worth something (gh #41 round
-(b): -6.0% copt-gpu, -5.4% copt-cpu, -2.2% mosek); on the other three, pricing is
-1-4% of the clock and the bound is lost in LP noise. The library default
-(CGParams::bounded_pricing) stays OFF, because that default is global.
+is 70-82% of wall clock under COPT/MOSEK/cuOpt (36% under HiGHS, whose LP
+dominates instead) and the bound is therefore worth something (gh #41 round (b):
+-6.0% copt-gpu, -5.4% copt-cpu, -2.2% mosek); on the other three families,
+pricing is 0.1-3.3% of the clock and the bound is lost in LP noise. The library
+default (CGParams::bounded_pricing) stays OFF, because that default is global.
+
+Those shares are of this table as it now stands, recomputed after the 2026-08-22
+intermodal re-run of section 5; the ablation READMEs quote slightly different
+figures because theirs are measured on the ablation's own runs, not on these.
 
 The consequence for a reader: intermodal wall-clock and iteration figures are
 this family's recommended configuration, not the same configuration as the other
@@ -421,7 +426,7 @@ sweep and the tag would otherwise raise the question:
                           Winnipeg gives 4345 commodities / 135 sources /
                           32.392 total demand either way.
 
-What the archive does NOT contain: `bench_runs/` is gitignored — bulky (583 CG run
+What the archive does NOT contain: `bench_runs/` is gitignored — bulky (683 CG run
 logs plus 165 baseline-solve logs) and fully regenerable — so the logs named in
 `source` are not part of this release or of the Zenodo archive. The consolidated
 CSVs under `results/` are the committed record; `source` documents which run
@@ -562,14 +567,23 @@ local logs and never re-solves, the same relationship `consolidate_cg_logs.py`
 has to the main table; rerunning it is byte-identical to what is committed. Add
 `--round families|backends` for one round.
 
-This ablation does NOT feed `results/cg_benchmark.csv`. No log behind that table
-carries the flag under either name — the feature postdates all 440 cells — so the
-committed benchmark is uniformly an unbounded-pricing configuration, and the flag
-stays off in `benchmark_solvers.py`'s per-family defaults. Note also that
-`cg_benchmark.csv` has no `extra_args` column: if a family default ever does gain
-a flag — and round (b) is the case for intermodal gaining this one — this file is
-the only place that can record it. The flag is `--bounded-pricing`; it was
-renamed in gh #42, and no committed artifact predates that rename.
+This ablation does NOT feed `results/cg_benchmark.csv` — no ablation log is one
+of the seven directories section 5 consolidates — but it did decide part of that
+table's configuration, and as of 2026-08-22 the two are no longer independent:
+
+    grid, planar, transportation   340 cells, no --bounded-pricing
+    intermodal                     100 cells, WITH --bounded-pricing
+
+So the committed benchmark is NOT uniformly an unbounded-pricing configuration,
+and the flag does NOT stay off in `benchmark_solvers.py`'s per-family defaults.
+Round (b) is what motivated turning it on for intermodal; section 1 states the
+split and what it costs a reader. `cg_benchmark.csv` has no `extra_args` column,
+so this file and `scripts/benchmark_solvers.py` are the only places the split is
+recorded — which is why `extra_args_test.py` pins it as a test rather than
+leaving it to prose.
+
+The flag is `--bounded-pricing`; it was renamed in gh #42, and no committed
+artifact predates that rename.
 
 
 6. Reproducibility and licensing

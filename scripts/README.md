@@ -86,7 +86,7 @@ python3 scripts/benchmark_solvers.py
 **Intermodal is the one family benchmarked with `--bounded-pricing`.** The bound
 is exact (identical columns, pinned by `FeatureTests.BoundedPricingShadow*`), so
 it changes intermodal's `time` and `iterations` but never its `objective`. It is
-on there because pricing is 71–85% of that family's wall clock and the bound is
+on there because pricing is 70–82% of that family's wall clock and the bound is
 worth 2–6% under COPT/MOSEK; on the other three, pricing is 1–4% and the saving
 disappears into LP noise, which is also why the *library* default
 (`CGParams::bounded_pricing`) stays off. Consequence: intermodal rows are not

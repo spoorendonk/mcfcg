@@ -205,7 +205,7 @@ test: the bound removes **22%** of its tree pricing time and the clock moves
 noise. **Off as the library default; on in the benchmark driver for intermodal
 only.** The library default is global and three of four families have nothing to
 win, so `CGParams::bounded_pricing` stays false. `benchmark_solvers.py` sets it
-per family, and intermodal — the one family where pricing is 71–85% of the clock —
+per family, and intermodal — the one family where pricing is 70–82% of the clock —
 is benchmarked with it. On the other three, measure it with
 `--extra-args=--bounded-pricing`; the split is pinned by
 `extra_args_test.py::test_bounded_pricing_is_an_intermodal_only_family_default`.
@@ -333,7 +333,7 @@ Two instance formats, both `.gz`-capable via zlib: CommaLab/UniPi plain-numeric 
 ### Intermodal pitfalls
 
 SUBWAY / BUS / SBT instances (from the Lienkamp & Schiffer repo) are far larger than grid/planar — hundreds of thousands of vertices, millions of arcs after time-expansion.
-- **Use the tree formulation with `PricerHeavy`.** `solve_tree_cg` is robust on BUS/SBT under COPT and MOSEK in both presets, converging to the paper's LP optimum on BUS-2632. Intermodal spends 73–83% of wall clock in the pricer under COPT/MOSEK/cuOpt (only 40–43% under HiGHS, whose LP is far slower) — hence the family where bounded pricing was worth evaluating; see above for why it is still off. (MOSEK solves intermodal path in comparable time, but the per-commodity master is the wrong default on high-commodity instances generally.) Integration tests use `solve_tree_cg` + `PricerHeavy` via `solve_intermodal_and_check`.
+- **Use the tree formulation with `PricerHeavy`.** `solve_tree_cg` is robust on BUS/SBT under COPT and MOSEK in both presets, converging to the paper's LP optimum on BUS-2632. Intermodal spends 70–82% of wall clock in the pricer under COPT/MOSEK/cuOpt (only ~36% under HiGHS, whose LP is far slower) — hence the family where bounded pricing was worth evaluating; see above for why it is still off. (MOSEK solves intermodal path in comparable time, but the per-commodity master is the wrong default on high-commodity instances generally.) Integration tests use `solve_tree_cg` + `PricerHeavy` via `solve_intermodal_and_check`.
 - **Writer precision matters.** `write_commalab` emits `-1` for `isinf(capacity)` and preserves fractional costs (no `llround`), mirroring `start_run.py::write_instance`. Round-tripping a cleaned instance through the older truncating writer would drop fractional walking-arc costs (0.5 → 0, 1.5 → 2) and produce a platform-dependent `LLONG_MIN` sentinel that the reader accidentally still maps to INF; `RoundTripFractionalCostAndInfCap` guards this.
 
 ### cuOpt GPU pitfalls
