@@ -8,6 +8,7 @@ Companion paper
     S. Spoorendonk and B. Petersen,
     "Tree-based formulation for the multi-commodity flow problem",
     arXiv:2509.24656 — https://arxiv.org/abs/2509.24656
+    v3 (2026-08-25) is the version whose numbers this artifact produced.
 
 Code
     Repository   https://github.com/spoorendonk/mcfcg  (public, MIT)

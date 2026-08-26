@@ -3,9 +3,9 @@
 Column generation solver for the minimum-cost multicommodity flow (MCF)
 problem with path-based and tree-based Dantzig-Wolfe decompositions.
 
-Based on: S. Spoorendonk and B. Petersen,
+The implementation accompanying: S. Spoorendonk and B. Petersen,
 [Tree-based formulation for the multi-commodity flow problem](https://arxiv.org/abs/2509.24656),
-2025.
+arXiv:2509.24656, 2026 (v3, 25 Aug 2026).
 
 ## Problem and formulations
 
@@ -444,13 +444,17 @@ Cite the paper for the result and the archived release for the code.
 [`CITATION.cff`](CITATION.cff) carries both in machine-readable form — GitHub's
 "Cite this repository" button reads it.
 
-The paper is **arXiv:2509.24656**, <https://arxiv.org/abs/2509.24656>:
+The paper is **arXiv:2509.24656**, <https://arxiv.org/abs/2509.24656>. Its
+current version is **v3 (25 Aug 2026)**, a substantial revision of the 2025
+v1/v2: every number it reports was produced by release v0.1.0 of this
+repository, and the 44 instances × 2 formulations × 5 backends it studies are
+the 440 cells of `results/cg_benchmark.csv`. Cite the year of that version:
 
 ```bibtex
-@misc{spoorendonk2025treemcf,
+@misc{spoorendonk2026treemcf,
   title        = {Tree-based formulation for the multi-commodity flow problem},
   author       = {Spoorendonk, Simon and Petersen, Bj{\o}rn},
-  year         = {2025},
+  year         = {2026},
   eprint       = {2509.24656},
   archivePrefix= {arXiv},
   primaryClass = {math.OC},
