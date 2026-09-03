@@ -1,5 +1,11 @@
 # mcfcg
 
+[![CI](https://github.com/spoorendonk/mcfcg/actions/workflows/ci.yml/badge.svg)](https://github.com/spoorendonk/mcfcg/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![C++23](https://img.shields.io/badge/C%2B%2B-23-blue.svg)
+[![arXiv](https://img.shields.io/badge/arXiv-2509.24656-b31b1b.svg)](https://arxiv.org/abs/2509.24656)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22058613.svg)](https://doi.org/10.5281/zenodo.22058613)
+
 Column generation solver for the minimum-cost multicommodity flow (MCF)
 problem with path-based and tree-based Dantzig-Wolfe decompositions.
 
