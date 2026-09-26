@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -41,6 +42,55 @@ TEST(TreeCGCorrectness, SingleSourceNoCap) {
                    "1 4 5\n1 3 3\n");
     verify_path_tree_agreement(path, 29.0);
     std::remove(path.c_str());
+}
+
+// The arc u -> v of `inst`, or INF_U32.
+static uint32_t find_arc(const mcfcg::Instance& inst, uint32_t u, uint32_t v) {
+    for (uint32_t a : inst.graph.out_arcs(u)) {
+        if (inst.graph.arc_target(a) == v) {
+            return a;
+        }
+    }
+    return mcfcg::INF_U32;
+}
+
+static bool same_flows(const std::vector<mcfcg::TreeColumn::ArcFlow>& a,
+                       const std::vector<mcfcg::TreeColumn::ArcFlow>& b) {
+    return std::ranges::equal(
+        a, b, [](const auto& x, const auto& y) { return x.arc == y.arc && x.flow == y.flow; });
+}
+
+// Regression (spoorendonk/mcfcg#46), tree formulation: a column that stays
+// at its index during purge_aged_columns keeps its arc flows.  Source 0
+// has a cheap tree (kept, index 0) and an expensive one that ages out;
+// source 1 has one tree.
+TEST(TreeCGPurge, KeepsArcFlowsOfColumnsThatStayInPlace) {
+    std::string path = mcfcg::test::unique_test_path("tree_purge_in_place.txt");
+    write_instance(path, 4, 4, 2, "1 3 1 10\n2 3 2 10\n3 4 1 10\n1 4 10 10\n", "1 4 4\n2 4 3\n");
+    auto inst = mcfcg::read_commalab(path);
+    std::remove(path.c_str());
+    auto arc = [&](uint32_t u, uint32_t v) { return find_arc(inst, u, v); };
+    ASSERT_EQ(inst.sources.size(), 2U);
+    using Flow = mcfcg::TreeColumn::ArcFlow;
+    const std::vector<Flow> cheap = {{.arc = arc(0, 2), .flow = 4.0},
+                                     {.arc = arc(2, 3), .flow = 4.0}};
+    const std::vector<Flow> dear = {{.arc = arc(0, 3), .flow = 4.0}};
+    const std::vector<Flow> other = {{.arc = arc(1, 2), .flow = 3.0},
+                                     {.arc = arc(2, 3), .flow = 3.0}};
+    mcfcg::TreeMaster master;
+    master.init(inst);
+    master.add_columns({{.source_idx = 0, .cost = 8.0, .arc_flows = cheap},
+                        {.source_idx = 0, .cost = 40.0, .arc_flows = dear},
+                        {.source_idx = 1, .cost = 9.0, .arc_flows = other}});
+    ASSERT_EQ(master.solve(), mcfcg::LPStatus::Optimal);
+    const auto primals = master.get_primals();
+    master.update_column_ages(primals);
+    master.update_column_ages(primals);
+
+    ASSERT_EQ(master.purge_aged_columns(1), 1U);  // only the expensive tree
+    ASSERT_EQ(master.columns().size(), 2U);
+    EXPECT_TRUE(same_flows(master.columns()[0].arc_flows, cheap));
+    EXPECT_TRUE(same_flows(master.columns()[1].arc_flows, other));
 }
 
 // --- Binding capacity forces split, obj* = 21 ---

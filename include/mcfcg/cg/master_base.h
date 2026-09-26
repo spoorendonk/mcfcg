@@ -800,7 +800,13 @@ public:
             int32_t new_lp = mask[_col_to_lp[c]];
             if (new_lp >= 0) {
                 old_to_new[c] = write;
-                _columns[write] = std::move(_columns[c]);
+                // Survivors before the first purged column stay in place
+                // (write == c). Self-move-assigning a column would empty
+                // its arcs (std::vector's self-move leaves it empty in
+                // libstdc++), so only move a column that actually moves.
+                if (write != c) {
+                    _columns[write] = std::move(_columns[c]);
+                }
                 _col_to_lp[write] = static_cast<uint32_t>(new_lp);
                 _col_age[write] = _col_age[c];
                 ++write;

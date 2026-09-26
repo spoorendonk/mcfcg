@@ -155,6 +155,45 @@ TEST_F(PathCGMultiSourceCap, ColPurgeWithMultiSourceCapacity) {
     EXPECT_NEAR(result.objective, 21.0, 1e-4);
 }
 
+// The arc u -> v of `inst`, or INF_U32.
+static uint32_t find_arc(const mcfcg::Instance& inst, uint32_t u, uint32_t v) {
+    for (uint32_t a : inst.graph.out_arcs(u)) {
+        if (inst.graph.arc_target(a) == v) {
+            return a;
+        }
+    }
+    return mcfcg::INF_U32;
+}
+
+// Regression (spoorendonk/mcfcg#46): purge_aged_columns compacts the
+// survivors in place, and a survivor that stays at its index (every one
+// before the first purged column) must keep its arcs.  An unguarded
+// self-move-assignment emptied them, so compute_arc_flow lost those
+// columns' flow and separation missed capacity violations.
+TEST_F(PathCGSingleSource, ColPurgeKeepsArcsOfColumnsThatStayInPlace) {
+    auto inst = mcfcg::read_commalab(path);
+    auto arc = [&](uint32_t u, uint32_t v) { return find_arc(inst, u, v); };
+    // Commodity 0 (0 -> 3, d=5): the cheap path first (it stays at index
+    // 0) and an expensive one that ages out; commodity 1 (0 -> 2, d=3).
+    const std::vector<uint32_t> cheap = {arc(0, 1), arc(1, 2), arc(2, 3)};
+    const std::vector<uint32_t> dear = {arc(0, 1), arc(1, 3)};
+    const std::vector<uint32_t> direct = {arc(0, 2)};
+    mcfcg::PathMaster master;
+    master.init(inst);
+    master.add_columns({{.cost = 4.0, .commodity = 0, .arcs = cheap},
+                        {.cost = 7.0, .commodity = 0, .arcs = dear},
+                        {.cost = 4.0, .commodity = 1, .arcs = direct}});
+    ASSERT_EQ(master.solve(), mcfcg::LPStatus::Optimal);
+    const auto primals = master.get_primals();
+    master.update_column_ages(primals);
+    master.update_column_ages(primals);
+
+    ASSERT_EQ(master.purge_aged_columns(1), 1U);  // only the expensive path
+    ASSERT_EQ(master.columns().size(), 2U);
+    EXPECT_EQ(master.columns()[0].arcs, cheap);
+    EXPECT_EQ(master.columns()[1].arcs, direct);
+}
+
 TEST_F(PathCGSingleSource, ColPurgeDisabledMatchesDefault) {
     auto inst = mcfcg::read_commalab(path);
     mcfcg::CGParams params;
