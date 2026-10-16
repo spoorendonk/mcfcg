@@ -72,23 +72,36 @@ set(HIPO ON CACHE BOOL "" FORCE)
 # actually available in the CLI/tests. Verify with `mcfcg_cli --verbose-solver`:
 # the HiGHS log must show HiPO/IPX, not "Using dual simplex solver".
 set(BUILD_SHARED_EXTRAS_LIB OFF CACHE BOOL "" FORCE)
-# HiPO needs a system BLAS (gh #49). Finding it here does two things:
+# HiPO needs a system BLAS (gh #49), and it is found here, before HiGHS:
 #  * Without one, HiGHS' own configure stops deep in its FetchContent tree with
 #    a bare "Could NOT find BLAS"; this says what to install instead.
-#  * It sets BLAS_LIBRARIES, which makes HiGHS' FindHipoDeps skip
-#    find_package(OpenBLAS CONFIG). Ubuntu's OpenBLASConfig.cmake (libopenblas-dev
-#    0.3.x, multiarch) resolves its root one level too high and names
-#    /usr/lib/lib/libopenblas.so, which fails at link time; HiGHS then finds the
-#    library through CMake's FindBLAS instead, at its real path.
+#  * The BLAS::BLAS target made here is the one HiGHS links (FindBLAS makes the
+#    target only once), and the BLAS_LIBRARIES set here makes HiGHS'
+#    FindHipoDeps skip find_package(OpenBLAS CONFIG). Ubuntu's
+#    OpenBLASConfig.cmake (libopenblas-dev, multiarch) resolves its root one
+#    level too high and names /usr/lib/lib/libopenblas.so, which broke the link.
+#  * OpenBLAS is tried first, as HiGHS does: HiGHS defines HIPO_USES_OPENBLAS
+#    (and calls openblas_set_num_threads) whenever an OpenBLAS search succeeds,
+#    so linking another BLAS while OpenBLAS is also installed (FindBLAS's
+#    vendor-less order puts MKL and FlexiBLAS first) would fail at link time.
+#    An explicit -DBLA_VENDOR is left to decide.
 # macOS uses Accelerate, which HiGHS finds itself.
 if(NOT APPLE)
-    find_package(BLAS QUIET)
+    if(NOT BLA_VENDOR)
+        set(BLA_VENDOR OpenBLAS)
+        find_package(BLAS QUIET)
+        unset(BLA_VENDOR)
+    endif()
+    if(NOT BLAS_FOUND)
+        find_package(BLAS QUIET)
+    endif()
     if(NOT BLAS_FOUND)
         message(FATAL_ERROR
             "No BLAS found. HiGHS' interior-point solver (HiPO) needs one: "
             "install OpenBLAS (Debian/Ubuntu: `sudo apt install libopenblas-dev`) "
             "and re-run cmake.")
     endif()
+    message(STATUS "BLAS for HiPO: ${BLAS_LIBRARIES}")
 endif()
 set(BUILD_TESTING_ORIG ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)

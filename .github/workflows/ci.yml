@@ -34,7 +34,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake zlib1g-dev
+          sudo apt-get install -y cmake zlib1g-dev libopenblas-dev
 
       - name: Configure
         run: cmake -B build
@@ -53,7 +53,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake zlib1g-dev
+          sudo apt-get install -y cmake zlib1g-dev libopenblas-dev
 
       - name: Install clang-tidy ${{ env.LLVM_VERSION }}
         run: |
