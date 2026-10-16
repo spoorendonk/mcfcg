@@ -25,10 +25,10 @@ private:
 
 public:
     static_digraph() = default;
-    static_digraph(const static_digraph &) = default;
-    static_digraph(static_digraph &&) = default;
-    static_digraph &operator=(const static_digraph &) = default;
-    static_digraph &operator=(static_digraph &&) = default;
+    static_digraph(const static_digraph&) = default;
+    static_digraph(static_digraph&&) = default;
+    static_digraph& operator=(const static_digraph&) = default;
+    static_digraph& operator=(static_digraph&&) = default;
 
     [[nodiscard]] constexpr uint32_t num_vertices() const noexcept {
         return static_cast<uint32_t>(_out_arc_begin.size());
@@ -55,7 +55,7 @@ public:
     template <std::ranges::forward_range S, std::ranges::forward_range T>
         requires std::convertible_to<std::ranges::range_value_t<S>, vertex> &&
                      std::convertible_to<std::ranges::range_value_t<T>, vertex>
-    static_digraph(std::size_t num_verts, S &&sources, T &&targets)
+    static_digraph(std::size_t num_verts, S&& sources, T&& targets)
         : _out_arc_begin(num_verts, arc{0}),
           _arc_target(std::forward<T>(targets)),
           _arc_source(std::forward<S>(sources)),
@@ -96,8 +96,8 @@ public:
 
     [[nodiscard]] constexpr auto in_arcs(vertex u) const noexcept {
         assert(is_valid_vertex(u));
-        const arc *begin = _in_arcs.data() + _in_arc_begin[u];
-        const arc *end = (u + 1 < num_vertices()) ? _in_arcs.data() + _in_arc_begin[u + 1]
+        const arc* begin = _in_arcs.data() + _in_arc_begin[u];
+        const arc* end = (u + 1 < num_vertices()) ? _in_arcs.data() + _in_arc_begin[u + 1]
                                                   : _in_arcs.data() + num_arcs();
         return std::span<const arc>(begin, end);
     }
@@ -116,7 +116,7 @@ public:
         return static_map<vertex, T>(num_vertices());
     }
     template <typename T>
-    [[nodiscard]] constexpr auto create_vertex_map(const T &val) const noexcept {
+    [[nodiscard]] constexpr auto create_vertex_map(const T& val) const noexcept {
         return static_map<vertex, T>(num_vertices(), val);
     }
 
@@ -125,7 +125,7 @@ public:
         return static_map<arc, T>(num_arcs());
     }
     template <typename T>
-    [[nodiscard]] constexpr auto create_arc_map(const T &val) const noexcept {
+    [[nodiscard]] constexpr auto create_arc_map(const T& val) const noexcept {
         return static_map<arc, T>(num_arcs(), val);
     }
 };
