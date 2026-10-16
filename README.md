@@ -234,8 +234,9 @@ Development hooks are tracked in [`.githooks/`](.githooks): `commit-msg`
 tracked C++ file is clang-formatted) and `pre-push` (no merge commits on main,
 a review receipt for the pushed commit, then a clean build, the tests and the
 `tidy` clang-tidy gate in a fresh worktree of that commit). They come from
-[wcp](https://github.com/spoorendonk/wcp); see `CLAUDE.md` for the details. Git only runs hooks from `core.hooksPath`, which is per-checkout config
-and therefore cannot itself be tracked, so `cmake -B build` sets it for you. It
+[wcp](https://github.com/spoorendonk/wcp); see `CLAUDE.md` for the details.
+Git only runs hooks from `core.hooksPath`, which is per-checkout config and
+therefore cannot itself be tracked, so `cmake -B build` sets it for you. It
 leaves an existing `.githooks` value alone and warns rather than overwriting a
 hooksPath you set deliberately. To do it by hand, or after configuring with
 `-DMCFCG_INSTALL_GIT_HOOKS=OFF`:
