@@ -72,6 +72,24 @@ set(HIPO ON CACHE BOOL "" FORCE)
 # actually available in the CLI/tests. Verify with `mcfcg_cli --verbose-solver`:
 # the HiGHS log must show HiPO/IPX, not "Using dual simplex solver".
 set(BUILD_SHARED_EXTRAS_LIB OFF CACHE BOOL "" FORCE)
+# HiPO needs a system BLAS (gh #49). Finding it here does two things:
+#  * Without one, HiGHS' own configure stops deep in its FetchContent tree with
+#    a bare "Could NOT find BLAS"; this says what to install instead.
+#  * It sets BLAS_LIBRARIES, which makes HiGHS' FindHipoDeps skip
+#    find_package(OpenBLAS CONFIG). Ubuntu's OpenBLASConfig.cmake (libopenblas-dev
+#    0.3.x, multiarch) resolves its root one level too high and names
+#    /usr/lib/lib/libopenblas.so, which fails at link time; HiGHS then finds the
+#    library through CMake's FindBLAS instead, at its real path.
+# macOS uses Accelerate, which HiGHS finds itself.
+if(NOT APPLE)
+    find_package(BLAS QUIET)
+    if(NOT BLAS_FOUND)
+        message(FATAL_ERROR
+            "No BLAS found. HiGHS' interior-point solver (HiPO) needs one: "
+            "install OpenBLAS (Debian/Ubuntu: `sudo apt install libopenblas-dev`) "
+            "and re-run cmake.")
+    endif()
+endif()
 set(BUILD_TESTING_ORIG ${BUILD_TESTING})
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)

@@ -208,8 +208,9 @@ $$
 
 ## Build
 
-Requires C++23, CMake 3.20+, and zlib.  HiGHS ships as a FetchContent
-dependency — no external install needed.
+Requires C++23, CMake 3.20+, zlib and a BLAS (OpenBLAS: `libopenblas-dev` on
+Debian/Ubuntu), which HiGHS' interior-point solver needs.  HiGHS itself ships
+as a FetchContent dependency — no external install needed.
 
 ```bash
 cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY
