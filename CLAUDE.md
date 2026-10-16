@@ -138,6 +138,8 @@ Git hooks live in `.githooks/` and are tracked; they came from [wcp](https://git
 
 **The lint is HiGHS-only.** The local CI configures with no optional backend, so `src/lp/{copt,cuopt,mosek}_solver.cpp` are not in its compile database and go unlinted at push. The old hook configured a separate lint tree with every backend whose SDK it found; to lint those files now, configure with the backend's `-DMCFCG_USE_*=ON` and run the `tidy` target by hand.
 
+Formatting-only commits are listed in `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to have `git blame` skip them.
+
 On a shared machine, pin the local CI to the job budget: `git config hooks.localCiCpus 0-3` makes the blocks' `-j$(nproc)` see four CPUs; run the push itself under the machine lock (`xk lock -- git push …`).
 
 `.claude/` is gitignored, owned by this repo, and not part of the published artifact — edit it in place; it holds only permission rules and a statusline, both written by `wcp init`. A new Claude Code hook must read its file path and command from the hook JSON **on stdin**, never `$CLAUDE_FILE_PATH` (unset by Claude Code — a hook reading it no-ops silently rather than failing).

@@ -1,0 +1,5 @@
+# Formatting-only commits, skipped by `git blame` once configured:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: clang-format two headers the old hook never reached
+54b3bfdf992485dff972ab261ea4509b4b7263db
