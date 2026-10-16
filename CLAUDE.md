@@ -1,6 +1,47 @@
+<!-- wcp: CLAUDE.md base=91ce1f117627 type=cpp -->
+<!-- wcp-declined: a6e5ec6d33d8 CLAUDE.md Discipline -->
+<!-- wcp-declined: 1a2483f6e234 Plan Adherence -->
+<!-- wcp-declined: e1a2b49b4c80 Reference Correctness -->
+<!-- wcp-declined: 027569c8a6fc Common Mistakes -->
+<!-- wcp-declined: 913ba5bd4d6f LSP -->
+# Project: mcfcg
+
+Column generation solver for minimum-cost multicommodity flow (MCF), with path-based and tree-based Dantzig-Wolfe decompositions.
+
 Navigation: LSP → narrow Grep → sliced Read.
 
-# Standards
+## Build & Test
+
+```clean
+rm -rf build
+```
+
+```build
+cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY && cmake --build build -j$(nproc)
+```
+
+```test
+GTEST_BRIEF=1 ctest --test-dir build --output-on-failure --progress -j$(nproc)
+```
+
+```lint
+cmake --build build --target tidy -j$(nproc)
+```
+
+`pre-push` runs these four blocks as the local CI (`## Tooling and Gates`), so keep them executable as written. The `lint` block is the clang-tidy gate (`## clang-tidy`); it fails, rather than passing silently, when clang-tidy is missing and CMake therefore defines no `tidy` target.
+
+Single test by name:
+```
+./build/mcfcg_tests --gtest_filter='PathCGSingleSource.OptimalObjective'
+./build/mcfcg_integration_tests --gtest_filter='GridCorrectness.Grid1'
+```
+
+`scripts/` has a stdlib-unittest tier in `test/python/`, run by ctest as `Python.Scripts`. It exists because those scripts carry the provenance of every committed result, and their failure mode is a silently blank or mislabelled column rather than a crash. Add tests as `test/python/<module>_test.py` — the `_test.py` suffix matches the C++ convention and is why ctest passes `-p "*_test.py"`; unittest's default `test*.py` would discover nothing. Files must sit directly in `test/python/`: discovery does not recurse, and the directory is not a package, so `python3 -m unittest test.python.foo` will not work.
+
+```
+python3 -m unittest discover -s test/python -p '*_test.py'                # all
+python3 -m unittest discover -s test/python -p '*_test.py' -k preserves   # one
+```
 
 ## Communication Style
 
@@ -78,17 +119,28 @@ When a complexity warning fires, don't extract methods mechanically. Ask what th
 plan (non-trivial) → implement → test → push to main
 ```
 
-Nothing formats on save — there are no Claude Code hooks. `clang-format` runs at commit time: `pre-commit` formats the staged C++, applies safe `clang-tidy` fixes, and re-stages the result, so what you commit is canonical even though the file you just edited is not. Don't hand-tune formatting — let the hook normalize it, or run it yourself:
+Nothing formats on save and nothing formats at commit: `pre-commit` only checks (`## Tooling and Gates`). Don't hand-tune formatting — run clang-format yourself before committing:
 
 ```
-clang-format -i <files>                       # normalize in place
-clang-format --dry-run --Werror <files>       # check only, non-zero if unformatted
-git diff --name-only --diff-filter=d HEAD | grep -E '\.(cpp|h)$' | xargs -r clang-format -i
+git ls-files -z '*.h' '*.cpp' | xargs -0 clang-format -i   # every tracked source, as pre-commit checks them
+clang-format --dry-run --Werror <files>                    # check only, non-zero if unformatted
 ```
 
-The same step covers shell and Python via `shfmt` / `ruff`, but **neither is installed here**, so those are silent no-ops — treat Python edits as unformatted and unchecked. Run tests locally before considering work done, even on trivial-looking changes. The pre-push hook is the final gate; it too skips steps whose tool is missing, so its shellcheck, ruff and mypy passes currently report nothing rather than warn.
+Neither `shfmt` nor `ruff` is installed here, and no hook runs them — treat shell and Python edits as unformatted and unchecked. Run tests locally before considering work done, even on trivial-looking changes.
 
-The hooks are **tracked in `.githooks/`** (`commit-msg`, `pre-commit`, `pre-push`, and the sourced `resolve-venv.sh`) — edit them there, not in `.git/hooks/`, which is empty of ours. Git only runs them when `core.hooksPath` points at that directory, and that setting is per-checkout config which cannot be tracked; `cmake -B build` sets it (option `MCFCG_INSTALL_GIT_HOOKS`, ON), leaving an existing `.githooks` value alone and warning rather than clobbering a hooksPath someone else set. To wire a clone up by hand: `git config core.hooksPath .githooks`. `.claude/` is still gitignored, owned by this repo, and not part of the published artifact — edit it in place; it holds only permission rules and a statusline; a new Claude Code hook must read its file path and command from the hook JSON **on stdin**, never `$CLAUDE_FILE_PATH` (unset by Claude Code — a hook reading it no-ops silently rather than failing). The clang-tidy gate deliberately lives outside the hooks, as the tracked `tidy` target plus the CI lint job, so a fresh clone can still run it — via CI, or `--target tidy` by hand. **Never `git push --no-verify` or `git commit --no-verify`** unless asked; a failing hook is a signal, so fix the root cause.
+## Tooling and Gates
+
+Git hooks live in `.githooks/` and are tracked; they came from [wcp](https://github.com/spoorendonk/wcp) (`wcp init`), see `## Hooks Are Files In This Repository`. `core.hooksPath` is per-checkout and cannot be committed, so **a fresh clone has no gates until `wcp init`, `cmake -B build` (option `MCFCG_INSTALL_GIT_HOOKS`, ON) or `git config core.hooksPath .githooks` is run in it**. The CMake option leaves an existing `.githooks` value alone and warns rather than clobbering a hooksPath someone else set.
+
+- **pre-commit** — `clang-format --dry-run -Werror` over every tracked C++ file. It checks, it does not reformat: run the format command above and commit again. No tests and no clang-tidy at commit.
+- **commit-msg** — Conventional Commits, subject ≤72 chars. `fixup!`/`squash!`/`amend!` pass through so `git rebase --autosquash` works, and `type!:` marks a breaking change (both local edits to wcp's hook).
+- **pre-push** — refuses merge commits on the trunk and a HEAD without a review receipt (`## Self-Review`), then runs the `clean`/`build`/`test`/`lint` blocks of `## Build & Test` in a fresh worktree of the pushed commit, outside this checkout. That build fetches and compiles HiGHS from scratch, so a push takes minutes. A push changing only `*.md` files (except the root CLAUDE.md, whose blocks are the CI's commands), the root LICENSE or the root `.gitignore` skips it.
+
+**The lint is HiGHS-only.** The local CI configures with no optional backend, so `src/lp/{copt,cuopt,mosek}_solver.cpp` are not in its compile database and go unlinted at push. The old hook configured a separate lint tree with every backend whose SDK it found; to lint those files now, configure with the backend's `-DMCFCG_USE_*=ON` and run the `tidy` target by hand.
+
+On a shared machine, pin the local CI to the job budget: `git config hooks.localCiCpus 0-3` makes the blocks' `-j$(nproc)` see four CPUs; run the push itself under the machine lock (`xk lock -- git push …`).
+
+`.claude/` is gitignored, owned by this repo, and not part of the published artifact — edit it in place; it holds only permission rules and a statusline, both written by `wcp init`. A new Claude Code hook must read its file path and command from the hook JSON **on stdin**, never `$CLAUDE_FILE_PATH` (unset by Claude Code — a hook reading it no-ops silently rather than failing).
 
 ## Git Workflow
 
@@ -99,6 +151,36 @@ Feature branches are optional for larger changes: always branch from main (`git 
 After a successful push:
 - **Close any gh issue the work resolved**: `gh issue close <num> -c "<one-line note>"`, for every issue the push covers.
 - **Delete the feature branch** if one was used: `git branch -d <branch>`, plus `git push origin --delete <branch>` if pushed.
+
+## Hooks Are Files In This Repository
+
+The git hooks live in `.githooks/` as ordinary shell scripts, committed like any other file. `wcp init` copies them there and points `core.hooksPath` at them; wcp installs no Claude Code hooks at all. The gate is those files and nothing else, so a clone without wcp installed is still gated — including the review receipt, which is a line of plain git the Self-Review section documents rather than anything wcp runs.
+
+- **They are yours to read, and yours to edit.** Each hook carries a `# wcp:` line recording the digest of the bytes wcp wrote. That is what lets `wcp doctor` tell an edit you made from a version wcp has moved past: an untouched hook is refreshed silently, an edited one is left alone, and one that moved on both sides is reported rather than overwritten. Edit them when the project needs something different — and say so upstream if the default was wrong for everyone.
+- **A clone is not gated until someone runs `wcp init` in it.** git clones neither a hooks directory nor local config, so the files arriving with the clone is not the same as git running them. `wcp doctor` reports an unset `core.hooksPath` as an error for exactly this reason.
+- **They call no wcp.** A hook that shelled out to a missing tool would exit 127, which git reads as a refusal — so a machine without wcp could not commit, and could not commit the fix either. What the hooks do call is the project's own toolchain, and there they fail open and say so on stderr.
+- **Never use `git push --no-verify` or `git commit --no-verify`** unless explicitly asked. A failing hook is a signal — fix the root cause, or change the hook deliberately and commit that.
+
+## This Document Carries A Provenance Line
+
+The comment at the top of this file is wcp's record of the bytes it wrote, in the same scheme the hooks use. `wcp doctor` reads it to tell an edit you made from a version wcp has moved past, and it is where this project's type is recorded — there is no `.wcp/` directory and no config file beside it.
+
+**The prose is yours.** wcp writes this document once and never rewrites it unasked; edit it freely. When wcp adds or changes a section you have not edited, `wcp doctor` names it and `wcp init --interactive` offers it, one section at a time; answering `n` declines that version for good. Leave the top line in place, and the tooling stays able to tell your changes from its own.
+
+## Running wcp
+
+wcp is a command-line tool installed once per machine, outside any repository. The hooks never call it, so a machine without it is still gated.
+
+```sh
+uv tool install git+https://github.com/spoorendonk/wcp   # once per machine; @vX.Y.Z for a release
+uv tool upgrade wcp                                       # to update an install without a tag
+uv tool install --force git+https://github.com/spoorendonk/wcp@vX.Y.Z   # to move a tagged one
+wcp --help                                                # the commands; `wcp <command> --help` for each one
+```
+
+- **Run `wcp doctor`** after pulling, after updating wcp, and before editing the hooks or this file. It changes nothing, and every finding names the command that fixes it. It exits 1 only when the gate does not work, e.g. `core.hooksPath` is unset, which is how every fresh clone starts until someone runs `wcp init` in it.
+- **Files wcp wrote carry a `wcp:` provenance line**: `# wcp:` in each hook, and the comment at the top of this file. Edit the files when the project needs to, but leave that line in place. It is how `wcp doctor` tells your edits apart from a newer wcp version.
+- **If `wcp` is not on PATH**, say so rather than installing it unasked. Installing it is a machine-wide change.
 
 ## Commit Messages
 
@@ -118,6 +200,69 @@ GitHub Issues, via the `gh` CLI.
 
 Issues get picked up cold, in fresh sessions, often by an agent with no access to this machine. So: keep the body **self-contained** (problem, motivation, acceptance criteria, repro steps); use **no local references** (`/home/user/...`, "see my other checkout" — dead links in a fresh session); prefer **stable external links** (GitHub permalinks, papers, RFCs); and **describe local code by concept, not path**, hinting that the agent can search under `..`, `../..`, or `~/code/`.
 
+## Working Through Issues
+
+A session's goal is often a list of issues (`wcp goal`). Work through them in the order given, one at a time:
+
+1. **Issue check.** Read the issue and what it links. If it is clear and implementable, say so in one line and go on; this should be fast. If not, write a plan as a comment on the issue (plans go on issues, never in git) and work from it. If a later issue's plan changes an earlier one, re-plan then.
+2. **Implement.**
+3. **Gate and commit.** Run the project's gate (`## Build & Test`) and commit: a review reads commits, never uncommitted changes (`## Self-Review`).
+4. **Review by one cold reviewer**: a fresh teammate or subagent running `/code-review` on the commits not yet pushed, never several reviewers in parallel. On findings, fix, gate, commit, and review again with a fresh reviewer. **At most two rounds**; the fix after the second is confirmed, not reviewed again (`## Self-Review`). Anything real left after that, or found out of scope, becomes its own issue. The bar for filing is a concrete failure scenario or a missing acceptance criterion; nits are fixed within the round or dropped.
+5. **Record, push, close.** Record the review on a clean tree, push it with the commit (`## Self-Review`), and close the issue.
+
+Without agent teams, implement in the session itself and review with a fresh subagent; the caps and the bar are the same.
+
+**A hygiene goal** (`/goal Hygiene round …`, set by `wcp hygiene`) is a task, not a list of issues: work it from its note. Its findings are edits to existing issues or new issues labelled `tech-debt`; nothing is fixed inside the round, one cold reviewer checks the findings (at most two rounds), and the task ends with the summary comment its note specifies, whose first line is the marker wcp looks for.
+
+## Self-Review
+
+**Code you produced gets reviewed before it lands on main.** Run `/code-review`
+on your own changes and act on what it finds; the review is not a formality you
+report having done. The pre-push hook is the backstop, not the review.
+
+**Then record the review, and push it with the commit**, or `pre-push` will
+refuse the push:
+
+```sh
+git update-ref "refs/reviews/$(git rev-parse HEAD)" HEAD
+git push --atomic origin HEAD "refs/reviews/$(git rev-parse HEAD)"
+```
+
+The receipt is a ref named by the reviewed commit, `refs/reviews/<sha>`, and it
+travels with the push, so a CI step can check every commit that reaches the
+trunk — including one pushed with `--no-verify`, or from a clone whose hooks
+never ran. wcp's README has the step to paste into the project's CI.
+`--atomic` lands the branch and its receipt together or not at all.
+
+Plain git, on purpose. No wcp, no harness, nothing installed — so a reviewer on
+any machine can write it, and a clone that has never heard of wcp is still able
+to record a review and push. Every worktree of a clone sees the same receipts,
+and each names one commit, so a review counts for that commit wherever it is
+checked out and for nothing else.
+
+**What it means, and what it does not.** It records that a review happened at
+this commit — not what was reviewed. It carries exactly the trust of whoever ran
+it, and it is a line anybody can write by hand; what it buys is that nobody can
+push work no one has looked at *without noticing they are doing it*.
+
+A later commit has no receipt, and the next push is refused again. That is
+deliberate: a new commit is work nobody reviewed, including the commit that
+fixes what the review found.
+
+**The fix after the last round.** Reviews stop after two rounds, so the commit
+that fixes the second round's findings gets no third review. That round's
+reviewer reads the fix commit alone (`git show <sha>`) against its own
+findings, and the receipt is recorded for the fix once it confirms they are
+addressed. It looks for nothing new. What it does not confirm is taken out of
+the fix, which makes a new commit: the same reviewer confirms that one before
+its receipt is recorded, and what was taken out becomes its own issue.
+
+**Record it only when the tree is clean.** With nothing new committed, a review
+falls back to reading uncommitted changes — so a record written then names a
+commit that does not contain what was read, and the push it clears is of work
+nobody reviewed. Commit first, then review, then record. Untracked scratch files
+do not matter; staged and unstaged changes to tracked files do.
+
 ## Working Rules
 
 - **CLAUDE.md discipline.** When Claude gets something wrong, fix CLAUDE.md in the same commit. It's a living document — update it whenever better instructions would have prevented the mistake.
@@ -127,37 +272,6 @@ Issues get picked up cold, in fresh sessions, often by an agent with no access t
 - **Don't ignore type errors.** If mypy/clang-tidy flags something, fix the root cause — don't suppress.
 - **Don't use deprecated patterns.** Check current docs, not training data.
 - **Performance matters.** Most of this is solvers: profile before micro-optimizing, but don't sacrifice perf for "clean code".
-
-# Project: mcfcg
-
-Column generation solver for minimum-cost multicommodity flow (MCF), with path-based and tree-based Dantzig-Wolfe decompositions.
-
-## Build & Test
-
-```clean
-rm -rf build
-```
-
-```build
-cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY && cmake --build build -j$(nproc)
-```
-
-```test
-GTEST_BRIEF=1 ctest --test-dir build --output-on-failure --progress -j$(nproc)
-```
-
-Single test by name:
-```
-./build/mcfcg_tests --gtest_filter='PathCGSingleSource.OptimalObjective'
-./build/mcfcg_integration_tests --gtest_filter='GridCorrectness.Grid1'
-```
-
-`scripts/` has a stdlib-unittest tier in `test/python/`, run by ctest as `Python.Scripts`. It exists because those scripts carry the provenance of every committed result, and their failure mode is a silently blank or mislabelled column rather than a crash. Add tests as `test/python/<module>_test.py` — the `_test.py` suffix matches the C++ convention and is why ctest passes `-p "*_test.py"`; unittest's default `test*.py` would discover nothing. Files must sit directly in `test/python/`: discovery does not recurse, and the directory is not a package, so `python3 -m unittest test.python.foo` will not work.
-
-```
-python3 -m unittest discover -s test/python -p '*_test.py'                # all
-python3 -m unittest discover -s test/python -p '*_test.py' -k preserves   # one
-```
 
 ## Default to the tree formulation
 

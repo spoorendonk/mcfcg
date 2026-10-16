@@ -1,3 +1,4 @@
+# wcp: config/.clang-tidy base=8fde61052c61
 ---
 # Naming here is the project's own STL-flavoured house style, NOT Google
 # naming.  Google *formatting* comes from .clang-format; the identifiers
