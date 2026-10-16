@@ -104,9 +104,9 @@ jobs:
 
       # This job configures HiGHS-only, so COPT/MOSEK/cuOpt are absent from the
       # compile database and src/lp/{copt,cuopt,mosek}_solver.cpp are NOT
-      # linted here -- they are covered by the local pre-push hook, which
-      # configures a separate build-tidy dir with whatever SDKs the machine
-      # has. Pin the count so a silently shrinking source list goes red rather
+      # linted here, nor by the local pre-push hook, which is HiGHS-only too;
+      # lint them by hand with the backend's -DMCFCG_USE_*=ON configured.
+      # Pin the count so a silently shrinking source list goes red rather
       # than quietly gating less than it claims to.
       - name: Assert the expected TU count
         run: |

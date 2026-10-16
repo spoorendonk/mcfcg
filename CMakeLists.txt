@@ -115,7 +115,7 @@ if(MCFCG_USE_CUOPT)
         message(FATAL_ERROR "cuOpt not found. Set CUOPT_ROOT (install prefix or spoorendonk/cuopt source checkout), activate a conda env with cuopt installed, or set CMAKE_PREFIX_PATH.")
     endif()
     target_sources(mcfcg PRIVATE src/lp/cuopt_solver.cpp)
-    # SYSTEM so clang-tidy (pre-commit --fix) never analyzes/rewrites the
+    # SYSTEM so clang-tidy (the tidy-fix target) never analyzes/rewrites the
     # vendor SDK headers — a PRIVATE include let modernize-* fix-its corrupt
     # an out-of-repo header.
     target_include_directories(mcfcg SYSTEM PRIVATE ${CUOPT_INCLUDE_DIR})

@@ -146,7 +146,7 @@ On a shared machine, pin the local CI to the job budget: `git config hooks.local
 
 ## Git Workflow
 
-Trunk-based, linear history on main. Commit directly to main and push when local gates pass.
+Trunk-based, linear history on main. Commit directly to main and push when local gates pass and the review receipt is recorded (`## Self-Review`).
 
 Feature branches are optional for larger changes: always branch from main (`git checkout main && git pull` first), never from another feature branch, keep them short-lived, and rebase or squash merge — no merge commits on main.
 
