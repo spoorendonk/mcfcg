@@ -495,7 +495,8 @@ carries it.
 
 ## License
 
-MIT, except for parts of the graph layer (`include/mcfcg/graph/`) derived from
+MIT, except for parts of the graph layer (`include/mcfcg/graph/`, plus one
+reverse-Dijkstra loop in `include/mcfcg/cg/pricer_base.h`) derived from
 [melon](https://github.com/fhamonic/melon), which stay under the Boost Software
 License 1.0. [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) lists them, and
 [`LICENSES/BSL-1.0.txt`](LICENSES/BSL-1.0.txt) holds the licence text.

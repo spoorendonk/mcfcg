@@ -57,6 +57,11 @@ inline int64_t scale_cost_saturating(double scaled) noexcept {
 // minimization), so reduced costs c_e - mu_e >= c_e.  The heuristic using
 // original costs c_e underestimates the shortest path under reduced costs,
 // guaranteeing A* optimality.
+//
+// The relaxation loop below is an inlined copy of the dijkstra class's, which
+// is derived from melon's algorithm/dijkstra.hpp
+// (https://github.com/fhamonic/melon, Copyright François Hamonic). This loop is
+// under BSL-1.0, see LICENSES/BSL-1.0.txt and THIRD_PARTY_NOTICES.md.
 inline static_map<uint32_t, int64_t> compute_lower_bounds_to_targets(const Instance& inst,
                                                                      double scale) {
     const auto& g = inst.graph;

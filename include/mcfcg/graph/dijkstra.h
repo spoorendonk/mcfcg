@@ -3,7 +3,8 @@
 // The dijkstra class (traits, vertex status, add_source/current/advance/run)
 // is derived from melon's algorithm/dijkstra.hpp
 // (https://github.com/fhamonic/melon, Copyright François Hamonic), adapted.
-// The A* and bounded searches in this file are mcfcg's own.
+// The astar_dijkstra class adapts the same relaxation loop; its heuristic,
+// min_f and target-count stop are mcfcg's own.
 // Licensed under BSL-1.0, see LICENSES/BSL-1.0.txt and THIRD_PARTY_NOTICES.md.
 
 #include <cassert>
