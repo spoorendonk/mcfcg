@@ -75,7 +75,12 @@ endfunction()
 _mcfcg_lint_find(CLANG_FORMAT_EXE clang-format)
 _mcfcg_lint_find(CLANG_TIDY_EXE clang-tidy)
 
-if(CLANG_FORMAT_EXE)
+# The check lists tracked files, so it needs a git checkout; a source tarball
+# gets no clang_format test rather than one that always fails. EXISTS, not
+# IS_DIRECTORY: in a linked worktree .git is a file.
+if(CLANG_FORMAT_EXE AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    message(STATUS "lint gate: not a git checkout -- no clang_format test")
+elseif(CLANG_FORMAT_EXE)
     add_test(NAME clang_format
         COMMAND "${CMAKE_COMMAND}"
                 "-DCLANG_FORMAT_EXE=${CLANG_FORMAT_EXE}"

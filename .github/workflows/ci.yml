@@ -14,12 +14,13 @@ on:
 permissions:
   contents: read
 
-# Superseded PR runs are cancelled; push runs are not, because each push's
-# trunk-checks covers only its own BEFORE..SHA range and tip receipt, so a
-# cancelled one would leave that push unchecked.
+# Superseded PR runs are cancelled. Each push run gets a group of its own:
+# its trunk-checks cover only its own BEFORE..SHA range and tip receipt, and a
+# shared group would cancel a pending push run (GitHub keeps one pending run
+# per group whatever cancel-in-progress says), leaving that push unchecked.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: true
 
 env:
   # Pinned, not `apt-get install clang-tidy`: ubuntu-24.04 ships clang-tidy 18,

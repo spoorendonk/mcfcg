@@ -51,9 +51,12 @@ endif()
 # is created, and HiGHS' targets are the recompile worth caching. A user-level
 # ccache `base_dir` makes the worktree's paths hit; path-valued -D defines
 # (MCFCG_SOURCE_DIR) are not rewritten, so keep those off widely-used targets.
+# An explicit -DCMAKE_<LANG>_COMPILER_LAUNCHER (even empty) wins.
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
+if(CCACHE_PROGRAM AND NOT DEFINED CMAKE_C_COMPILER_LAUNCHER)
     set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+endif()
+if(CCACHE_PROGRAM AND NOT DEFINED CMAKE_CXX_COMPILER_LAUNCHER)
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
 endif()
 
