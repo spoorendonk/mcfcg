@@ -77,25 +77,19 @@ CheckOptions:
   - key: readability-identifier-naming.TemplateParameterCase
     value: CamelCase
 
-# The gate. Curated on purpose: these four are the categories where a hit
-# means something is wrong, so `tidy` (and CI, and pre-push) fail on them.
+# The gate: every finding blocks (the `clang_tidy:<path>` ctest tests, which
+# pre-push and CI run). An advisory finding that is wrong for a site --
+# notably readability-function-cognitive-complexity -- is suppressed there
+# with NOLINTNEXTLINE(check) and a comment saying why, never by narrowing this.
 # clang-diagnostic-* must ALSO appear in Checks above: the leading `-*`
 # disables it, and listing it here alone is inert -- a compiler warning is
-# then generated but never reported, and the gate stays green. (Hard
-# compilation *errors*, like the graph header that only GCC would compile,
-# surface regardless.) Everything else in Checks above stays
-# advisory -- notably readability-function-cognitive-complexity, which is
-# real signal but not a thing to block a push on.
-WarningsAsErrors: >
-  clang-diagnostic-*,
-  bugprone-*,
-  performance-*,
-  readability-identifier-naming
+# then generated but never reported, and the gate stays green.
+WarningsAsErrors: '*'
 
 # NOTE: this value is NOT honoured when clang-tidy auto-discovers this
 # file — pass --config-file=<repo>/.clang-tidy AND an anchored
 # --header-filter='^<repo>/(include|src|test)/' explicitly.  Plain '.*'
-# would also drag in build/_deps/highs-src.  The `tidy` CMake target does
-# both for you.
+# would also drag in build/_deps/highs-src.  The `clang_tidy:` ctest tests
+# (cmake/Lint.cmake) do both for you.
 HeaderFilterRegex: '^.*/(include|src|test)/'
 FormatStyle: file

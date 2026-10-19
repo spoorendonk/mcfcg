@@ -20,12 +20,60 @@ concurrency:
 
 env:
   # Pinned, not `apt-get install clang-tidy`: ubuntu-24.04 ships clang-tidy 18,
-  # which disagrees with local development (20) about which checks exist at all
+  # which disagrees with local development (21) about which checks exist at all
   # -- modernize-use-ranges among them. A gate that is green locally and red in
-  # CI (or the reverse) is worse than no gate.
-  LLVM_VERSION: "20"
+  # CI (or the reverse) is worse than no gate. Keep equal to
+  # MCFCG_CLANG_TOOLS_VERSION (cmake/Lint.cmake).
+  LLVM_VERSION: "21"
 
 jobs:
+  # What the pre-push hook enforces, re-checked here because a `--no-verify`
+  # push or a clone whose hooks never ran skips the hook. Push to main only:
+  # a PR has no receipt yet, and its commits may still be autosquashed.
+  trunk-checks:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # >>> review receipt
+      - name: Review receipt
+        run: |
+          ref="refs/reviews/$GITHUB_SHA"
+          found=$(git ls-remote origin "$ref" | awk -v ref="$ref" '$2 == ref { print $1 }')
+          if [ "$found" = "$GITHUB_SHA" ]; then
+            echo "reviewed: $GITHUB_SHA"
+          else
+            echo "::error::$GITHUB_SHA reached main with no review receipt (refs/reviews/$GITHUB_SHA)."
+            echo "Review it, then record the review and push it with the commit:"
+            echo '  git update-ref "refs/reviews/$(git rev-parse HEAD)" HEAD'
+            echo '  git push --atomic origin HEAD "refs/reviews/$(git rev-parse HEAD)"'
+            echo "A receipt pushed on its own starts no run: re-run this job once it is pushed."
+            exit 1
+          fi
+      # <<< review receipt
+
+      # commit-msg lets fixup!/squash!/amend! through so `git rebase
+      # --autosquash` works; one that reaches main was never squashed.
+      - name: No unsquashed fixup commits
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = 0000000000000000000000000000000000000000 ] \
+              || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            range="$GITHUB_SHA"   # new branch or rewritten history: check all of it
+          else
+            range="$BEFORE..$GITHUB_SHA"
+          fi
+          bad=$(git log --format='%h %s' "$range" | grep -E '^[0-9a-f]+ (fixup|squash|amend)!' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::unsquashed commits reached main:"
+            echo "$bad"
+            exit 1
+          fi
+
   build-and-test:
     runs-on: ubuntu-24.04
     steps:
@@ -42,8 +90,10 @@ jobs:
       - name: Build
         run: cmake --build build -j$(nproc)
 
+      # The lint tests run in the lint job, against pinned tools; the runner
+      # image's own clang-tidy would report a different set.
       - name: Test
-        run: ctest --test-dir build --output-on-failure -j$(nproc)
+        run: ctest --test-dir build --output-on-failure -LE lint -j$(nproc)
 
   lint:
     runs-on: ubuntu-24.04
@@ -53,7 +103,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake zlib1g-dev libopenblas-dev
+          sudo apt-get install -y cmake ninja-build zlib1g-dev libopenblas-dev
 
       - name: Install clang-tidy ${{ env.LLVM_VERSION }}
         run: |
@@ -63,8 +113,9 @@ jobs:
           echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" \
             | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update
-          sudo apt-get install -y "clang-tidy-${LLVM_VERSION}"
+          sudo apt-get install -y "clang-tidy-${LLVM_VERSION}" "clang-format-${LLVM_VERSION}"
           "clang-tidy-${LLVM_VERSION}" --version
+          "clang-format-${LLVM_VERSION}" --version
 
       # FetchContent clones HiGHS and googletest at CONFIGURE time, and that
       # clone is the slow part of this job. Cache the populated source trees
@@ -88,33 +139,27 @@ jobs:
       # generate_export_header. Building would cost ~10 min of HiGHS compile
       # for nothing. MCFCG_NATIVE_ARCH=OFF keeps -march=native out of the
       # compile database so the result does not depend on the runner's CPU.
+      # MCFCG_REQUIRE_LINT makes a missing or wrong-version tool fatal, so the
+      # gate cannot silently register no tests.
       - name: Configure
         run: |
-          cmake -B build \
-            -DMCFCG_NATIVE_ARCH=OFF \
-            -DCLANG_TIDY_EXE=/usr/bin/clang-tidy-${LLVM_VERSION}
-
-      # The find_program guard in CMakeLists makes a missing clang-tidy a
-      # silent skip, so without these a broken install would turn the gate into
-      # a passing no-op -- the worst outcome available. `grep -qw tidy` is not
-      # enough: -w treats '-' as a word boundary, so it also matches the
-      # tidy-fix line and would pass even if `tidy` itself were gone.
-      - name: Assert the tidy target exists
-        run: cmake --build build --target help | grep -qxE '\.\.\. tidy'
+          cmake -B build -G Ninja \
+            -DMCFCG_NATIVE_ARCH=OFF -DMCFCG_REQUIRE_LINT=ON \
+            -DCLANG_TIDY_EXE=/usr/bin/clang-tidy-${LLVM_VERSION} \
+            -DCLANG_FORMAT_EXE=/usr/bin/clang-format-${LLVM_VERSION}
 
       # This job configures HiGHS-only, so COPT/MOSEK/cuOpt are absent from the
       # compile database and src/lp/{copt,cuopt,mosek}_solver.cpp are NOT
       # linted here, nor by the local pre-push hook, which is HiGHS-only too;
       # lint them by hand with the backend's -DMCFCG_USE_*=ON configured.
       # Pin the count so a silently shrinking source list goes red rather
-      # than quietly gating less than it claims to.
-      - name: Assert the expected TU count
+      # than quietly gating less than it claims to: 22 clang_tidy: tests
+      # plus clang_format.
+      - name: Assert the expected lint test count
         run: |
-          cmake -B build -DMCFCG_NATIVE_ARCH=OFF \
-            -DCLANG_TIDY_EXE=/usr/bin/clang-tidy-${LLVM_VERSION} 2>&1 \
-            | grep -qE "'tidy' lints 22 TUs"
+          n=$(ctest --test-dir build -N -L lint | grep -cE 'Test +#[0-9]+: (clang_tidy:|clang_format$)')
+          echo "lint tests: $n"
+          [ "$n" -eq 23 ]
 
-      # Fails the job on its own: WarningsAsErrors makes clang-tidy exit
-      # non-zero, which fails the custom command, which fails the build.
-      - name: clang-tidy
-        run: cmake --build build --target tidy -j$(nproc)
+      - name: Lint
+        run: ctest --test-dir build --output-on-failure -L lint -j$(nproc)

@@ -233,8 +233,9 @@ cmake --build build -j$(nproc)
 Development hooks are tracked in [`.githooks/`](.githooks): `commit-msg`
 (Conventional Commits), `pre-commit` (checks, without reformatting, that every
 tracked C++ file is clang-formatted) and `pre-push` (no merge commits on main,
-a review receipt for the pushed commit, then a clean build, the tests and the
-`tidy` clang-tidy gate in a fresh worktree of that commit). They come from
+a review receipt for the pushed commit, then a clean build and the tests,
+including the `clang_format` and `clang_tidy:<path>` lint tests for what the
+push changed, in a fresh worktree of that commit). They come from
 [wcp](https://github.com/spoorendonk/wcp); see `CLAUDE.md` for the details.
 Git only runs hooks from `core.hooksPath`, which is per-checkout config and
 therefore cannot itself be tracked, so `cmake -B build` sets it for you. It

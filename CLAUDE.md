@@ -17,18 +17,14 @@ rm -rf build
 ```
 
 ```build
-cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY && cmake --build build -j$(nproc)
+cmake -B build -G Ninja -DCMAKE_INSTALL_MESSAGE=LAZY && cmake --build build -j$(nproc)
 ```
 
 ```test
 GTEST_BRIEF=1 ctest --test-dir build --output-on-failure --progress -j$(nproc)
 ```
 
-```lint
-cmake --build build --target tidy -j$(nproc)
-```
-
-`pre-push` runs these four blocks as the local CI (`## Tooling and Gates`), so keep them executable as written. The `lint` block is the clang-tidy gate (`## clang-tidy`); it fails, rather than passing silently, when clang-tidy is missing and CMake therefore defines no `tidy` target.
+`pre-push` runs these three blocks as the local CI (`## Tooling and Gates`), so keep them executable as written. The lint gate is part of the `test` block's ctest: `clang_format` and one `clang_tidy:<path>` test per translation unit, labelled `lint` (`## clang-tidy`). `ctest --test-dir build -L lint -j4` runs it alone, `-LE lint` skips it while iterating. `-G Ninja` is not cosmetic: pre-push reads the ninja dependency log to tidy only what a push changed.
 
 Single test by name:
 ```
@@ -82,9 +78,9 @@ Setup: install `clangd-lsp@claude-plugins-official` plus `clangd` (`apt install 
 
 ## clang-tidy
 
-`cmake --build build --target tidy` — the gate. Stamped per translation unit: ~30s at `-j` from cold, a no-op when nothing changed, and it needs only `cmake -B build`, not a compiled tree. `tidy-fix` applies fix-its serially and refuses to run outside a git checkout or with a dirty worktree under `include/`, `src/` or `test/`. Narrow a bulk fix with `-DMCFCG_TIDY_FIX_CHECKS='-*,some-check'`.
+The gate is `cmake/Lint.cmake`: one ctest test `clang_tidy:<path from the repo root>` per first-party translation unit, whose command is clang-tidy itself, plus `clang_format`. Run it all with `ctest --test-dir build -L lint -j4`; it needs only `cmake -B build`, not a compiled tree. pre-push runs the suite without the `clang_tidy:` tests and then tidies only what the push changed (a changed header through a one-line stub unit), caching passes; keep the test command bare clang-tidy, or the hook falls back to plain ctest. A missing tool or a clang-tidy/clang-format major other than `MCFCG_CLANG_TOOLS_VERSION` (21) is a configure warning, fatal under `-DMCFCG_REQUIRE_LINT=ON` (CI). `tidy-fix` applies fix-its serially and refuses to run outside a git checkout or with a dirty worktree under `include/`, `src/` or `test/`. Narrow a bulk fix with `-DMCFCG_TIDY_FIX_CHECKS='-*,some-check'`.
 
-`WarningsAsErrors` covers `clang-diagnostic-*`, `bugprone-*`, `performance-*` and `readability-identifier-naming`; those block. Everything else — notably `readability-function-cognitive-complexity` — is advisory. Suppress an advisory finding with `NOLINTNEXTLINE(check)` plus a comment saying why, never by widening the config. `NOLINTNEXTLINE` applies to the *literal* next line: put the prose above it and the pragma last, and for a template put it between the `template<...>` line and the signature.
+`WarningsAsErrors` is `'*'`: every finding blocks, `readability-function-cognitive-complexity` included. Suppress a finding that is wrong for its site with `NOLINTNEXTLINE(check)` plus a comment saying why, never by widening the config. `NOLINTNEXTLINE` applies to the *literal* next line: put the prose above it and the pragma last, and for a template put it between the `template<...>` line and the signature.
 
 **Invoking clang-tidy by hand needs two flags the config cannot supply.** `HeaderFilterRegex` is silently ignored when clang-tidy auto-discovers `.clang-tidy`: `clang-tidy -p build src/cg/tree_cg.cpp` reports 2 diagnostics where the same command with `--config-file=.clang-tidy` reports 481 — every header, which is where nearly all of this codebase lives. A bare `.*` header filter is also wrong even with the config file, because it matches `build/_deps/highs-src/**`. So:
 
@@ -93,7 +89,7 @@ clang-tidy -p build --config-file=.clang-tidy \
   --header-filter="^$PWD/(include|src|test)/" --quiet <file.cpp>
 ```
 
-Prefer the `tidy` target, which does both for you.
+Prefer the `clang_tidy:` tests, which do both for you.
 
 Two bulk-fix traps. `run-clang-tidy -fix` was measured reporting a set of warnings then silently applying only a fraction — use the serial `tidy-fix` target. And never run `clang-tidy --fix` in parallel here: every template lives in a header under `include/mcfcg`, so concurrent processes rewrite the same file and corrupt it.
 
@@ -134,9 +130,11 @@ Git hooks live in `.githooks/` and are tracked; they came from [wcp](https://git
 
 - **pre-commit** — `clang-format --dry-run -Werror` over every tracked C++ file. It checks, it does not reformat: run the format command above and commit again. No tests and no clang-tidy at commit.
 - **commit-msg** — Conventional Commits, subject ≤72 chars. `fixup!`/`squash!`/`amend!` pass through so `git rebase --autosquash` works, and `type!:` marks a breaking change (both local edits to wcp's hook).
-- **pre-push** — refuses merge commits on the trunk and a HEAD without a review receipt (`## Self-Review`), then runs the `clean`/`build`/`test`/`lint` blocks of `## Build & Test` in a fresh worktree of the pushed commit, outside this checkout. That build fetches and compiles HiGHS from scratch, so a push takes minutes. A push changing only `*.md` files (except the root CLAUDE.md, whose blocks are the CI's commands), the root LICENSE or the root `.gitignore` skips it.
+- **pre-push** — refuses merge commits on the trunk and a HEAD without a review receipt (`## Self-Review`), then runs the `clean`/`build`/`test` blocks of `## Build & Test` in a fresh worktree of the pushed commit, outside this checkout, linting only what the push changed (`## clang-tidy`). That build fetches HiGHS and compiles it through ccache (when installed; a user-level ccache `base_dir` lets the fresh worktree hit), so a push takes minutes cold and much less warm. A push changing only `*.md` files (except the root CLAUDE.md, whose blocks are the CI's commands), the root LICENSE or the root `.gitignore` skips it.
 
-**The lint is HiGHS-only.** The local CI configures with no optional backend, so `src/lp/{copt,cuopt,mosek}_solver.cpp` are not in its compile database and go unlinted at push. The old hook configured a separate lint tree with every backend whose SDK it found; to lint those files now, configure with the backend's `-DMCFCG_USE_*=ON` and run the `tidy` target by hand.
+**The lint is HiGHS-only.** The local CI configures with no optional backend, so `src/lp/{copt,cuopt,mosek}_solver.cpp` are not in its compile database and go unlinted at push. To lint those files, configure with the backend's `-DMCFCG_USE_*=ON` and run `ctest -L lint` by hand.
+
+**CI** (`.github/workflows/ci.yml`) runs the suite without `lint`, the lint gate with pinned LLVM 21 tools, and, on pushes to main, checks the pushed tip has a review receipt and that no `fixup!`/`squash!`/`amend!` commit reached main. Those two catch after the fact what a `--no-verify` push or an unhooked clone skipped.
 
 Formatting-only commits are listed in `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to have `git blame` skip them.
 

@@ -22,7 +22,7 @@ if(NOT _no_git EQUAL 0)
     message(FATAL_ERROR
         "tidy-fix refuses to run outside a git checkout: it rewrites source in "
         "place and relies on `git diff` for review and `git checkout .` for "
-        "undo. Use the read-only `tidy` target instead, or apply fixes in a "
+        "undo. Use the read-only `ctest -L lint` instead, or apply fixes in a "
         "clone.")
 endif()
 
