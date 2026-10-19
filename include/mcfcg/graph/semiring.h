@@ -1,5 +1,9 @@
 #pragma once
 
+// The name and fields follow melon's shortest_path_semiring
+// (https://github.com/fhamonic/melon, François Hamonic, BSL-1.0); the
+// implementation is independent. See THIRD_PARTY_NOTICES.md.
+
 #include <limits>
 
 namespace mcfcg {

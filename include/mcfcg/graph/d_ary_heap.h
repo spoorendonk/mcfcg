@@ -1,5 +1,10 @@
 #pragma once
 
+// The name and interface (push/pop/top/promote/contains/priority) follow
+// melon's updatable_d_ary_heap (https://github.com/fhamonic/melon, François
+// Hamonic, BSL-1.0); the implementation is independent. See
+// THIRD_PARTY_NOTICES.md.
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>

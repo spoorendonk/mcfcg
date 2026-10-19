@@ -1,5 +1,9 @@
 #pragma once
 
+// Derived from melon's container/static_digraph.hpp
+// (https://github.com/fhamonic/melon, Copyright François Hamonic), adapted.
+// Licensed under BSL-1.0, see LICENSES/BSL-1.0.txt and THIRD_PARTY_NOTICES.md.
+
 #include <algorithm>
 #include <cassert>
 #include <cstdint>

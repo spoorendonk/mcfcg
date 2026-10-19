@@ -1,5 +1,10 @@
 #pragma once
 
+// The vertex status and per-vertex arrays are derived from melon's
+// algorithm/dijkstra.hpp (https://github.com/fhamonic/melon, Copyright
+// François Hamonic); the reusable workspace is mcfcg's own.
+// Licensed under BSL-1.0, see LICENSES/BSL-1.0.txt and THIRD_PARTY_NOTICES.md.
+
 #include <cstdint>
 #include <vector>
 

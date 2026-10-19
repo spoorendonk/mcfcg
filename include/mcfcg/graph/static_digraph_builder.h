@@ -1,5 +1,10 @@
 #pragma once
 
+// The interface (add_arc(u, v, props...), build() -> (graph, maps...))
+// follows melon's static_digraph_builder (https://github.com/fhamonic/melon,
+// François Hamonic, BSL-1.0); the implementation is independent. See
+// THIRD_PARTY_NOTICES.md.
+
 #include <algorithm>
 #include <cstdint>
 #include <numeric>
