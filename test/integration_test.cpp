@@ -813,6 +813,9 @@ TEST(FeatureTests, BoundedPricingKeepsColumnWithZeroDemandCommodity) {
 // moves the CG trajectory (see the Shadow tests for the invariant that DOES
 // hold), and treating a bounded source as affected instead costs +31% wall clock on
 // intermodal — see should_record_arcs.
+// Complexity is the gtest assertion macros, each a hidden branch; the body is
+// one straight-line scenario and splitting it would scatter the check.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST(FeatureTests, BoundedPricingFilterUsesStaleArcsForBoundedSources) {
     auto inst = bounded_pricing_test::build_two_sources_and_spare_arc();
     ASSERT_EQ(inst.sources.size(), 2U);
@@ -868,6 +871,9 @@ TEST(FeatureTests, BoundedPricingFilterUsesStaleArcsForBoundedSources) {
 // pricing bound that is too aggressive (e.g. dividing the tree budget by the
 // wrong demand aggregate) shows up here as a dropped column, which end-to-end
 // objective checks would only catch if it happened to change the optimum.
+// Complexity is the gtest assertion macros, each a hidden branch; the body is
+// one straight-line scenario and splitting it would scatter the check.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST(FeatureTests, BoundedPricingEmitsSameColumns) {
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar30");
 
@@ -1178,6 +1184,9 @@ TEST(FeatureTests, BoundedPricingShadowIntermodalTree) {
 // capacity-dual term snapshotted pre-separation, exactly as cg_loop does), and
 // asserts the bound never exceeds the reference optimum and that at least one
 // slack-basic iteration produced a finite valid bound.
+// Complexity is the gtest assertion macros, each a hidden branch; the body is
+// one straight-line scenario and splitting it would scatter the check.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST(FeatureTests, LagrangianBoundValidWhileSlacksBasic) {
     auto opt = load_optimal(data_dir("commalab/planar"));
     auto inst = mcfcg::read_commalab(data_dir("commalab") + "/planar/planar30");

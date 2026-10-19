@@ -25,7 +25,7 @@ public:
 
     ~thread_pool() {
         {
-            std::lock_guard lock(_mutex);
+            std::scoped_lock lock(_mutex);
             _stop = true;
             ++_generation;
         }
@@ -63,7 +63,7 @@ public:
         // Publish work inside the lock so the mutex release establishes
         // happens-before with worker acquire (guarantees visibility).
         {
-            std::lock_guard lock(_mutex);
+            std::scoped_lock lock(_mutex);
             _task_fn = [&task](uint32_t idx, uint32_t tid) { task(idx, tid); };
             _task_count = n;
             _done_count = 0;
@@ -101,7 +101,7 @@ private:
             run_tasks(thread_id);
 
             {
-                std::lock_guard lock(_mutex);
+                std::scoped_lock lock(_mutex);
                 ++_done_count;
             }
             _done_cv.notify_one();

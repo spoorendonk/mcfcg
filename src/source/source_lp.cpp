@@ -59,7 +59,7 @@ SourceLPSize source_lp_size(const Instance& inst) {
     const uint64_t n_sources = inst.sources.size();
     const uint64_t n_arcs = g.num_arcs();
     s.cols = n_sources * n_arcs;
-    s.rows = n_sources * g.num_vertices() + s.capacitated_arcs;
+    s.rows = (n_sources * g.num_vertices()) + s.capacitated_arcs;
     // Mirrors append_source_column entry for entry: +1 at the tail and -1 at the
     // head unless both land on the same row (self-loop -> cancels to nothing),
     // plus one capacity entry per capacitated arc. Every source repeats it.
@@ -230,6 +230,37 @@ std::string model_name(const std::string& path) {
     return dot == std::string::npos ? name : name.substr(0, dot);
 }
 
+// BOUNDS section. The source LP's columns are all 0 <= f <= +inf (MPS
+// default), so nothing is written today; guard generically in case that ever
+// changes.
+void write_bounds(MpsSink& out, const SourceLP& lp) {
+    bool need_bounds = false;
+    for (uint32_t j = 0; j < lp.num_cols && !need_bounds; ++j) {
+        need_bounds = lp.col_lower[j] != 0.0 || lp.col_upper[j] < INF;
+    }
+    if (!need_bounds) {
+        return;
+    }
+    out.word("BOUNDS");
+    out.nl();
+    for (uint32_t j = 0; j < lp.num_cols; ++j) {
+        if (lp.col_lower[j] != 0.0) {
+            out.word(" LO BND  C");
+            out.word(j);
+            out.word("  ");
+            out.num(lp.col_lower[j]);
+            out.nl();
+        }
+        if (lp.col_upper[j] < INF) {
+            out.word(" UP BND  C");
+            out.word(j);
+            out.word("  ");
+            out.num(lp.col_upper[j]);
+            out.nl();
+        }
+    }
+}
+
 }  // namespace
 
 bool write_source_mps(const Instance& inst, const std::string& path) {
@@ -292,32 +323,7 @@ bool write_source_mps(const Instance& inst, const std::string& path) {
         }
     }
 
-    // The source LP's columns are all 0 <= f <= +inf (MPS default), so no BOUNDS
-    // section is needed; guard generically in case that ever changes.
-    bool need_bounds = false;
-    for (uint32_t j = 0; j < lp.num_cols && !need_bounds; ++j) {
-        need_bounds = lp.col_lower[j] != 0.0 || lp.col_upper[j] < INF;
-    }
-    if (need_bounds) {
-        out.word("BOUNDS");
-        out.nl();
-        for (uint32_t j = 0; j < lp.num_cols; ++j) {
-            if (lp.col_lower[j] != 0.0) {
-                out.word(" LO BND  C");
-                out.word(j);
-                out.word("  ");
-                out.num(lp.col_lower[j]);
-                out.nl();
-            }
-            if (lp.col_upper[j] < INF) {
-                out.word(" UP BND  C");
-                out.word(j);
-                out.word("  ");
-                out.num(lp.col_upper[j]);
-                out.nl();
-            }
-        }
-    }
+    write_bounds(out, lp);
 
     out.word("ENDATA");
     out.nl();

@@ -59,6 +59,9 @@ TEST_F(InstanceTest, SourceGrouping) {
     }
 }
 
+// Complexity is the gtest assertion macros inside the per-arc and
+// per-commodity loops; the body is one straight-line comparison.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_F(InstanceTest, RoundTrip) {
     auto inst = mcfcg::read_commalab(path);
 

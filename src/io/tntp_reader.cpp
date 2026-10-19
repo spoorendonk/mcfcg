@@ -12,46 +12,50 @@
 
 namespace mcfcg {
 
+// Read the metadata block of *_net.tntp up to and including <END OF METADATA>;
+// returns <NUMBER OF NODES>, or 0 when absent.
+static uint32_t parse_net_metadata(std::istream& file) {
+    std::string line;
+    uint32_t num_nodes = 0;
+    while (std::getline(file, line)) {
+        if (line.find("<NUMBER OF NODES>") != std::string::npos) {
+            std::istringstream iss(line.substr(line.find('>') + 1));
+            iss >> num_nodes;
+        }
+        if (line.find("<END OF METADATA>") != std::string::npos) {
+            break;
+        }
+    }
+    return num_nodes;
+}
+
+// The column header line: first non-blank character is '~'.
+static bool is_column_header(const std::string& line) {
+    for (char c : line) {
+        if (c == ' ' || c == '\t') {
+            continue;
+        }
+        return c == '~';
+    }
+    return false;
+}
+
 // Parse *_net.tntp: skip metadata, read arcs.
 // Format: init_node term_node capacity length free_flow_time b power speed toll
 // type ;
 static void parse_net(std::istream& file, const std::string& path, uint32_t& num_nodes,
                       std::vector<uint32_t>& src, std::vector<uint32_t>& dst,
                       std::vector<double>& cost, std::vector<double>& capacity) {
+    num_nodes = parse_net_metadata(file);
+
     std::string line;
-    num_nodes = 0;
-    bool past_metadata = false;
     bool past_header = false;
-
     while (std::getline(file, line)) {
-        // Parse metadata
-        if (!past_metadata) {
-            if (line.find("<NUMBER OF NODES>") != std::string::npos) {
-                std::istringstream iss(line.substr(line.find('>') + 1));
-                iss >> num_nodes;
-            }
-            if (line.find("<END OF METADATA>") != std::string::npos) {
-                past_metadata = true;
-            }
-            continue;
-        }
-
         // Skip blank lines and the ~ header line
         if (line.empty() || line[0] == '\n' || line[0] == '\r') {
             continue;
         }
-        // Skip lines starting with ~ (column header)
-        bool is_tilde = false;
-        for (char c : line) {
-            if (c == ' ' || c == '\t') {
-                continue;
-            }
-            if (c == '~') {
-                is_tilde = true;
-            }
-            break;
-        }
-        if (is_tilde) {
+        if (is_column_header(line)) {
             past_header = true;
             continue;
         }
