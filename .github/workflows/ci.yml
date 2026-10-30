@@ -1,25 +1,18 @@
 name: CI
 
+# A weekly check-up, never a gate. Local CI -- pre-push, run under the machine
+# lock -- is what lands a change; nothing waits on this workflow. Never add a
+# push or pull_request trigger, or a schedule more often than weekly.
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    branches: [main]
-  # `push: [main]` is not redundant with `pull_request` here: CLAUDE.md's Git
-  # Workflow is trunk-based -- commit straight to main, feature branches
-  # optional -- so for most changes there is no PR and pull_request would
-  # never fire. Scoping push to main means a feature-branch commit is still
-  # covered exactly once, by its PR.
+  schedule:
+    - cron: "17 4 * * 1"   # Mondays 04:17 UTC
 
 permissions:
   contents: read
 
-# Superseded PR runs are cancelled. Each push run gets a group of its own:
-# its trunk-checks cover only its own BEFORE..SHA range and tip receipt, and a
-# shared group would cancel a pending push run (GitHub keeps one pending run
-# per group whatever cancel-in-progress says), leaving that push unchecked.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -31,11 +24,11 @@ env:
   LLVM_VERSION: "21"
 
 jobs:
-  # What the pre-push hook enforces, re-checked here because a `--no-verify`
-  # push or a clone whose hooks never ran skips the hook. Push to main only:
-  # a PR has no receipt yet, and its commits may still be autosquashed.
+  # What the pre-push hook enforces, re-checked weekly because a `--no-verify`
+  # push or a clone whose hooks never ran skips the hook. It sees main's tip
+  # only, so a receipt-less commit that a later reviewed push buried goes
+  # unnoticed; the fixup check reads all of main and has no such gap.
   trunk-checks:
-    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +47,7 @@ jobs:
             echo "Review it, then record the review and push it with the commit:"
             echo '  git update-ref "refs/reviews/$(git rev-parse HEAD)" HEAD'
             echo '  git push --atomic origin HEAD "refs/reviews/$(git rev-parse HEAD)"'
-            echo "A receipt pushed on its own starts no run: re-run this job once it is pushed."
+            echo "Then re-run this workflow (workflow_dispatch) to clear the check."
             exit 1
           fi
       # <<< review receipt
@@ -62,16 +55,8 @@ jobs:
       # commit-msg lets fixup!/squash!/amend! through so `git rebase
       # --autosquash` works; one that reaches main was never squashed.
       - name: No unsquashed fixup commits
-        env:
-          BEFORE: ${{ github.event.before }}
         run: |
-          if [ -z "$BEFORE" ] || [ "$BEFORE" = 0000000000000000000000000000000000000000 ] \
-              || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            range="$GITHUB_SHA"   # new branch or rewritten history: check all of it
-          else
-            range="$BEFORE..$GITHUB_SHA"
-          fi
-          bad=$(git log --format='%h %s' "$range" | grep -E '^[0-9a-f]+ (fixup|squash|amend)!' || true)
+          bad=$(git log --format='%h %s' "$GITHUB_SHA" | grep -E '^[0-9a-f]+ (fixup|squash|amend)!' || true)
           if [ -n "$bad" ]; then
             echo "::error::unsquashed commits reached main:"
             echo "$bad"

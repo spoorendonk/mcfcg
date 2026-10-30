@@ -134,7 +134,7 @@ Git hooks live in `.githooks/` and are tracked; they came from [wcp](https://git
 
 **The lint is HiGHS-only.** The local CI configures with no optional backend, so `src/lp/{copt,cuopt,mosek}_solver.cpp` are not in its compile database and go unlinted at push. To lint those files, configure with the backend's `-DMCFCG_USE_*=ON` and run `ctest -L lint` by hand.
 
-**CI** (`.github/workflows/ci.yml`) runs the suite without `lint`, the lint gate with pinned LLVM 21 tools, and, on pushes to main, checks the pushed tip has a review receipt and that no `fixup!`/`squash!`/`amend!` commit reached main. Those two catch after the fact what a `--no-verify` push or an unhooked clone skipped.
+**Local CI is the gate; GitHub Actions is a weekly check-up.** A change lands on a review plus green pre-push, run under the machine lock — never on a GitHub run. `.github/workflows/ci.yml` triggers only on a weekly `schedule` and `workflow_dispatch`, never on push or pull request: keep it that way, and schedule nothing more often than weekly. It runs the suite without `lint`, the lint gate with pinned LLVM 21 tools, and checks main's tip has a review receipt and that no `fixup!`/`squash!`/`amend!` commit is on main — catching, a week late at most, what a `--no-verify` push or an unhooked clone skipped. A red weekly run is a finding to fix, not a block on landing.
 
 Formatting-only commits are listed in `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to have `git blame` skip them.
 
@@ -229,9 +229,9 @@ git push --atomic origin HEAD "refs/reviews/$(git rev-parse HEAD)"
 ```
 
 The receipt is a ref named by the reviewed commit, `refs/reviews/<sha>`, and it
-travels with the push, so a CI step can check every commit that reaches the
-trunk — including one pushed with `--no-verify`, or from a clone whose hooks
-never ran. wcp's README has the step to paste into the project's CI.
+travels with the push, so the weekly GitHub check-up can check the trunk's tip
+after the fact — including one pushed with `--no-verify`, or from a clone whose
+hooks never ran (`## Tooling and Gates`).
 `--atomic` lands the branch and its receipt together or not at all.
 
 Plain git, on purpose. No wcp, no harness, nothing installed — so a reviewer on
