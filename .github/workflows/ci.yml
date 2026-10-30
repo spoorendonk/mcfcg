@@ -27,8 +27,11 @@ jobs:
   # What the pre-push hook enforces, re-checked weekly because a `--no-verify`
   # push or a clone whose hooks never ran skips the hook. It sees main's tip
   # only, so a receipt-less commit that a later reviewed push buried goes
-  # unnoticed; the fixup check reads all of main and has no such gap.
+  # unnoticed; the fixup check reads all of main and has no such gap. Main
+  # only: a branch dispatched by hand has no receipt yet and may still carry
+  # fixups awaiting autosquash.
   trunk-checks:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
