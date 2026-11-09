@@ -160,8 +160,10 @@ double parse_double(const char* flag, const char* text) {
     char* end = nullptr;
     errno = 0;
     const double value = std::strtod(text, &end);
-    if (end == text || *end != '\0' || errno == ERANGE) {
-        bad_value(flag, text, "a number");
+    // ERANGE also flags underflow, where strtod returns a usable tiny value;
+    // reject only overflow.
+    if (end == text || *end != '\0' || (errno == ERANGE && std::isinf(value))) {
+        bad_value(flag, text, "a finite number");
     }
     return value;
 }
@@ -171,7 +173,9 @@ long long parse_integer(const char* flag, const char* text, long long lo, long l
     errno = 0;
     const long long value = std::strtoll(text, &end, 10);
     if (end == text || *end != '\0' || errno == ERANGE || value < lo || value > hi) {
-        bad_value(flag, text, "an integer in range");
+        bad_value(
+            flag, text,
+            ("an integer in [" + std::to_string(lo) + ", " + std::to_string(hi) + "]").c_str());
     }
     return value;
 }

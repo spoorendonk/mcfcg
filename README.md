@@ -208,9 +208,14 @@ $$
 
 ## Build
 
-Requires C++23, CMake 3.20+, zlib and a BLAS (OpenBLAS: `libopenblas-dev` on
+Requires C++23, CMake 3.21+, zlib and a BLAS (OpenBLAS: `libopenblas-dev` on
 Debian/Ubuntu), which HiGHS' interior-point solver needs.  HiGHS itself ships
 as a FetchContent dependency — no external install needed.
+
+To push, also run `uv sync` once per checkout: it installs clang-format and
+clang-tidy **22.1.8** (pinned in `pyproject.toml`) into `.venv/bin`. The
+pre-push gate configures with `-DMCFCG_REQUIRE_LINT=ON` and fails on any other
+version, including a system clang-tidy on PATH.
 
 ```bash
 cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY

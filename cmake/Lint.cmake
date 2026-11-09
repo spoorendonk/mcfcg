@@ -55,8 +55,12 @@ option(MCFCG_REQUIRE_LINT
        OFF)
 
 # A tool the gate cannot use: fatal under MCFCG_REQUIRE_LINT, else a warning.
+# An optional fourth argument replaces the default advice (`uv sync`).
 function(_mcfcg_lint_unusable tool wanted problem)
     set(_fix "Run `uv sync` for the pinned wheels in .venv/bin (pyproject.toml)")
+    if(ARGC GREATER 3)
+        set(_fix "${ARGV3}")
+    endif()
     if(MCFCG_REQUIRE_LINT)
         message(FATAL_ERROR "lint gate: ${problem}, wanted ${tool} ${wanted}. ${_fix}.")
     endif()
@@ -88,7 +92,8 @@ function(_mcfcg_lint_find var tool)
         string(STRIP "${_wanted}" _wanted)
     endif()
     if(_wanted STREQUAL "")
-        _mcfcg_lint_unusable(${tool} "the pinned version" ".${tool}-version holds no version")
+        _mcfcg_lint_unusable(${tool} "the pinned version" ".${tool}-version holds no version"
+                             "Restore .${tool}-version from git (the group pins 22.1.8)")
         set(${var} "" PARENT_SCOPE)
         return()
     endif()

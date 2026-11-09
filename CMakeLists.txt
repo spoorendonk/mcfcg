@@ -287,6 +287,17 @@ set_tests_properties(CLI.NoArgs PROPERTIES WILL_FAIL true)
 add_test(NAME CLI.UnknownFlag COMMAND mcfcg_cli dummy.txt --bogus val)
 set_tests_properties(CLI.UnknownFlag PROPERTIES
     PASS_REGULAR_EXPRESSION "Unknown option")
+# Numeric options are parsed whole: a negative count or an out-of-range enum
+# is an error naming the option, not a silent wrap or clamp.
+add_test(NAME CLI.NegativeCount COMMAND mcfcg_cli dummy.txt --max-iters -1)
+set_tests_properties(CLI.NegativeCount PROPERTIES
+    PASS_REGULAR_EXPRESSION "option '--max-iters': '-1' is not an integer in")
+add_test(NAME CLI.GpuModeOutOfRange COMMAND mcfcg_cli dummy.txt --copt-gpu-mode 3)
+set_tests_properties(CLI.GpuModeOutOfRange PROPERTIES
+    PASS_REGULAR_EXPRESSION "is not an integer in \\[0, 2\\]")
+add_test(NAME CLI.TrailingJunk COMMAND mcfcg_cli dummy.txt --time-limit 5s)
+set_tests_properties(CLI.TrailingJunk PROPERTIES
+    PASS_REGULAR_EXPRESSION "is not a finite number")
 
 # Python harness tests (stdlib unittest, no new dependency). scripts/ carries the
 # provenance of every committed result, and the teardown path these cover already
