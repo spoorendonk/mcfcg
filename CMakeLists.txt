@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)  # find_program NO_CACHE (cmake/Lint.cmake)
 project(mcfcg LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)

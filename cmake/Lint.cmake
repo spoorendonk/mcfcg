@@ -41,8 +41,8 @@
 # worktree has none, and there the hook's PATH already holds the pushing tree's,
 # then the main checkout's, which a hint here would overrule. A linked worktree
 # configured by hand needs its own `uv sync`. NO_CACHE, so a venv created after
-# the first configure is picked up; -DCLANG_TIDY_EXE=... still overrides, and is
-# still version-checked.
+# the first configure is picked up; -DCLANG_TIDY_EXE=... still overrides when
+# it is the pin, and a preset or cached path that is not is dropped.
 #
 # A missing tool, a missing pin or any other version is fatal under
 # MCFCG_REQUIRE_LINT, which the `build` block (the push gate) and the weekly CI
@@ -65,6 +65,17 @@ function(_mcfcg_lint_unusable tool wanted problem)
                     "build block has, makes this fatal.")
 endfunction()
 
+# Sets <out> to the whole version token after "version" in <exe>'s banner, or
+# "" when it reports none.
+function(_mcfcg_lint_version out exe)
+    execute_process(COMMAND "${exe}" --version OUTPUT_VARIABLE _banner ERROR_QUIET)
+    set(_found "")
+    if(_banner MATCHES "version ([^ \t\r\n]+)")
+        set(_found "${CMAKE_MATCH_1}")
+    endif()
+    set(${out} "${_found}" PARENT_SCOPE)
+endfunction()
+
 # Sets <var> to the path of <tool> when it is exactly the version
 # .<tool>-version pins, else clears it. The whole token after "version", so a
 # suffix joined to the number ("22.1.8-rc1") is not the pin. A pin file missing
@@ -81,6 +92,19 @@ function(_mcfcg_lint_find var tool)
         set(${var} "" PARENT_SCOPE)
         return()
     endif()
+    # find_program does not search when <var> is already set, and the old
+    # Lint.cmake cached it, so a build dir from before the pin would keep its
+    # old tool past `uv sync`. A preset path (-D or a stale cache entry) that is
+    # the pin wins; one that is not is dropped and the search runs.
+    if(${var})
+        _mcfcg_lint_version(_preset "${${var}}")
+        if(NOT _preset STREQUAL _wanted)
+            message(STATUS "lint gate: ignoring ${var}=${${var}} (${tool} '${_preset}', "
+                           "not ${_wanted}) and searching .venv/bin, then PATH")
+            unset(${var} CACHE)
+            unset(${var})
+        endif()
+    endif()
     # Not CMAKE_PREFIX_PATH or CMAKE_PROGRAM_PATH, which CMake would search
     # before the hint.
     find_program(${var} ${tool} HINTS "${CMAKE_CURRENT_SOURCE_DIR}/.venv/bin"
@@ -90,11 +114,7 @@ function(_mcfcg_lint_find var tool)
         set(${var} "" PARENT_SCOPE)
         return()
     endif()
-    execute_process(COMMAND "${${var}}" --version OUTPUT_VARIABLE _banner ERROR_QUIET)
-    set(_found "")
-    if(_banner MATCHES "version ([^ \t\r\n]+)")
-        set(_found "${CMAKE_MATCH_1}")
-    endif()
+    _mcfcg_lint_version(_found "${${var}}")
     if(NOT _found STREQUAL _wanted)
         if(_found STREQUAL "")
             set(_found "of an unknown version")
