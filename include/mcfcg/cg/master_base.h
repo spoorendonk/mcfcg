@@ -177,7 +177,7 @@ protected:
         // below is never used in practice (init always overwrites it).
         double cost_ceiling = 1e7;
 
-        bool empty() const noexcept { return col_lp.empty(); }
+        [[nodiscard]] bool empty() const noexcept { return col_lp.empty(); }
 
         void clear() noexcept {
             col_lp.clear();
@@ -189,7 +189,7 @@ protected:
         // Used by the CG loop log to flag LP-obj as "partly slack" —
         // when this is > 0 the printed objective is feasibility-driven
         // rather than an MCF bound the user can trust.
-        uint32_t count_active(std::span<const double> primals) const noexcept {
+        [[nodiscard]] uint32_t count_active(std::span<const double> primals) const noexcept {
             if (col_lp.empty()) {
                 return 0;
             }

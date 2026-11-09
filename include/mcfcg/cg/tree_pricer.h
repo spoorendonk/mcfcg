@@ -87,7 +87,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         double rem_demand = 0.0;
         for (uint32_t k : src.commodity_indices) {
             double demand = _inst->commodities[k].demand;
-            scratch.push_back({_inst->commodities[k].sink, 0, demand});
+            scratch.push_back({.sink = _inst->commodities[k].sink, .key = 0, .demand = demand});
             rem_demand += demand;
         }
         std::ranges::sort(scratch, [](const BoundEntry& lhs, const BoundEntry& rhs) {
@@ -113,7 +113,8 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         // no column at all (fatal in EdgeRows slack mode, whose feasibility
         // rests on warm start seeding every structural row).  NaN still lands
         // in the !(_budget > 0) branch and stops, as documented there.
-        double budget = (pi_s[s_idx] + rem_demand * _round_slack_per_demand + _neg_rc_tol) * SCALE;
+        double budget =
+            (pi_s[s_idx] + (rem_demand * _round_slack_per_demand) + _neg_rc_tol) * SCALE;
         return {scratch, budget, rem_demand};
     }
 
@@ -232,7 +233,7 @@ class TreePricer : public PricerBase<TreePricer, TreeColumn> {
         col.reduced_cost = tree_rc;
 
         for (auto& [arc, flow] : arc_flow_map) {
-            col.arc_flows.push_back({arc, flow});
+            col.arc_flows.push_back({.arc = arc, .flow = flow});
         }
 
         new_columns.push_back(std::move(col));

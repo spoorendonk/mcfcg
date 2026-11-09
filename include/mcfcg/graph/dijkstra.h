@@ -61,7 +61,7 @@ public:
 
     void reset() noexcept { _ws->reset(); }
 
-    void add_source(vertex s, length_type dist = semiring::ZERO) noexcept {
+    void add_source(vertex s, length_type dist = semiring::ZERO) {
         assert(_ws->status[s] != VertexStatus::InHeap);
         _ws->heap.push(s, dist);
         _ws->status[s] = VertexStatus::InHeap;
@@ -82,7 +82,7 @@ public:
         return {top.v, top.p};
     }
 
-    void advance() noexcept {
+    void advance() {
         assert(!finished());
         auto [u, u_dist] = current();
         if constexpr (Traits::STORE_DISTANCES) {
@@ -117,7 +117,7 @@ public:
         }
     }
 
-    void run() noexcept {
+    void run() {
         while (!finished()) {
             advance();
         }
@@ -181,7 +181,7 @@ public:
 
     void reset() noexcept { _ws->reset(); }
 
-    void add_source(vertex s, length_type dist = semiring::ZERO) noexcept {
+    void add_source(vertex s, length_type dist = semiring::ZERO) {
         assert(_ws->status[s] != VertexStatus::InHeap);
         _ws->dist[s] = dist;
         length_type f = semiring::plus(dist, (*_heuristic)[s]);
@@ -207,7 +207,7 @@ public:
     }
 
     // Returns the vertex being settled and its true distance g(v).
-    std::pair<vertex, length_type> settle_next() noexcept {
+    std::pair<vertex, length_type> settle_next() {
         assert(!finished());
         auto top = _ws->heap.top();
         vertex u = top.v;
@@ -246,7 +246,7 @@ public:
         return {u, u_dist};
     }
 
-    void run() noexcept {
+    void run() {
         while (!finished()) {
             settle_next();
         }
@@ -255,8 +255,7 @@ public:
     // Run until num_targets target vertices have been settled.
     // Mutates is_target (sets settled targets to false) and decrements
     // targets_remaining.  Caller initializes both before calling.
-    void run_until_targets(static_map<vertex, bool>& is_target,
-                           uint32_t& targets_remaining) noexcept {
+    void run_until_targets(static_map<vertex, bool>& is_target, uint32_t& targets_remaining) {
         while (!finished() && targets_remaining > 0) {
             auto [v, _] = settle_next();
             if (is_target[v]) {

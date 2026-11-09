@@ -40,7 +40,8 @@ struct dijkstra_workspace {
           pred(num_vertices, NO_PRED) {}
 
     // Track a vertex whose status changed from VertexStatus::PreHeap.
-    void touch(vertex v) noexcept { _touched.push_back(v); }
+    // Not noexcept: push_back may throw bad_alloc.
+    void touch(vertex v) { _touched.push_back(v); }
 
     // Reset for the next shortest-path run. Only clears heap and touched
     // vertices — O(touched) instead of O(V). dist/pred are not reset;

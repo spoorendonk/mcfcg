@@ -49,7 +49,7 @@ static Instance parse_commalab(std::istream& file, const std::string& path) {
         if (cap < 0.0) {
             cap = INF;
         }
-        arc_data.push_back({src - 1, dst - 1, cost, cap});
+        arc_data.push_back({.src = src - 1, .dst = dst - 1, .cost = cost, .cap = cap});
     }
     if (file.fail()) {
         throw std::runtime_error("Failed to read arcs from: " + path);
@@ -63,7 +63,7 @@ static Instance parse_commalab(std::istream& file, const std::string& path) {
         uint32_t dst;
         double demand;
         file >> src >> dst >> demand;
-        commodities.push_back({src - 1, dst - 1, demand});
+        commodities.push_back({.source = src - 1, .sink = dst - 1, .demand = demand});
     }
     if (file.fail()) {
         throw std::runtime_error("Failed to read commodities from: " + path);
@@ -108,7 +108,7 @@ std::vector<Source> group_by_source(const std::vector<Commodity>& commodities) {
         auto it = source_index.find(s);
         if (it == source_index.end()) {
             source_index[s] = static_cast<uint32_t>(sources.size());
-            sources.push_back({s, {k}});
+            sources.push_back({.vertex = s, .commodity_indices = {k}});
         } else {
             sources[it->second].commodity_indices.push_back(k);
         }

@@ -1,6 +1,9 @@
 build*/
 .cache/
 __pycache__/
+# The pinned lint tools (`uv sync`, pyproject.toml).
+.venv/
+uv.lock
 data/intermodal-repo/
 data/intermodal/raw/
 

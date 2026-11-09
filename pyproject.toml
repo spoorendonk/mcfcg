@@ -1,0 +1,20 @@
+# The lint gate's tools, pinned exactly (#54): `uv sync` puts them in `.venv/bin`,
+# where the hooks and cmake/Lint.cmake look first, so PATH order does not matter.
+# The solver is C++ and scripts/ is stdlib-only; nothing here is a Python
+# package. The pins follow `.clang-format-version` and `.clang-tidy-version`,
+# which the gate compares them against: the group's one toolchain version,
+# changed for every repo together, through the hub.
+[project]
+name = "mcfcg-lint-tools"
+version = "0"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "clang-format==22.1.8",
+    "clang-tidy==22.1.8",
+]
+
+[tool.uv]
+package = false

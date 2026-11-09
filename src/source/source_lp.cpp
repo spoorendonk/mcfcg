@@ -63,7 +63,7 @@ SourceLPSize source_lp_size(const Instance& inst) {
     // Mirrors append_source_column entry for entry: +1 at the tail and -1 at the
     // head unless both land on the same row (self-loop -> cancels to nothing),
     // plus one capacity entry per capacitated arc. Every source repeats it.
-    s.nnz = n_sources * (2 * (n_arcs - s.self_loop_arcs) + s.capacitated_arcs);
+    s.nnz = n_sources * ((2 * (n_arcs - s.self_loop_arcs)) + s.capacitated_arcs);
     return s;
 }
 

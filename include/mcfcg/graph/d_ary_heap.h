@@ -63,7 +63,8 @@ public:
         return _heap[_index[v]].p;
     }
 
-    void push(vertex v, priority_type p) noexcept {
+    // Not noexcept: _heap grows on demand, and push_back may throw bad_alloc.
+    void push(vertex v, priority_type p) {
         assert(!contains(v));
         size_type pos = _heap.size();
         _heap.push_back({v, p});
@@ -92,7 +93,7 @@ public:
         sift_up(pos);
     }
 
-    void push_or_promote(vertex v, priority_type p) noexcept {
+    void push_or_promote(vertex v, priority_type p) {
         if (contains(v)) {
             if (p < priority(v)) {
                 promote(v, p);

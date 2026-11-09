@@ -17,14 +17,21 @@ rm -rf build
 ```
 
 ```build
-cmake -B build -G Ninja -DCMAKE_INSTALL_MESSAGE=LAZY && cmake --build build -j$(nproc)
+cmake -B build -G Ninja -DCMAKE_INSTALL_MESSAGE=LAZY -DMCFCG_REQUIRE_LINT=ON && cmake --build build -j$(nproc)
 ```
 
 ```test
 GTEST_BRIEF=1 ctest --test-dir build --output-on-failure --progress -j$(nproc)
 ```
 
-`pre-push` runs these three blocks as the local CI (`## Tooling and Gates`), so keep them executable as written. The lint gate is part of the `test` block's ctest: `clang_format` and one `clang_tidy:<path>` test per translation unit, labelled `lint` (`## clang-tidy`). `ctest --test-dir build -L lint -j4` runs it alone, `-LE lint` skips it while iterating. `-G Ninja` is not cosmetic: pre-push reads the ninja dependency log to tidy only what a push changed.
+```lint-every
+^\.clang-tidy-version$
+^pyproject\.toml$
+```
+
+`pre-push` runs these three blocks as the local CI (`## Tooling and Gates`), so keep them executable as written. The lint gate is part of the `test` block's ctest: `clang_format` and one `clang_tidy:<path>` test per translation unit, labelled `lint` (`## clang-tidy`). `ctest --test-dir build -L lint -j4` runs it alone, `-LE lint` skips it while iterating. `-G Ninja` is not cosmetic: pre-push reads the ninja dependency log to tidy only what a push changed. `-DMCFCG_REQUIRE_LINT=ON` makes a missing or wrongly versioned clang tool fail the configure, so a push cannot land unlinted (`## clang-tidy`). The `lint-every` block re-tidies every unit when the clang-tidy pin moves, since a new version can fire on code the push does not touch.
+
+**The lint tools are pinned wheels:** run `uv sync` once per checkout (a linked worktree too) to put clang-format and clang-tidy 22.1.8 in `.venv/bin`, where the hooks and `cmake/Lint.cmake` look before PATH.
 
 Single test by name:
 ```
@@ -78,7 +85,7 @@ Setup: install `clangd-lsp@claude-plugins-official` plus `clangd` (`apt install 
 
 ## clang-tidy
 
-The gate is `cmake/Lint.cmake`: one ctest test `clang_tidy:<path from the repo root>` per first-party translation unit, whose command is clang-tidy itself, plus `clang_format`. Run it all with `ctest --test-dir build -L lint -j4`; it needs only `cmake -B build`, not a compiled tree. pre-push runs the suite without the `clang_tidy:` tests and then tidies only what the push changed (a changed header through a one-line stub unit), caching passes; keep the test command bare clang-tidy, or the hook falls back to plain ctest. A missing tool or a clang-tidy/clang-format major other than `MCFCG_CLANG_TOOLS_VERSION` (21) is a configure warning, fatal under `-DMCFCG_REQUIRE_LINT=ON` (CI). `tidy-fix` applies fix-its serially and refuses to run outside a git checkout or with a dirty worktree under `include/`, `src/` or `test/`. Narrow a bulk fix with `-DMCFCG_TIDY_FIX_CHECKS='-*,some-check'`.
+The gate is `cmake/Lint.cmake`: one ctest test `clang_tidy:<path from the repo root>` per first-party translation unit, whose command is clang-tidy itself, plus `clang_format`. Run it all with `ctest --test-dir build -L lint -j4`; it needs only `cmake -B build`, not a compiled tree. pre-push runs the suite without the `clang_tidy:` tests and then tidies only what the push changed (a changed header through a one-line stub unit), caching passes; keep the test command bare clang-tidy, or the hook falls back to plain ctest. `.clang-format-version` and `.clang-tidy-version` hold the group's one toolchain version, **22.1.8** (a change is made for every repo together, through the hub); `pyproject.toml` pins the matching wheels (`uv sync` → `.venv/bin`). `Lint.cmake` compares the whole version: a missing tool or any other version (22.1.0 included) fails the configure under `-DMCFCG_REQUIRE_LINT=ON`, which the `build` block and the weekly CI set, naming found and wanted; without it, a warning that drops that tool's tests. pre-commit reads `.clang-format-version` too but compares only the major and skips loudly: the push is the gate. On macOS `Lint.cmake` passes the wheel's clang-tidy `--extra-arg=-isysroot<SDK>` (from `xcrun`), which it needs to find the standard library. `tidy-fix` applies fix-its serially and refuses to run outside a git checkout or with a dirty worktree under `include/`, `src/` or `test/`. Narrow a bulk fix with `-DMCFCG_TIDY_FIX_CHECKS='-*,some-check'`.
 
 `WarningsAsErrors` is `'*'`: every finding blocks, `readability-function-cognitive-complexity` included. Suppress a finding that is wrong for its site with `NOLINTNEXTLINE(check)` plus a comment saying why, never by widening the config. `NOLINTNEXTLINE` applies to the *literal* next line: put the prose above it and the pragma last, and for a template put it between the `template<...>` line and the signature.
 
@@ -87,6 +94,7 @@ The gate is `cmake/Lint.cmake`: one ctest test `clang_tidy:<path from the repo r
 ```
 clang-tidy -p build --config-file=.clang-tidy \
   --header-filter="^$PWD/(include|src|test)/" --quiet <file.cpp>
+# on macOS also: --extra-arg=-isysroot"$(xcrun --show-sdk-path)"
 ```
 
 Prefer the `clang_tidy:` tests, which do both for you.
@@ -118,9 +126,11 @@ plan (non-trivial) → implement → test → push to main
 Nothing formats on save and nothing formats at commit: `pre-commit` only checks (`## Tooling and Gates`). Don't hand-tune formatting — run clang-format yourself before committing:
 
 ```
-git ls-files -z '*.h' '*.cpp' | xargs -0 clang-format -i   # every tracked source, as pre-commit checks them
-clang-format --dry-run --Werror <files>                    # check only, non-zero if unformatted
+git ls-files -z '*.h' '*.cpp' | xargs -0 .venv/bin/clang-format -i   # every tracked source, as pre-commit checks them
+.venv/bin/clang-format --dry-run --Werror <files>                    # check only, non-zero if unformatted
 ```
+
+Use the pinned `.venv/bin/clang-format` (`uv sync`), not whatever is on PATH: another version formats differently.
 
 Neither `shfmt` nor `ruff` is installed here, and no hook runs them — treat shell and Python edits as unformatted and unchecked. Run tests locally before considering work done, even on trivial-looking changes.
 
@@ -134,7 +144,7 @@ Git hooks live in `.githooks/` and are tracked; they came from [wcp](https://git
 
 **The lint is HiGHS-only.** The local CI configures with no optional backend, so `src/lp/{copt,cuopt,mosek}_solver.cpp` are not in its compile database and go unlinted at push. To lint those files, configure with the backend's `-DMCFCG_USE_*=ON` and run `ctest -L lint` by hand.
 
-**Local CI is the gate; GitHub Actions is a weekly check-up.** A change lands on a review plus green pre-push, run under the machine lock — never on a GitHub run. `.github/workflows/ci.yml` triggers only on a weekly `schedule` and `workflow_dispatch`, never on push or pull request: keep it that way, and schedule nothing more often than weekly. It runs the suite without `lint`, the lint gate with pinned LLVM 21 tools, and checks that main's tip at run time has a review receipt and that no `fixup!`/`squash!`/`amend!` commit is on main. That is a spot check of what a `--no-verify` push or an unhooked clone skips, not a record: a receipt-less commit that a later reviewed push buried before the run goes unnoticed. GitHub also disables a schedule after 60 days without repository activity; re-enable it with `gh workflow enable ci.yml`. A red weekly run is a finding to fix, not a block on landing.
+**Local CI is the gate; GitHub Actions is a weekly check-up.** A change lands on a review plus green pre-push, run under the machine lock — never on a GitHub run. `.github/workflows/ci.yml` triggers only on a weekly `schedule` and `workflow_dispatch`, never on push or pull request: keep it that way, and schedule nothing more often than weekly. It runs the suite without `lint`, the lint gate with the pinned 22.1.8 wheels, and checks that main's tip at run time has a review receipt and that no `fixup!`/`squash!`/`amend!` commit is on main. That is a spot check of what a `--no-verify` push or an unhooked clone skips, not a record: a receipt-less commit that a later reviewed push buried before the run goes unnoticed. GitHub also disables a schedule after 60 days without repository activity; re-enable it with `gh workflow enable ci.yml`. A red weekly run is a finding to fix, not a block on landing.
 
 Formatting-only commits are listed in `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to have `git blame` skip them.
 

@@ -31,49 +31,94 @@
 # FetchContent sources all exist after `cmake -B build`, which is what lets CI
 # lint without building HiGHS.
 #
-# TOOL VERSIONS ARE PART OF THE CONTRACT: both tools change their output between
-# major versions. A different major than MCFCG_CLANG_TOOLS_VERSION is a
-# configure-time warning, as is a missing tool; MCFCG_REQUIRE_LINT=ON (CI)
-# makes both fatal so the gate can never silently disappear.
+# TOOL VERSIONS ARE PART OF THE CONTRACT: both tools change their output and
+# their check set between versions, so the gate would pass on one machine and
+# fail on another. `.clang-format-version` and `.clang-tidy-version` hold the
+# group's one toolchain version, 22.1.8 (changed for every repo together,
+# through the hub), and the WHOLE version is compared, not the major. The tools
+# are the wheels pyproject.toml pins (`uv sync`), in `.venv/bin`, searched before
+# anything else, so PATH order does not matter. Only this tree's: the push's
+# worktree has none, and there the hook's PATH already holds the pushing tree's,
+# then the main checkout's, which a hint here would overrule. A linked worktree
+# configured by hand needs its own `uv sync`. NO_CACHE, so a venv created after
+# the first configure is picked up; -DCLANG_TIDY_EXE=... still overrides, and is
+# still version-checked.
+#
+# A missing tool, a missing pin or any other version is fatal under
+# MCFCG_REQUIRE_LINT, which the `build` block (the push gate) and the weekly CI
+# set, naming the found and wanted versions, so a push cannot land unlinted.
+# Without it (a hand-configured build) it is a warning that drops that tool's
+# tests, so a machine without the tools still builds.
 
-set(MCFCG_CLANG_TOOLS_VERSION "21"
-    CACHE STRING "Expected clang-format / clang-tidy major version for the lint gate")
 option(MCFCG_REQUIRE_LINT
-       "Fail configuration when clang-format/clang-tidy are missing or the wrong major version" OFF)
+       "Fail the configure unless clang-format and clang-tidy are exactly the pinned versions"
+       OFF)
 
-function(_mcfcg_lint_complain)
-    string(JOIN "" _msg ${ARGN})
+# A tool the gate cannot use: fatal under MCFCG_REQUIRE_LINT, else a warning.
+function(_mcfcg_lint_unusable tool wanted problem)
+    set(_fix "Run `uv sync` for the pinned wheels in .venv/bin (pyproject.toml)")
     if(MCFCG_REQUIRE_LINT)
-        message(FATAL_ERROR "lint gate: ${_msg} (MCFCG_REQUIRE_LINT is ON)")
-    else()
-        message(WARNING "lint gate: ${_msg}. Configure with -DMCFCG_REQUIRE_LINT=ON "
-                        "to make this fatal.")
+        message(FATAL_ERROR "lint gate: ${problem}, wanted ${tool} ${wanted}. ${_fix}.")
     endif()
+    message(WARNING "lint gate: ${problem}, wanted ${tool} ${wanted}: its tests are not "
+                    "registered. ${_fix}; -DMCFCG_REQUIRE_LINT=ON, as the push gate's "
+                    "build block has, makes this fatal.")
 endfunction()
 
-# Found means usable: present, runnable, and of the expected major version.
-# A mismatched major still registers the tests (with a warning) -- the findings
-# may differ from CI's, but a gate that disappears is worse.
-function(_mcfcg_lint_find var label)
-    find_program(${var} NAMES ${label}-${MCFCG_CLANG_TOOLS_VERSION} ${label} NAMES_PER_DIR
-                 DOC "${label} binary used by the lint gate")
-    if(NOT ${var})
-        _mcfcg_lint_complain("${label} not found -- its tests are not registered")
+# Sets <var> to the path of <tool> when it is exactly the version
+# .<tool>-version pins, else clears it. The whole token after "version", so a
+# suffix joined to the number ("22.1.8-rc1") is not the pin. A pin file missing
+# or empty counts as unusable: nothing to compare against must not pass.
+function(_mcfcg_lint_find var tool)
+    set(_file "${CMAKE_CURRENT_SOURCE_DIR}/.${tool}-version")
+    set(_wanted "")
+    if(EXISTS "${_file}")
+        file(STRINGS "${_file}" _wanted LIMIT_COUNT 1)
+        string(STRIP "${_wanted}" _wanted)
+    endif()
+    if(_wanted STREQUAL "")
+        _mcfcg_lint_unusable(${tool} "the pinned version" ".${tool}-version holds no version")
+        set(${var} "" PARENT_SCOPE)
         return()
     endif()
-    execute_process(COMMAND "${${var}}" --version
-                    OUTPUT_VARIABLE _v ERROR_QUIET RESULT_VARIABLE _rc)
-    string(REGEX MATCH "version ([0-9]+)\\." _m "${_v}")
-    if(NOT _rc EQUAL 0 OR _m STREQUAL "")
-        _mcfcg_lint_complain("${label} at ${${var}} did not report a version")
-    elseif(NOT CMAKE_MATCH_1 STREQUAL MCFCG_CLANG_TOOLS_VERSION)
-        _mcfcg_lint_complain("${label} is major ${CMAKE_MATCH_1}, the gate expects "
-                             "${MCFCG_CLANG_TOOLS_VERSION}; its findings will differ from CI's")
+    # Not CMAKE_PREFIX_PATH or CMAKE_PROGRAM_PATH, which CMake would search
+    # before the hint.
+    find_program(${var} ${tool} HINTS "${CMAKE_CURRENT_SOURCE_DIR}/.venv/bin"
+                 NO_CMAKE_PATH NO_CMAKE_ENVIRONMENT_PATH NO_CACHE)
+    if(NOT ${var})
+        _mcfcg_lint_unusable(${tool} "${_wanted}" "no ${tool} found")
+        set(${var} "" PARENT_SCOPE)
+        return()
     endif()
+    execute_process(COMMAND "${${var}}" --version OUTPUT_VARIABLE _banner ERROR_QUIET)
+    set(_found "")
+    if(_banner MATCHES "version ([^ \t\r\n]+)")
+        set(_found "${CMAKE_MATCH_1}")
+    endif()
+    if(NOT _found STREQUAL _wanted)
+        if(_found STREQUAL "")
+            set(_found "of an unknown version")
+        endif()
+        _mcfcg_lint_unusable(${tool} "${_wanted}" "${${var}} is ${tool} ${_found}")
+        set(${var} "" PARENT_SCOPE)
+        return()
+    endif()
+    set(${var} "${${var}}" PARENT_SCOPE)
 endfunction()
 
 _mcfcg_lint_find(CLANG_FORMAT_EXE clang-format)
 _mcfcg_lint_find(CLANG_TIDY_EXE clang-tidy)
+
+# The wheel's clang-tidy has no default SDK on macOS, so without a sysroot it
+# does not find the C++ standard library there. Linux needs nothing.
+set(MCFCG_TIDY_EXTRA_ARGS "")
+if(APPLE AND CLANG_TIDY_EXE)
+    execute_process(COMMAND xcrun --show-sdk-path
+                    OUTPUT_VARIABLE _mcfcg_sdk OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(_mcfcg_sdk)
+        set(MCFCG_TIDY_EXTRA_ARGS "--extra-arg=-isysroot${_mcfcg_sdk}")
+    endif()
+endif()
 
 # The check lists tracked files, so it needs a git checkout; a source tarball
 # gets no clang_format test rather than one that always fails. EXISTS, not
@@ -131,6 +176,7 @@ foreach(_src IN LISTS MCFCG_TIDY_SOURCES)
                 --quiet
                 "--config-file=${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy"
                 "--header-filter=${MCFCG_TIDY_HEADER_FILTER}"
+                ${MCFCG_TIDY_EXTRA_ARGS}
                 "${_src}")
     # A heavy TU (cg_loop.h through tree_cg.cpp) takes ~30s; leave headroom
     # for a loaded laptop.
@@ -153,9 +199,9 @@ endforeach()
 # independent second mechanism.
 set(MCFCG_TIDY_FIX_CHECKS ""
     CACHE STRING "Restrict tidy-fix to these checks; empty uses .clang-tidy.")
-set(_tidy_fix_args "")
+set(_tidy_fix_args ${MCFCG_TIDY_EXTRA_ARGS})
 if(MCFCG_TIDY_FIX_CHECKS)
-    set(_tidy_fix_args "--checks=${MCFCG_TIDY_FIX_CHECKS}")
+    list(APPEND _tidy_fix_args "--checks=${MCFCG_TIDY_FIX_CHECKS}")
 endif()
 add_custom_target(tidy-fix
     COMMAND "${CMAKE_COMMAND}" -E echo

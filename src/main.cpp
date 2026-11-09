@@ -1,12 +1,19 @@
+#include <algorithm>
+#include <array>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <limits>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
-#include <unordered_map>
+#include <utility>
 
 #include "mcfcg/cg/master.h"
 #include "mcfcg/cg/master_base.h"
@@ -16,12 +23,19 @@
 #include "mcfcg/instance.h"
 #include "mcfcg/source/source_lp.h"
 
-// Demand coefficients for TNTP instances (from paper's coefs.csv)
-static const std::unordered_map<std::string, double> TNTP_COEFS = {
-    {"Austin", 6.0},       {"Barcelona", 5050.0},    {"BerlinCenter", 0.5},
-    {"Birmingham", 0.9},   {"ChicagoRegional", 4.1}, {"ChicagoSketch", 2.4},
-    {"Philadelphia", 7.0}, {"Sydney", 1.9},          {"Winnipeg", 2000.0},
-};
+// Demand coefficients for TNTP instances (from paper's coefs.csv). A constexpr
+// table, not a static map, so no static initializer can throw.
+static constexpr std::array<std::pair<std::string_view, double>, 9> TNTP_COEFS = {{
+    {"Austin", 6.0},
+    {"Barcelona", 5050.0},
+    {"BerlinCenter", 0.5},
+    {"Birmingham", 0.9},
+    {"ChicagoRegional", 4.1},
+    {"ChicagoSketch", 2.4},
+    {"Philadelphia", 7.0},
+    {"Sydney", 1.9},
+    {"Winnipeg", 2000.0},
+}};
 
 // Extract city name from TNTP path: "some/dir/CityName_net.tntp" -> "CityName"
 static std::string tntp_city_name(const std::string& net_path) {
@@ -133,6 +147,40 @@ static bool configure_solver(const std::string& solver, bool verbose_solver, int
 
 namespace {
 
+// Numeric option values, parsed whole: junk, a trailing suffix or an
+// out-of-range value is an error naming the option, where atoi/atof would
+// silently read 0 (or wrap a negative into a huge uint32_t). Thrown, and
+// reported by main's catch, so the dispatch below stays one line per option.
+[[noreturn]] void bad_value(const char* flag, const char* text, const char* what) {
+    throw std::invalid_argument(std::string("option '") + flag + "': '" + text + "' is not " +
+                                what);
+}
+
+double parse_double(const char* flag, const char* text) {
+    char* end = nullptr;
+    errno = 0;
+    const double value = std::strtod(text, &end);
+    if (end == text || *end != '\0' || errno == ERANGE) {
+        bad_value(flag, text, "a number");
+    }
+    return value;
+}
+
+long long parse_integer(const char* flag, const char* text, long long lo, long long hi) {
+    char* end = nullptr;
+    errno = 0;
+    const long long value = std::strtoll(text, &end, 10);
+    if (end == text || *end != '\0' || errno == ERANGE || value < lo || value > hi) {
+        bad_value(flag, text, "an integer in range");
+    }
+    return value;
+}
+
+uint32_t parse_u32(const char* flag, const char* text) {
+    return static_cast<uint32_t>(
+        parse_integer(flag, text, 0, std::numeric_limits<uint32_t>::max()));
+}
+
 // One flat argument-parsing dispatch followed by the solve it configures.
 // The one part that was its own concern -- backend selection -- is already
 // extracted as configure_solver above; splitting the rest would only pass
@@ -188,34 +236,39 @@ int run_cli(int argc, char* argv[]) {
         if (std::strcmp(argv[i], "--formulation") == 0) {
             formulation = argv[++i];
         } else if (std::strcmp(argv[i], "--max-iters") == 0) {
-            max_iters = static_cast<uint32_t>(std::atoi(argv[++i]));
+            max_iters = parse_u32(argv[i], argv[i + 1]);
+            ++i;
         } else if (std::strcmp(argv[i], "--trips") == 0) {
             trips_path = argv[++i];
         } else if (std::strcmp(argv[i], "--write-mps") == 0) {
             write_mps_path = argv[++i];
         } else if (std::strcmp(argv[i], "--coef") == 0) {
-            coef = std::atof(argv[++i]);
+            coef = parse_double(argv[i], argv[i + 1]);
+            ++i;
         } else if (std::strcmp(argv[i], "--threads") == 0) {
-            num_threads = static_cast<uint32_t>(std::atoi(argv[++i]));
+            num_threads = parse_u32(argv[i], argv[i + 1]);
+            ++i;
         } else if (std::strcmp(argv[i], "--batch-size") == 0) {
-            batch_size = static_cast<uint32_t>(std::atoi(argv[++i]));
+            batch_size = parse_u32(argv[i], argv[i + 1]);
+            ++i;
         } else if (std::strcmp(argv[i], "--solver") == 0) {
             solver = argv[++i];
         } else if (std::strcmp(argv[i], "--copt-gpu-mode") == 0) {
-            copt_gpu_mode = std::atoi(argv[++i]);
-            if (copt_gpu_mode < 0 || copt_gpu_mode > 2) {
-                std::fprintf(stderr, "Invalid --copt-gpu-mode '%s'. Valid: 0 (CPU), 1, 2 (GPU).\n",
-                             argv[i]);
-                return EXIT_FAILURE;
-            }
+            // 0 (CPU), 1, 2 (GPU).
+            copt_gpu_mode = static_cast<int>(parse_integer(argv[i], argv[i + 1], 0, 2));
+            ++i;
         } else if (std::strcmp(argv[i], "--col-age-limit") == 0) {
-            params.col_age_limit = static_cast<uint32_t>(std::atoi(argv[++i]));
+            params.col_age_limit = parse_u32(argv[i], argv[i + 1]);
+            ++i;
         } else if (std::strcmp(argv[i], "--row-inactivity") == 0) {
-            params.row_inactivity_threshold = static_cast<uint32_t>(std::atoi(argv[++i]));
+            params.row_inactivity_threshold = parse_u32(argv[i], argv[i + 1]);
+            ++i;
         } else if (std::strcmp(argv[i], "--neg-rc-tol") == 0) {
-            params.neg_rc_tol = std::atof(argv[++i]);
+            params.neg_rc_tol = parse_double(argv[i], argv[i + 1]);
+            ++i;
         } else if (std::strcmp(argv[i], "--time-limit") == 0) {
-            params.time_limit_seconds = std::atof(argv[++i]);
+            params.time_limit_seconds = parse_double(argv[i], argv[i + 1]);
+            ++i;
         } else if (std::strcmp(argv[i], "--strategy") == 0) {
             std::string s = argv[++i];
             if (s == "pricer-heavy") {
@@ -243,7 +296,8 @@ int run_cli(int argc, char* argv[]) {
         }
         if (coef == 0.0) {
             auto city = tntp_city_name(instance_path);
-            auto it = TNTP_COEFS.find(city);
+            const auto* it = std::ranges::find(TNTP_COEFS, std::string_view(city),
+                                               &std::pair<std::string_view, double>::first);
             if (it != TNTP_COEFS.end()) {
                 coef = it->second;
             } else {

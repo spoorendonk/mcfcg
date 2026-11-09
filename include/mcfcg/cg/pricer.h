@@ -62,7 +62,9 @@ class PathPricer : public PricerBase<PathPricer, Column> {
         // a slightly tighter bound than the naive SCALE·π_k, not a looser one.
         double allowance = _round_slack_per_demand + _neg_rc_tol;
         for (uint32_t k : src.commodity_indices) {
-            scratch.push_back({_inst->commodities[k].sink, scale_dual(pi[k] + allowance), 0.0});
+            scratch.push_back({.sink = _inst->commodities[k].sink,
+                               .key = scale_dual(pi[k] + allowance),
+                               .demand = 0.0});
         }
         std::ranges::sort(scratch, [](const BoundEntry& lhs, const BoundEntry& rhs) {
             return lhs.key > rhs.key;

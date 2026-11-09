@@ -18,11 +18,11 @@ static uint32_t parse_net_metadata(std::istream& file) {
     std::string line;
     uint32_t num_nodes = 0;
     while (std::getline(file, line)) {
-        if (line.find("<NUMBER OF NODES>") != std::string::npos) {
+        if (line.contains("<NUMBER OF NODES>")) {
             std::istringstream iss(line.substr(line.find('>') + 1));
             iss >> num_nodes;
         }
-        if (line.find("<END OF METADATA>") != std::string::npos) {
+        if (line.contains("<END OF METADATA>")) {
             break;
         }
     }
@@ -151,14 +151,14 @@ static void parse_trips(std::istream& file, double demand_coef, std::vector<Comm
 
     while (std::getline(file, line)) {
         if (!past_metadata) {
-            if (line.find("<END OF METADATA>") != std::string::npos) {
+            if (line.contains("<END OF METADATA>")) {
                 past_metadata = true;
             }
             continue;
         }
 
         // Check for "Origin N"
-        if (line.find("Origin") != std::string::npos) {
+        if (line.contains("Origin")) {
             std::istringstream iss(line.substr(line.find("Origin") + 6));
             iss >> current_origin;
             continue;
@@ -189,7 +189,9 @@ static void parse_trips(std::istream& file, double demand_coef, std::vector<Comm
             // dropped without counting against `malformed`.
             if (demand > 0.0) {
                 // 1-indexed -> 0-indexed, apply coefficient
-                commodities.push_back({current_origin - 1, dest - 1, demand / demand_coef});
+                commodities.push_back({.source = current_origin - 1,
+                                       .sink = dest - 1,
+                                       .demand = demand / demand_coef});
             }
         }
     }

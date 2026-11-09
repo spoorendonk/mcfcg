@@ -15,14 +15,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Pinned, not `apt-get install clang-tidy`: ubuntu-24.04 ships clang-tidy 18,
-  # which disagrees with local development (21) about which checks exist at all
-  # -- modernize-use-ranges among them. A gate that is green locally and red in
-  # CI (or the reverse) is worse than no gate. Keep equal to
-  # MCFCG_CLANG_TOOLS_VERSION (cmake/Lint.cmake).
-  LLVM_VERSION: "21"
-
 jobs:
   # What the pre-push hook enforces, re-checked weekly because a `--no-verify`
   # push or a clone whose hooks never ran skips the hook. It sees main's tip
@@ -97,17 +89,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build zlib1g-dev libopenblas-dev
 
-      - name: Install clang-tidy ${{ env.LLVM_VERSION }}
+      # The same wheels local development uses (pyproject.toml, 22.1.8), not
+      # the runner image's clang-tidy, which reports a different check set. A
+      # gate that is green locally and red here (or the reverse) is worse than
+      # no gate. cmake/Lint.cmake finds them in .venv/bin and checks the
+      # version against .clang-format-version / .clang-tidy-version.
+      - name: Install the pinned clang tools
         run: |
           set -euxo pipefail
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
-            | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
-          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" \
-            | sudo tee /etc/apt/sources.list.d/llvm.list
-          sudo apt-get update
-          sudo apt-get install -y "clang-tidy-${LLVM_VERSION}" "clang-format-${LLVM_VERSION}"
-          "clang-tidy-${LLVM_VERSION}" --version
-          "clang-format-${LLVM_VERSION}" --version
+          # pipx ships on the runner image; plain pip refuses (PEP 668).
+          pipx run uv sync
+          .venv/bin/clang-tidy --version
+          .venv/bin/clang-format --version
 
       # FetchContent clones HiGHS and googletest at CONFIGURE time, and that
       # clone is the slow part of this job. Cache the populated source trees
@@ -135,10 +128,7 @@ jobs:
       # gate cannot silently register no tests.
       - name: Configure
         run: |
-          cmake -B build -G Ninja \
-            -DMCFCG_NATIVE_ARCH=OFF -DMCFCG_REQUIRE_LINT=ON \
-            -DCLANG_TIDY_EXE=/usr/bin/clang-tidy-${LLVM_VERSION} \
-            -DCLANG_FORMAT_EXE=/usr/bin/clang-format-${LLVM_VERSION}
+          cmake -B build -G Ninja -DMCFCG_NATIVE_ARCH=OFF -DMCFCG_REQUIRE_LINT=ON
 
       # This job configures HiGHS-only, so COPT/MOSEK/cuOpt are absent from the
       # compile database and src/lp/{copt,cuopt,mosek}_solver.cpp are NOT
