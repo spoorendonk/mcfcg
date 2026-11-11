@@ -161,7 +161,7 @@ if(MCFCG_USE_CUOPT)
                  HINTS ENV CUOPT_ROOT ENV CONDA_PREFIX
                  PATH_SUFFIXES lib lib64 cpp/build)
     if(NOT CUOPT_INCLUDE_DIR OR NOT CUOPT_LIBRARY)
-        message(FATAL_ERROR "cuOpt not found. Set CUOPT_ROOT (install prefix or spoorendonk/cuopt source checkout), activate a conda env with cuopt installed, or set CMAKE_PREFIX_PATH.")
+        message(FATAL_ERROR "cuOpt 26.08 or later not found (looked for cuopt/mathematical_optimization/cuopt_c.h; an older cuOpt is not found). Set CUOPT_ROOT (install prefix or spoorendonk/cuopt source checkout on delta-api-latest), activate a conda env with cuopt installed, or set CMAKE_PREFIX_PATH.")
     endif()
     target_sources(mcfcg PRIVATE src/lp/cuopt_solver.cpp)
     # SYSTEM so clang-tidy (the tidy-fix target) never analyzes/rewrites the

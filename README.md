@@ -430,12 +430,16 @@ cmake --build build -j$(nproc)
 | Config | Licence | Hardware | Reproducible with open-source components? |
 |--------|---------|----------|-------------------------------------------|
 | `highs`    | none (MIT) | CPU | **Yes.** Fetched and built by CMake; nothing to install. |
-| `cuopt`    | none (Apache-2.0) | **NVIDIA GPU** | **Yes**, given a GPU. Build the [`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt) fork at commit `8ea7a033a` first — the delta C API the default build needs is not in stock cuOpt. |
+| `cuopt`    | none (Apache-2.0) | **NVIDIA GPU** | **Yes**, given a GPU. Build the [`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt) fork at commit `162a2f784` (`delta-api-latest`, cuOpt 26.08 base) first — the delta C API the default build needs is not in stock cuOpt. |
 | `mosek`    | commercial (academic licences available) | CPU | No. |
 | `copt-cpu` | commercial (academic licences available) | CPU | No. |
 | `copt-gpu` | commercial (academic licences available) | NVIDIA GPU | No. |
 
-Cite the cuOpt fork by commit, not by branch: `delta-api` is a moving ref.
+Cite the cuOpt fork by commit, not by branch: `delta-api-latest` is a moving ref.
+The results tagged v0.1.0 were run on the older `delta-api` branch (commit
+`8ea7a033a`, cuOpt 26.06 base, as `PROVENANCE.txt` at that tag records); that
+fork keeps its headers under `cuopt/linear_programming/`, so build it with
+mcfcg's v0.1.0 tag, not `main`.
 
 ### Verifying a reproduction
 

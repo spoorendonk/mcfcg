@@ -19,9 +19,9 @@
 #endif
 
 // cuOpt corrected the "TERIMINATION" typo in the termination-status constants
-// in a release after 26.04 (26.04 still ships the typo; the 26.06+ base the
-// delta-api fork tracks has it fixed). Accept either spelling so this backend
-// builds against both an older installed cuOpt and the fork.
+// after 26.04. The 26.08+ headers this backend now requires (CMakeLists.txt)
+// define the fixed spelling, so this fallback is inert; it stays as a guard in
+// case an older constants.h is ever on the include path.
 #ifndef CUOPT_TERMINATION_STATUS_OPTIMAL
 #define CUOPT_TERMINATION_STATUS_OPTIMAL CUOPT_TERIMINATION_STATUS_OPTIMAL
 #define CUOPT_TERMINATION_STATUS_INFEASIBLE CUOPT_TERIMINATION_STATUS_INFEASIBLE
