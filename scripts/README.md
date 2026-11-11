@@ -129,9 +129,11 @@ cmake --build build -j$(nproc)
 ldd build/mcfcg_cli | grep -E 'cuopt|copt|mosek'   # all three should resolve
 ```
 
-(cuOpt needs the `spoorendonk/cuopt` fork checkout as `CUOPT_ROOT`; stock cuOpt
-requires `-DMCFCG_CUOPT_DELTA_API=OFF`. See the top-level CLAUDE.md for the
-delta-API rationale.)
+(cuOpt needs a `spoorendonk/cuopt` fork checkout on the `delta-api-latest`
+branch as `CUOPT_ROOT`; stock cuOpt requires `-DMCFCG_CUOPT_DELTA_API=OFF`.
+Either way the headers must be under `cuopt/mathematical_optimization/` (cuOpt
+v26.08.00 on): the fork's old `delta-api` branch and older stock releases fail
+the configure. See the top-level CLAUDE.md for the delta-API rationale.)
 
 Each backend reports the version of the library it actually loaded in the
 `[lp-config]` banner, captured in every run log and in the sweep CSV's `config`

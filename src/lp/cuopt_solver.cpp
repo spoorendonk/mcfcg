@@ -19,9 +19,10 @@
 #endif
 
 // cuOpt corrected the "TERIMINATION" typo in the termination-status constants
-// after 26.04. The 26.08+ headers this backend now requires (CMakeLists.txt)
-// define the fixed spelling, so this fallback is inert; it stays as a guard in
-// case an older constants.h is ever on the include path.
+// after 26.04. The cuopt/mathematical_optimization/ headers this backend now
+// requires (CMakeLists.txt) define the fixed spelling, so this fallback is
+// inert; it stays as a guard in case an older constants.h is ever on the
+// include path.
 #ifndef CUOPT_TERMINATION_STATUS_OPTIMAL
 #define CUOPT_TERMINATION_STATUS_OPTIMAL CUOPT_TERIMINATION_STATUS_OPTIMAL
 #define CUOPT_TERMINATION_STATUS_INFEASIBLE CUOPT_TERIMINATION_STATUS_INFEASIBLE

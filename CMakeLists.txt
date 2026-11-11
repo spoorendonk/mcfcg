@@ -151,9 +151,11 @@ if(MCFCG_USE_CUOPT)
     # or a source-tree checkout of spoorendonk/cuopt ({root}/cpp/include +
     # {root}/cpp/build). CONDA_PREFIX covers the conda-installed case (e.g.
     # a cuopt_dev env that already has runtime deps like rmm, cublas, etc.).
-    # cuOpt 26.08 moved the public headers to cuopt/mathematical_optimization/;
-    # cuopt/linear_programming/cuopt_c.h is only a deprecated forwarding shim,
-    # so an older (pre-26.08) cuOpt is no longer found.
+    # cuOpt moved its public headers from cuopt/linear_programming/ to
+    # cuopt/mathematical_optimization/ during the 26.08 cycle (so the version
+    # number cannot tell the layouts apart: the old delta-api fork also reports
+    # 26.8.0). linear_programming/cuopt_c.h survives only as a deprecated
+    # forwarding shim; this backend requires the new layout.
     find_path(CUOPT_INCLUDE_DIR cuopt/mathematical_optimization/cuopt_c.h
               HINTS ENV CUOPT_ROOT ENV CONDA_PREFIX
               PATH_SUFFIXES include cpp/include)
@@ -161,7 +163,19 @@ if(MCFCG_USE_CUOPT)
                  HINTS ENV CUOPT_ROOT ENV CONDA_PREFIX
                  PATH_SUFFIXES lib lib64 cpp/build)
     if(NOT CUOPT_INCLUDE_DIR OR NOT CUOPT_LIBRARY)
-        message(FATAL_ERROR "cuOpt 26.08 or later not found (looked for cuopt/mathematical_optimization/cuopt_c.h; an older cuOpt is not found). Set CUOPT_ROOT (install prefix or spoorendonk/cuopt source checkout on delta-api-latest), activate a conda env with cuopt installed, or set CMAKE_PREFIX_PATH.")
+        message(FATAL_ERROR "cuOpt not found (looked for cuopt/mathematical_optimization/cuopt_c.h and libcuopt). Set CUOPT_ROOT (install prefix or spoorendonk/cuopt source checkout on delta-api-latest), activate a conda env with cuopt installed, or set CMAKE_PREFIX_PATH.")
+    endif()
+    # find_path is skipped when CUOPT_INCLUDE_DIR is already set (-D on the
+    # command line, or the cache of a build dir configured against an older
+    # cuOpt), so check the layout explicitly.
+    if(NOT EXISTS "${CUOPT_INCLUDE_DIR}/cuopt/mathematical_optimization/cuopt_c.h")
+        message(FATAL_ERROR
+            "CUOPT_INCLUDE_DIR=${CUOPT_INCLUDE_DIR} has no "
+            "cuopt/mathematical_optimization/cuopt_c.h: it is an older cuOpt that keeps "
+            "its headers under cuopt/linear_programming/ (e.g. the fork's old delta-api "
+            "branch). Point it at a cuOpt with the mathematical_optimization/ layout "
+            "(spoorendonk/cuopt delta-api-latest), or clear the cached value with "
+            "-UCUOPT_INCLUDE_DIR.")
     endif()
     target_sources(mcfcg PRIVATE src/lp/cuopt_solver.cpp)
     # SYSTEM so clang-tidy (the tidy-fix target) never analyzes/rewrites the
@@ -184,15 +198,15 @@ if(MCFCG_USE_CUOPT)
     # The cuOpt backend defaults to the incremental delta C API: the CG master
     # mutates one persistent LP handle (add/delete rows & columns, resolve) every
     # iteration. It needs the fork that exports cuopt_c_delta.h (spoorendonk/cuopt,
-    # epic #20). For stock (non-fork) cuOpt, set -DMCFCG_CUOPT_DELTA_API=OFF to
-    # fall back to the rebuild-from-scratch path.
+    # epic #20). For stock (non-fork) cuOpt with the mathematical_optimization/
+    # layout, set -DMCFCG_CUOPT_DELTA_API=OFF to fall back to the
+    # rebuild-from-scratch path.
     if(MCFCG_CUOPT_DELTA_API)
         if(NOT EXISTS "${CUOPT_INCLUDE_DIR}/cuopt/mathematical_optimization/cuopt_c_delta.h")
             message(FATAL_ERROR
                 "MCFCG_CUOPT_DELTA_API is ON (default) but cuopt_c_delta.h was not found "
                 "under ${CUOPT_INCLUDE_DIR} — this looks like a stock (non-fork) cuOpt. "
-                "Build the spoorendonk/cuopt fork (delta-api-latest branch, cuOpt 26.08 "
-                "base, see epic #20), or "
+                "Build the spoorendonk/cuopt fork (delta-api-latest branch, see epic #20), or "
                 "reconfigure with -DMCFCG_CUOPT_DELTA_API=OFF to use the rebuild path. "
                 "NOTE: the rebuild path recreates the entire LP every CG iteration — a "
                 "SERIOUS performance degradation; the delta API is strongly recommended.")
@@ -202,7 +216,8 @@ if(MCFCG_USE_CUOPT)
         message(WARNING
             "MCFCG_CUOPT_DELTA_API=OFF: using the cuOpt rebuild-from-scratch path, which "
             "recreates the entire LP every CG iteration — SERIOUS performance degradation. "
-            "Use only for stock (non-fork) cuOpt; prefer the spoorendonk/cuopt fork with the "
+            "Use only for stock (non-fork) cuOpt with the cuopt/mathematical_optimization/ "
+            "header layout; prefer the spoorendonk/cuopt fork with the "
             "delta API left ON.")
     endif()
 endif()
