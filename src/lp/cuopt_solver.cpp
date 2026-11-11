@@ -1,7 +1,7 @@
 #ifdef MCFCG_USE_CUOPT
 
-#include <cuopt/linear_programming/constants.h>
-#include <cuopt/linear_programming/cuopt_c.h>
+#include <cuopt/mathematical_optimization/constants.h>
+#include <cuopt/mathematical_optimization/cuopt_c.h>
 
 #include <algorithm>
 #include <cassert>
@@ -15,7 +15,7 @@
 #include "mcfcg/util/tolerances.h"
 
 #ifdef MCFCG_CUOPT_DELTA_API
-#include <cuopt/linear_programming/cuopt_c_delta.h>
+#include <cuopt/mathematical_optimization/cuopt_c_delta.h>
 #endif
 
 // cuOpt corrected the "TERIMINATION" typo in the termination-status constants

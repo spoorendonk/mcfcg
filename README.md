@@ -259,10 +259,12 @@ The cuOpt backend mutates the restricted master incrementally (add/delete
 columns and rows, re-solve), so by default it uses cuOpt's incremental delta C
 API (`MCFCG_CUOPT_DELTA_API=ON`). Stock cuOpt has no such API; the default path
 needs a cuOpt build that ships `cuopt_c_delta.h` — the
-[`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt) fork (delta-api
-branch). **Build that fork first** (configure errors out if the header is
-missing), or reconfigure with `-DMCFCG_CUOPT_DELTA_API=OFF` to fall back to the
-rebuild-from-scratch path on stock cuOpt — a serious performance degradation
+[`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt) fork (`delta-api-latest`
+branch, the delta API on the cuOpt 26.08 release). **Build that fork first**
+(configure errors out if the header is missing), or reconfigure with
+`-DMCFCG_CUOPT_DELTA_API=OFF` to fall back to the rebuild-from-scratch path on
+stock cuOpt 26.08 or later (earlier releases keep their headers under
+`cuopt/linear_programming/` and are not found) — a serious performance degradation
 (the whole LP is recreated every CG iteration), supported only as a
 compatibility fallback. To use the fork, point the configure at it (an install
 prefix or a source checkout both work):

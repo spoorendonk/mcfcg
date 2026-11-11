@@ -151,7 +151,10 @@ if(MCFCG_USE_CUOPT)
     # or a source-tree checkout of spoorendonk/cuopt ({root}/cpp/include +
     # {root}/cpp/build). CONDA_PREFIX covers the conda-installed case (e.g.
     # a cuopt_dev env that already has runtime deps like rmm, cublas, etc.).
-    find_path(CUOPT_INCLUDE_DIR cuopt/linear_programming/cuopt_c.h
+    # cuOpt 26.08 moved the public headers to cuopt/mathematical_optimization/;
+    # cuopt/linear_programming/cuopt_c.h is only a deprecated forwarding shim,
+    # so an older (pre-26.08) cuOpt is no longer found.
+    find_path(CUOPT_INCLUDE_DIR cuopt/mathematical_optimization/cuopt_c.h
               HINTS ENV CUOPT_ROOT ENV CONDA_PREFIX
               PATH_SUFFIXES include cpp/include)
     find_library(CUOPT_LIBRARY cuopt
@@ -184,11 +187,12 @@ if(MCFCG_USE_CUOPT)
     # epic #20). For stock (non-fork) cuOpt, set -DMCFCG_CUOPT_DELTA_API=OFF to
     # fall back to the rebuild-from-scratch path.
     if(MCFCG_CUOPT_DELTA_API)
-        if(NOT EXISTS "${CUOPT_INCLUDE_DIR}/cuopt/linear_programming/cuopt_c_delta.h")
+        if(NOT EXISTS "${CUOPT_INCLUDE_DIR}/cuopt/mathematical_optimization/cuopt_c_delta.h")
             message(FATAL_ERROR
                 "MCFCG_CUOPT_DELTA_API is ON (default) but cuopt_c_delta.h was not found "
                 "under ${CUOPT_INCLUDE_DIR} — this looks like a stock (non-fork) cuOpt. "
-                "Build the spoorendonk/cuopt fork (delta-api branch, see epic #20), or "
+                "Build the spoorendonk/cuopt fork (delta-api-latest branch, cuOpt 26.08 "
+                "base, see epic #20), or "
                 "reconfigure with -DMCFCG_CUOPT_DELTA_API=OFF to use the rebuild path. "
                 "NOTE: the rebuild path recreates the entire LP every CG iteration — a "
                 "SERIOUS performance degradation; the delta API is strongly recommended.")
