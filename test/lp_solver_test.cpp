@@ -4,15 +4,48 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <optional>
 #include <stdexcept>
+#include <string>
 
 // A method HiGHS rejects must fail construction, not leave HiGHS on its default
 // solver while the [lp-config] banner names the requested one. This is how a
 // build without HiPO's extras now surfaces (HiGHS >= 1.16 rejects solver=hipo).
+namespace {
+
+// Sets an environment variable for one scope and restores the caller's value,
+// so MCFCG_HIGHS_SOLVER=simplex ./mcfcg_tests keeps the later tests on simplex.
+class ScopedEnv {
+public:
+    ScopedEnv(const char* name, const char* value) : _name(name) {
+        const char* prev = std::getenv(name);
+        if (prev != nullptr) {
+            _prev = prev;
+        }
+        setenv(name, value, 1);
+    }
+    ScopedEnv(const ScopedEnv&) = delete;
+    ScopedEnv& operator=(const ScopedEnv&) = delete;
+    ScopedEnv(ScopedEnv&&) = delete;
+    ScopedEnv& operator=(ScopedEnv&&) = delete;
+    ~ScopedEnv() {
+        if (_prev) {
+            setenv(_name, _prev->c_str(), 1);
+        } else {
+            unsetenv(_name);
+        }
+    }
+
+private:
+    const char* _name;
+    std::optional<std::string> _prev;
+};
+
+}  // namespace
+
 TEST(LPSolver, HighsRejectedMethodThrows) {
-    ASSERT_EQ(setenv("MCFCG_HIGHS_SOLVER", "no-such-method", 1), 0);
+    const ScopedEnv env("MCFCG_HIGHS_SOLVER", "no-such-method");
     EXPECT_THROW(mcfcg::create_lp_solver(), std::runtime_error);
-    unsetenv("MCFCG_HIGHS_SOLVER");
 }
 
 // Solve: min x + 2y  s.t. x + y >= 3, x >= 0, y >= 0

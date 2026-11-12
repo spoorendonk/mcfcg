@@ -352,14 +352,15 @@ library reports, so both are part of the version pin.
 
 HiGHS — local patch, in BOTH experiments, required for correctness.
     cmake/patches/highs-hipo-refine-status.patch, applied to the FetchContent'd
-    source by CMakeLists.txt (idempotent, no manual step). Stock HiPO discards a
+    source by v0.1.0's CMakeLists.txt (idempotent, no manual step); removed on
+    main since, see the last paragraph of this entry. Stock v1.15.1 HiPO discards a
     near-optimal solution as an "internal error" when its IPX refinement step
     fails on the ill-conditioned path masters this solver produces — the slack
     penalty gives the objective a wide dynamic range. Tracked as issue #36.
 
-    Load-bearing, not defensive, and no upstream tag replaces it. Checked
-    2026-08-13: HiGHS master still carries the unpatched `refineWithIpx()`, and
-    v1.15.1 — the tag pinned here — is the newest release. Built against
+    Load-bearing, not defensive, and at v0.1.0 no upstream tag replaced it.
+    Checked 2026-08-13: HiGHS master still carried the unpatched `refineWithIpx()`,
+    and v1.15.1 — the tag v0.1.0 pins — was the newest release. Built against
     unpatched v1.15.1, this repo fails its own suite at RCValidation.WinnipegPath
     ("LP not optimal at iter 8"); every other test passes, so the blast radius is
     exactly the ill-conditioned path masters. `highsGithash()` reports the

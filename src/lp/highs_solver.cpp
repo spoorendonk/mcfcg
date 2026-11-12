@@ -68,7 +68,10 @@ public:
         // would leave the solver at its default while the banner below still
         // reads method=hipo, so a rejected method is an error.
         if (_highs.setOptionValue("solver", method) != HighsStatus::kOk) {
-            throw std::runtime_error(std::string("HiGHS rejected solver=") + method);
+            throw std::runtime_error(std::string("HiGHS rejected solver=") + method +
+                                     " (for hipo: HiPO's extras are not linked, see "
+                                     "BUILD_SHARED_EXTRAS_LIB in CMakeLists.txt; "
+                                     "--verbose-solver shows HiGHS' reason)");
         }
         HighsModel model;
         model.lp_.sense_ = ObjSense::kMinimize;

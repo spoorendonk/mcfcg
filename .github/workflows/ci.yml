@@ -104,19 +104,15 @@ jobs:
 
       # FetchContent clones HiGHS and googletest at CONFIGURE time, and that
       # clone is the slow part of this job. Cache the populated source trees
-      # only -- never build/CMakeCache.txt, which pins absolute paths. The
-      # HiGHS PATCH_COMMAND is idempotent, so restoring an already-patched
-      # highs-src is safe.
+      # only -- never build/CMakeCache.txt, which pins absolute paths.
       - name: Cache FetchContent sources
         uses: actions/cache@v4
         with:
           path: build/_deps
-          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/patches/*.patch') }}
-          # No restore-keys on purpose. A fallback would restore a tree
-          # populated at the same GIT_TAG, and FetchContent then skips the
-          # download AND the PATCH_COMMAND -- so an edited
-          # cmake/patches/*.patch would never be applied, silently defeating
-          # the patch hash this key exists to track.
+          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          # No restore-keys on purpose: a fallback would restore a tree from
+          # an older GIT_TAG, and FetchContent's in-place update of it is
+          # slower and less certain than a clean clone.
 
       # Configure only. clang-tidy needs compile_commands.json and HiGHS'
       # generated headers, both of which exist after configure -- HConfig.h
