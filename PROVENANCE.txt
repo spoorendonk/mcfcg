@@ -370,7 +370,7 @@ HiGHS — local patch, in BOTH experiments, required for correctness.
     After v0.1.0 (2026-11-12, issue #55): main moved to stock HiGHS v1.16.0,
     githash f3f113d230, and dropped the patch, because upstream commit
     02d5f2135 ("Do not discard hipo status if ipx refinement fails"), first
-    released in v1.16.0, does the same thing. Every committed result above was
+    released in v1.16.0, fixes the same failure. Every committed result above was
     produced on patched v1.15.1; build v0.1.0 to reproduce its timings.
 
 cuOpt — delta-API fork, CG benchmark ONLY (the compact baseline uses stock 26.2.0).

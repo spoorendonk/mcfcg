@@ -147,9 +147,10 @@ That version is read back from the loaded library, not from the vendor header's
 compile-time macros, so a stale `LD_LIBRARY_PATH` pointing at a second install
 shows up in the log instead of being silently misreported as the version you
 built against. Two things it cannot tell you, both recorded in `PROVENANCE.txt`
-instead: whether the HiGHS HiPO patch is applied (`highsGithash()` reports the
-upstream tag either way), and whether cuOpt is the delta-API fork
-(`cuOptGetVersion` reports the upstream RAPIDS version).
+instead: whether cuOpt is the delta-API fork (`cuOptGetVersion` reports the
+upstream RAPIDS version), and, for logs from HiGHS 1.15.1 builds such as the
+v0.1.0 results, that the local HiPO patch was applied (`highsGithash()` reports
+the upstream tag either way; v1.16.0 builds are stock).
 
 ### Verifying a reproduction
 

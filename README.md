@@ -310,8 +310,9 @@ construction (captured in the CG / benchmark logs), e.g.:
 `version=` is queried from the library actually loaded at run time, never from
 the vendor header's compile-time macros, so a stale `LD_LIBRARY_PATH` pointing at
 a second install shows up here instead of being silently misreported.
-`PROVENANCE.txt` records the two things it cannot see: whether the HiGHS HiPO
-patch is applied, and whether cuOpt is the delta-API fork.
+`PROVENANCE.txt` records what it cannot see: whether cuOpt is the delta-API fork,
+and, for the v0.1.0 results built on HiGHS 1.15.1, the local HiPO patch (gone
+since v1.16.0, which carries the upstream fix).
 
 `threads=auto(N)` reports the backend's effective thread count (`N` = hardware
 concurrency when the backend auto-selects); `exec` is CPU or GPU. The banner
