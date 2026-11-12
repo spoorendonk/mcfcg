@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
+#include <string>
 #include <thread>
 
 #include "mcfcg/lp/lp_solver.h"
@@ -61,16 +63,21 @@ public:
         // MCFCG_HIGHS_SOLVER = simplex | ipm | hipo | pdlp.
         const char* highs_method = std::getenv("MCFCG_HIGHS_SOLVER");
         const char* method = highs_method != nullptr ? highs_method : "hipo";
-        _highs.setOptionValue("solver", method);
+        // Since v1.16 HiGHS rejects solver=hipo when HiPO's extras are not
+        // linked (before, it fell back to dual simplex). Ignoring the status
+        // would leave the solver at its default while the banner below still
+        // reads method=hipo, so a rejected method is an error.
+        if (_highs.setOptionValue("solver", method) != HighsStatus::kOk) {
+            throw std::runtime_error(std::string("HiGHS rejected solver=") + method);
+        }
         HighsModel model;
         model.lp_.sense_ = ObjSense::kMinimize;
         model.lp_.offset_ = 0.0;
         _highs.passModel(std::move(model));
         HighsInt threads = 0;
         _highs.getOptionValue("threads", threads);
-        // Githash identifies the upstream tag only — it cannot reveal whether
-        // cmake/patches/highs-hipo-refine-status.patch is applied, so a run's
-        // full HiGHS provenance is this banner plus PROVENANCE.txt.
+        // Githash identifies the upstream tag. Builds before v1.16.0 carried a
+        // local HiPO patch the hash cannot show; PROVENANCE.txt section 4.
         char version[64];
         std::snprintf(version, sizeof(version), "%s-%s", highsVersion(), highsGithash());
         log_solver_config("highs", version, method, /*gpu=*/false, static_cast<int>(threads));

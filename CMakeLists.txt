@@ -62,16 +62,15 @@ endif()
 
 # HiGHS — always available as default fallback
 include(FetchContent)
-# HiPO (HiGHS interior-point) discards a near-optimal solution as an "internal
-# error" when its optional IPX refinement step fails on ill-conditioned masters
-# (wide objective range from slack penalty costs). Patched locally; needs
-# upstreaming — see gh issue #36. Idempotent: skip if already applied.
-set(HIGHS_HIPO_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/highs-hipo-refine-status.patch")
+# Stock v1.16.0. Up to v1.15.1 we patched HiPO, which discarded a near-optimal
+# solution as an "internal error" when its IPX refinement step failed on
+# ill-conditioned masters (gh #36); upstream 02d5f2135, first in v1.16.0, keeps
+# the HiPO status when IPX fails, so the patch is gone. RCValidation.WinnipegPath
+# is the test that fails without that fix.
 FetchContent_Declare(
     highs
     GIT_REPOSITORY https://github.com/ERGO-Code/HiGHS.git
-    GIT_TAG v1.15.1
-    PATCH_COMMAND bash -c "git apply --reverse --check '${HIGHS_HIPO_PATCH}' 2>/dev/null || git apply '${HIGHS_HIPO_PATCH}'"
+    GIT_TAG v1.16.0
 )
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(HIGHS_BUILD_CXX ON CACHE BOOL "" FORCE)
@@ -81,11 +80,12 @@ set(HIPO ON CACHE BOOL "" FORCE)
 # builds it as libhighs_extras.so and #defines HIGHS_SHARED_EXTRAS_LIBRARY so the
 # feature set is resolved by loading that .so at runtime. Because we link HiGHS
 # statically (BUILD_SHARED_LIBS OFF) and never ship/find that .so, the extras go
-# unresolved at runtime: HiGHS prints "features unavailable: amd, blas, metis,
-# rcm" and SILENTLY falls back to dual simplex while the solver is still nominally
-# "hipo". Forcing the extras static compiles them into libhighs so HiPO is
+# unresolved at runtime. v1.15 then SILENTLY fell back to dual simplex while the
+# solver was still nominally "hipo"; v1.16 logs "The following features are
+# unavailable" and rejects solver=hipo, which the HiGHS backend turns into an
+# error. Forcing the extras static compiles them into libhighs so HiPO is
 # actually available in the CLI/tests. Verify with `mcfcg_cli --verbose-solver`:
-# the HiGHS log must show HiPO/IPX, not "Using dual simplex solver".
+# the HiGHS log must show "Running HiPO", not "Using dual simplex solver".
 set(BUILD_SHARED_EXTRAS_LIB OFF CACHE BOOL "" FORCE)
 # HiPO needs a system BLAS (gh #49), and it is found here, before HiGHS:
 #  * Without one, HiGHS' own configure stops deep in its FetchContent tree with

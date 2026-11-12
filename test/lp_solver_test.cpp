@@ -3,6 +3,17 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdlib>
+#include <stdexcept>
+
+// A method HiGHS rejects must fail construction, not leave HiGHS on its default
+// solver while the [lp-config] banner names the requested one. This is how a
+// build without HiPO's extras now surfaces (HiGHS >= 1.16 rejects solver=hipo).
+TEST(LPSolver, HighsRejectedMethodThrows) {
+    ASSERT_EQ(setenv("MCFCG_HIGHS_SOLVER", "no-such-method", 1), 0);
+    EXPECT_THROW(mcfcg::create_lp_solver(), std::runtime_error);
+    unsetenv("MCFCG_HIGHS_SOLVER");
+}
 
 // Solve: min x + 2y  s.t. x + y >= 3, x >= 0, y >= 0
 TEST(LPSolver, SimpleLP) {

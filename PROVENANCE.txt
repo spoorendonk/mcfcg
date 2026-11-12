@@ -131,7 +131,7 @@ shows up in the log instead of being silently misreported.
 
 That field was added while preparing this artifact, so it is absent from the
 committed CG logs, and the five versions above were established as follows.
-HiGHS: pinned by GIT_TAG v1.15.1 in CMakeLists.txt and written down by the
+HiGHS: pinned by GIT_TAG v1.15.1 in v0.1.0's CMakeLists.txt and recorded by the
 single 2026-08-05 sweep that produced all 88 HiGHS cells. cuOpt: a fixed fork
 commit whose build predates the window. MOSEK and COPT: INFERRED — the installed
 libraries are dated 2025-11-17 and 2025-10-22, both before the first run on
@@ -365,6 +365,12 @@ HiGHS — local patch, in BOTH experiments, required for correctness.
     exactly the ill-conditioned path masters. `highsGithash()` reports the
     upstream tag's hash and cannot tell you whether the patch is applied — the
     build applies it unconditionally, so any binary from this tag has it.
+
+    After v0.1.0 (2026-11-12, issue #55): main moved to stock HiGHS v1.16.0,
+    githash f3f113d230, and dropped the patch, because upstream commit
+    02d5f2135 ("Do not discard hipo status if ipx refinement fails"), first
+    released in v1.16.0, does the same thing. Every committed result above was
+    produced on patched v1.15.1; build v0.1.0 to reproduce its timings.
 
 cuOpt — delta-API fork, CG benchmark ONLY (the compact baseline uses stock 26.2.0).
     Repository https://github.com/spoorendonk/cuopt  (public)
