@@ -540,7 +540,7 @@ def run_one(binary, instance, solver, formulation, extra, max_iters, log_path=No
     os.close(out_fd)
     os.close(err_fd)
     # The binary inherits the caller's environment. A cuOpt build embeds an
-    # RPATH to libcuopt, so no LD_LIBRARY_PATH is normally needed; set it in your
+    # RPATH to the cuOpt library directory, so no LD_LIBRARY_PATH is normally needed; set it in your
     # shell only if the cuOpt fork build was moved after configuring.
     returncode = None
     try:

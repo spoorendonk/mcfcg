@@ -388,6 +388,16 @@ cuOpt — delta-API fork, CG benchmark ONLY (the compact baseline uses stock 26.
     `cuOptGetVersion` reports the upstream RAPIDS version (26.8.0) and cannot
     distinguish the fork.
 
+    After v0.1.0 (2026-11-13, issue #47): main builds against branch
+    `delta-api-26.10`, commit c474dd160edb7cb52c979579c3ea2b4cfd5d126c: the
+    delta-API commits rebased onto NVIDIA/cuopt v26.10.00, which moved the
+    headers to cuopt/mathematical_optimization/. It is not a descendant of
+    8ea7a033a. The #32 ranged-bound failure is not fixed upstream either; mcfcg
+    coerces |bound| >= 1e19 to infinity itself. On 30 cells of the CG table its
+    objectives agree with the rows above within 3.7e-5 relative (gh #47). Every
+    committed cuOpt result above was produced on 8ea7a033a; build v0.1.0 against
+    it to reproduce its timings.
+
 
 5. Repository state during the benchmark runs
 ---------------------------------------------
