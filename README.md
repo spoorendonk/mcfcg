@@ -259,8 +259,8 @@ The cuOpt backend mutates the restricted master incrementally (add/delete
 columns and rows, re-solve), so by default it uses cuOpt's incremental delta C
 API (`MCFCG_CUOPT_DELTA_API=ON`). Stock cuOpt has no such API; the default path
 needs a cuOpt build that ships `cuopt_c_delta.h` — the
-[`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt) fork (`delta-api-latest`
-branch, the delta API on the v26.08.00 release). **Build that fork first**
+[`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt) fork (`delta-api-26.10`
+branch, the delta API on the v26.10.00 release). **Build that fork first**
 (configure errors out if the header is missing), or reconfigure with
 `-DMCFCG_CUOPT_DELTA_API=OFF` to fall back to the rebuild-from-scratch path on
 a stock cuOpt with its headers under `cuopt/mathematical_optimization/` (the
@@ -280,7 +280,10 @@ cmake -B build -DCMAKE_INSTALL_MESSAGE=LAZY \
 cmake --build build -j$(nproc)
 ```
 
-`libcuopt.so` (and its `librmm` / `rapids_logger` deps) must be reachable by
+From v26.10 `libcuopt.so` is a GNU ld script naming the component libraries
+`libcuopt_mathopt.so` and `libcuopt_client.so` in the same directory, so the
+link line above still works and the binaries end up depending on those two.
+They (and their `librmm` / `rapids_logger` deps) must be reachable by
 the dynamic loader at run time. The build **embeds the cuOpt library directory
 as an RPATH** — derived from `CUOPT_LIBRARY` — so `build/mcfcg_cli`, the tests,
 and the tools run without exporting `LD_LIBRARY_PATH`. If you later **move the
@@ -432,17 +435,18 @@ cmake --build build -j$(nproc)
 | Config | Licence | Hardware | Reproducible with open-source components? |
 |--------|---------|----------|-------------------------------------------|
 | `highs`    | none (MIT) | CPU | **Yes.** Fetched and built by CMake; nothing to install. |
-| `cuopt`    | none (Apache-2.0) | **NVIDIA GPU** | **Yes**, given a GPU. Build the [`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt) fork first — the delta C API the default build needs is not in stock cuOpt. To reproduce the published v0.1.0 numbers, build mcfcg's v0.1.0 tag against fork commit `8ea7a033a`; `main` builds only against `delta-api-latest` (commit `162a2f784`). |
+| `cuopt`    | none (Apache-2.0) | **NVIDIA GPU** | **Yes**, given a GPU. Build the [`spoorendonk/cuopt`](https://github.com/spoorendonk/cuopt) fork first — the delta C API the default build needs is not in stock cuOpt. To reproduce the published v0.1.0 numbers, build mcfcg's v0.1.0 tag against fork commit `8ea7a033a`; `main` builds against `delta-api-26.10` (commit `c474dd160`). |
 | `mosek`    | commercial (academic licences available) | CPU | No. |
 | `copt-cpu` | commercial (academic licences available) | CPU | No. |
 | `copt-gpu` | commercial (academic licences available) | NVIDIA GPU | No. |
 
-Cite the cuOpt fork by commit, not by branch: `delta-api-latest` is a moving ref.
+Cite the cuOpt fork by commit, not by branch: `delta-api-26.10` is a moving ref.
 The results tagged v0.1.0 were run on the older `delta-api` branch (commit
 `8ea7a033a`, as `PROVENANCE.txt` at that tag records). That fork keeps its
 headers under `cuopt/linear_programming/`, so build it with mcfcg's v0.1.0 tag,
-not `main`; `delta-api-latest` is a rebase onto a different upstream base, not a
-descendant, so it is a different cuOpt from the one the results record.
+not `main`; `delta-api-26.10` is the delta-API commits rebased onto upstream
+v26.10.00, not a descendant of `8ea7a033a`, so it is a different cuOpt from the
+one the results record (its objectives agree, see gh #47).
 
 ### Verifying a reproduction
 

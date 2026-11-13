@@ -129,7 +129,7 @@ cmake --build build -j$(nproc)
 ldd build/mcfcg_cli | grep -E 'cuopt|copt|mosek'   # all three should resolve
 ```
 
-(cuOpt needs a `spoorendonk/cuopt` fork checkout on the `delta-api-latest`
+(cuOpt needs a `spoorendonk/cuopt` fork checkout on the `delta-api-26.10`
 branch as `CUOPT_ROOT`; stock cuOpt requires `-DMCFCG_CUOPT_DELTA_API=OFF`.
 Either way the headers must be under `cuopt/mathematical_optimization/` (cuOpt
 v26.08.00 on): the fork's old `delta-api` branch and older stock releases fail

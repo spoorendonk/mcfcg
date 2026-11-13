@@ -163,7 +163,7 @@ if(MCFCG_USE_CUOPT)
                  HINTS ENV CUOPT_ROOT ENV CONDA_PREFIX
                  PATH_SUFFIXES lib lib64 cpp/build)
     if(NOT CUOPT_INCLUDE_DIR OR NOT CUOPT_LIBRARY)
-        message(FATAL_ERROR "cuOpt not found (looked for cuopt/mathematical_optimization/cuopt_c.h and libcuopt). Set CUOPT_ROOT (install prefix or spoorendonk/cuopt source checkout on delta-api-latest), activate a conda env with cuopt installed, or set CMAKE_PREFIX_PATH.")
+        message(FATAL_ERROR "cuOpt not found (looked for cuopt/mathematical_optimization/cuopt_c.h and libcuopt). Set CUOPT_ROOT (install prefix or spoorendonk/cuopt source checkout on delta-api-26.10), activate a conda env with cuopt installed, or set CMAKE_PREFIX_PATH.")
     endif()
     # find_path is skipped when CUOPT_INCLUDE_DIR is already set (-D on the
     # command line, or the cache of a build dir configured against an older
@@ -174,7 +174,7 @@ if(MCFCG_USE_CUOPT)
             "cuopt/mathematical_optimization/cuopt_c.h: it is an older cuOpt that keeps "
             "its headers under cuopt/linear_programming/ (e.g. the fork's old delta-api "
             "branch). Point it at a cuOpt with the mathematical_optimization/ layout "
-            "(spoorendonk/cuopt delta-api-latest), or clear the cached value with "
+            "(spoorendonk/cuopt delta-api-26.10), or clear the cached value with "
             "-UCUOPT_INCLUDE_DIR.")
     endif()
     target_sources(mcfcg PRIVATE src/lp/cuopt_solver.cpp)
@@ -206,7 +206,7 @@ if(MCFCG_USE_CUOPT)
             message(FATAL_ERROR
                 "MCFCG_CUOPT_DELTA_API is ON (default) but cuopt_c_delta.h was not found "
                 "under ${CUOPT_INCLUDE_DIR} — this looks like a stock (non-fork) cuOpt. "
-                "Build the spoorendonk/cuopt fork (delta-api-latest branch, see epic #20), or "
+                "Build the spoorendonk/cuopt fork (delta-api-26.10 branch, see epic #20), or "
                 "reconfigure with -DMCFCG_CUOPT_DELTA_API=OFF to use the rebuild path. "
                 "NOTE: the rebuild path recreates the entire LP every CG iteration — a "
                 "SERIOUS performance degradation; the delta API is strongly recommended.")
