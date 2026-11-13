@@ -281,7 +281,7 @@ cmake --build build -j$(nproc)
 ```
 
 From v26.10 `libcuopt.so` is a GNU ld script naming the component libraries
-`libcuopt_mathopt.so` and `libcuopt_client.so` in the same directory, so the
+`libcuopt_client.so` and `libcuopt_mathopt.so` in the same directory, so the
 link line above still works and the binaries end up depending on those two.
 They (and their `librmm` / `rapids_logger` deps) must be reachable by
 the dynamic loader at run time. The build **embeds the cuOpt library directory

@@ -185,8 +185,9 @@ if(MCFCG_USE_CUOPT)
     target_link_libraries(mcfcg PRIVATE ${CUOPT_LIBRARY})
     # Embed the cuOpt library's directory as a build RPATH so the executables
     # (defined below) resolve libcuopt at load time without the caller setting
-    # LD_LIBRARY_PATH. libcuopt itself carries an RPATH to its own deps
-    # (librmm / rapids_logger), so this single entry is enough. The path is
+    # LD_LIBRARY_PATH. From 26.10 libcuopt.so is an ld script over
+    # libcuopt_{client,mathopt}.so in the same directory; those carry RPATHs
+    # to their own deps (librmm / rapids_logger), so this single entry is enough. The path is
     # derived from the configure-time CUOPT_LIBRARY — nothing hardcoded here.
     get_filename_component(_cuopt_libdir "${CUOPT_LIBRARY}" DIRECTORY)
     list(APPEND CMAKE_BUILD_RPATH "${_cuopt_libdir}")
